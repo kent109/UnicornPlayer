@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme -->
+    <!-- Base application theme for dark mode -->
     <style name="Theme.UnicornPlayer" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Primary brand color -->
         <item name="colorPrimary">@color/primary</item>
@@ -52,7 +52,7 @@
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:fitsSystemWindows">false</item>
 
-        <!-- 添加主题属性来判断是否是亮色主题 -->
-        <item name="isLightTheme">true</item>
+        <!-- 黑夜模式下isLightTheme为false -->
+        <item name="isLightTheme">false</item>
     </style>
 </resources>

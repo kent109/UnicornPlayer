@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
+import android.text.TextUtils
 import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
 import com.unicorn.player.databinding.ActivityPlayerBinding
@@ -108,7 +109,8 @@ class PlayerActivity : AppCompatActivity() {
         song?.let {
             binding.songTitle.text = it.title
             binding.artistName.text = it.artist
-            binding.albumName.text = it.album
+            binding.albumName.text =
+                if (TextUtils.equals(it.album, "Music")) "<unknown>" else it.album
 
             // Set album art if available
             // Glide.with(this)
