@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.service.MusicService
+import com.bumptech.glide.Glide
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -112,11 +113,13 @@ class PlayerActivity : AppCompatActivity() {
             binding.albumName.text =
                 if (TextUtils.equals(it.album, "Music")) "<unknown>" else it.album
 
-            // Set album art if available
-            // Glide.with(this)
-            //     .load(it.albumArt)
-            //     .placeholder(R.drawable.ic_music_note)
-            //     .into(binding.albumArt)
+            // 使用Glide加载专辑封面并添加圆角
+            Glide.with(this)
+                .load(it.albumArt)
+                .placeholder(R.drawable.ic_music_note)
+                .error(R.drawable.ic_music_note)
+                .transform(com.bumptech.glide.load.resource.bitmap.RoundedCorners(36))
+                .into(binding.albumArt)
 
             // Update seek bar max duration
             binding.seekBar.max = musicService?.getDuration() ?: 0

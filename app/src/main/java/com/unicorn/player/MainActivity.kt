@@ -22,6 +22,7 @@ import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
+import com.bumptech.glide.Glide
 
 class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
@@ -242,11 +243,13 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         binding.songTitle.text = song.title
         binding.artistName.text = song.artist
 
-        // Set album art if available
-        // Glide.with(this)
-        //     .load(song.albumArt)
-        //     .placeholder(R.drawable.ic_music_note)
-        //     .into(binding.albumArt)
+        // 使用Glide加载专辑封面并添加圆角
+        Glide.with(this)
+            .load(song.albumArt)
+            .placeholder(R.drawable.ic_music_note)
+            .error(R.drawable.ic_music_note)
+            .transform(com.bumptech.glide.load.resource.bitmap.RoundedCorners(20))
+            .into(binding.albumArt)
     }
 
     override fun onResume() {
