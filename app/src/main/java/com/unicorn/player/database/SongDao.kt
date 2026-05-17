@@ -10,8 +10,8 @@ interface SongDao {
     @Query("SELECT * FROM songs ORDER BY title ASC")
     fun getAllSongs(): Flow<List<Song>>
 
-    @Query("SELECT * FROM songs WHERE id = :id")
-    fun getSongById(id: Long): Flow<Song?>
+    @Query("SELECT * FROM songs WHERE id = :songId")
+    fun getSongById(songId: Long): Flow<Song?>
 
     @Query("SELECT * FROM songs WHERE title LIKE :query OR artist LIKE :query OR album LIKE :query")
     fun searchSongs(query: String): Flow<List<Song>>

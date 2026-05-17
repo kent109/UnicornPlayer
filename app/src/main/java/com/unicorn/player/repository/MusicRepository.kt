@@ -26,7 +26,10 @@ class MusicRepository(private val context: Context) {
             MediaStore.Audio.Media.ALBUM_ID
         )
 
-        val selection = MediaStore.Audio.Media.IS_MUSIC + " != 0"
+        val selection = MediaStore.Audio.Media.IS_MUSIC + " != 0" +
+            " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/music/Recordings/%'" +
+            " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/allsaintsMusic/%'" +
+            " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/msc/%'"
 
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -52,10 +55,18 @@ class MusicRepository(private val context: Context) {
                 val path = cursor.getString(pathColumn)
                 val albumId = cursor.getLong(albumIdColumn)
 
+                // 过滤掉小于500KB的音频文件
+                if (!isFileSizeValid(path)) {
+                    continue
+                }
+
                 val albumArtUri = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
                     albumId
                 ).toString()
+
+                val file = java.io.File(path)
+                val lastModified = if (file.exists()) file.lastModified() else 0L
 
                 val song = Song(
                     id = id,
@@ -64,7 +75,8 @@ class MusicRepository(private val context: Context) {
                     album = album,
                     duration = duration,
                     path = path,
-                    albumArt = albumArtUri
+                    albumArt = albumArtUri,
+                    lastModified = lastModified
                 )
                 songs.add(song)
             }
@@ -80,4 +92,18 @@ class MusicRepository(private val context: Context) {
     suspend fun getSongById(id: Long) = songDao.getSongById(id)
 
     fun searchSongs(query: String) = songDao.searchSongs("%$query%")
+
+    private fun isFileSizeValid(path: String): Boolean {
+        return try {
+            val file = java.io.File(path)
+            if (file.exists()) {
+                val fileSizeInKB = file.length() / 1024
+                fileSizeInKB >= 1024
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
 }

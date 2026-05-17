@@ -149,6 +149,11 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         musicService?.currentSong?.observe(this) { song ->
             song?.let { updateBottomPlayer(it) }
         }
+
+        // 监听文件变化，自动刷新列表
+        musicService?.fileChanged?.observe(this) {
+            loadMusic()
+        }
     }
 
     private fun updateBottomPlayerUI() {

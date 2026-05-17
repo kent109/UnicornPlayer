@@ -10,7 +10,7 @@ import com.unicorn.player.model.PlaylistSong
 
 @Database(
     entities = [Song::class, Playlist::class, PlaylistSong::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
@@ -28,7 +28,8 @@ abstract class MusicDatabase : RoomDatabase() {
                     context.applicationContext,
                     MusicDatabase::class.java,
                     "music_database"
-                ).build()
+                ).fallbackToDestructiveMigration() // 允许破坏性迁移
+                .build()
                 INSTANCE = instance
                 instance
             }

@@ -3,6 +3,7 @@ package com.unicorn.player
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -49,6 +50,17 @@ class SongAdapter(
 
                 root.setOnClickListener {
                     listener.onSongClick(song, position)
+                }
+
+                root.setOnLongClickListener {
+                    // 显示文件全路径的弱提示
+                    val context = binding.root.context
+                    Toast.makeText(
+                        context,
+                        song.path,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    true
                 }
             }
         }
