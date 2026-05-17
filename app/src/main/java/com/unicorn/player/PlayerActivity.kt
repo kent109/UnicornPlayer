@@ -52,17 +52,18 @@ class PlayerActivity : AppCompatActivity() {
                 if (service.isPlaying.value == true) {
                     service.pause()
                 } else {
-                    service.play()
+                    // 请求音频焦点，如果获得焦点就播放
+                    service.requestAudioFocusAndPlay()
                 }
             }
         }
 
         binding.nextButton.setOnClickListener {
-            musicService?.playNext()
+            musicService?.requestAudioFocusAndPlayNext()
         }
 
         binding.previousButton.setOnClickListener {
-            musicService?.playPrevious()
+            musicService?.requestAudioFocusAndPlayPrevious()
         }
 
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {

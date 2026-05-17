@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Binder
 import android.os.FileObserver
@@ -46,6 +47,9 @@ class MusicService : Service() {
     val fileChanged: LiveData<Unit> = _fileChanged
 
     private var songList = mutableListOf<Song>()
+
+    // 音频管理器
+    private lateinit var audioManager: AudioManager
     private var currentIndex = 0
 
     // 播放模式 - 默认为全部循环
@@ -91,6 +95,10 @@ class MusicService : Service() {
 
         mediaSession = MediaSessionCompat(this, "MusicService")
         mediaSession.isActive = true
+
+        // 初始化音频焦点管理
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        setupAudioFocus()
 
         // 启动文件监听
         startFileObserver()
@@ -286,6 +294,23 @@ class MusicService : Service() {
         }
     }
 
+    fun requestAudioFocusAndPlay() {
+        // 请求音频焦点
+        val result = audioManager.requestAudioFocus(
+            audioFocusChangeListener,
+            AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN
+        )
+
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            // 获得音频焦点，可以播放
+            play()
+        } else {
+            // 没有获得音频焦点，显示提示
+            // 注意：这里不能直接访问UI，需要通过LiveData或其他方式通知
+        }
+    }
+
     fun pause() {
         if (mediaPlayer.isPlaying) {
             mediaPlayer.pause()
@@ -334,6 +359,34 @@ class MusicService : Service() {
         playCurrentSong()
     }
 
+    fun requestAudioFocusAndPlayNext() {
+        // 请求音频焦点
+        val result = audioManager.requestAudioFocus(
+            audioFocusChangeListener,
+            AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN
+        )
+
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            // 获得音频焦点，播放下一首
+            playNext()
+        }
+    }
+
+    fun requestAudioFocusAndPlayPrevious() {
+        // 请求音频焦点
+        val result = audioManager.requestAudioFocus(
+            audioFocusChangeListener,
+            AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN
+        )
+
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            // 获得音频焦点，播放上一首
+            playPrevious()
+        }
+    }
+
     fun seekTo(position: Int) {
         mediaPlayer.seekTo(position)
         _currentPosition.postValue(position)
@@ -342,6 +395,40 @@ class MusicService : Service() {
     private var fileObserver: FileObserver? = null
     private val executorService: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private var lastCheckTime = 0L
+
+    // 音频焦点变化监听
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                // 获得音频焦点，可以继续播放
+                val wasPlayingBefore = _wasPlayingBeforeFocusLoss
+                if (wasPlayingBefore) {
+                    play()
+                }
+            }
+            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // 失去音频焦点，需要暂停播放
+                _wasPlayingBeforeFocusLoss = mediaPlayer.isPlaying
+                pause()
+            }
+        }
+    }
+
+    private var _wasPlayingBeforeFocusLoss = false
+
+    private fun setupAudioFocus() {
+        // 请求音频焦点
+        val result = audioManager.requestAudioFocus(
+            audioFocusChangeListener,
+            AudioManager.STREAM_MUSIC,
+            AudioManager.AUDIOFOCUS_GAIN
+        )
+
+        if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            // 如果没有获得音频焦点，暂停播放
+            pause()
+        }
+    }
 
     private fun startFileObserver() {
         // 创建一个定期检查文件变化的定时任务
