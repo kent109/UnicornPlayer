@@ -5,8 +5,11 @@
     <!-- 权限声明 -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        tools:ignore="ForegroundServicesPolicy" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -37,7 +40,15 @@
         <service
             android:name=".service.MusicService"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="com.unicorn.player.action.PLAY" />
+                <action android:name="com.unicorn.player.action.PAUSE" />
+                <action android:name="com.unicorn.player.action.NEXT" />
+                <action android:name="com.unicorn.player.action.PREVIOUS" />
+                <action android:name="com.unicorn.player.action.STOP" />
+            </intent-filter>
+        </service>
 
     </application>
 

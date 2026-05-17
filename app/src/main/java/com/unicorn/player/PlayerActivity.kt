@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.service.MusicService
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class PlayerActivity : AppCompatActivity() {
@@ -78,6 +79,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun bindMusicService() {
         val intent = Intent(this, MusicService::class.java)
         bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        startService(intent)
     }
 
     private fun setupMusicObservers() {
@@ -144,7 +146,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun formatTime(milliseconds: Int): String {
         val minutes = TimeUnit.MILLISECONDS.toMinutes(milliseconds.toLong())
         val seconds = TimeUnit.MILLISECONDS.toSeconds(milliseconds.toLong()) % 60
-        return String.format("%02d:%02d", minutes, seconds)
+        return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
     }
 
     override fun onDestroy() {

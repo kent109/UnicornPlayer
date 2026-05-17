@@ -1,16 +1,15 @@
 package com.unicorn.player.service
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.os.Binder
-import android.os.Build
 import android.os.IBinder
 import android.support.v4.media.session.MediaSessionCompat
 import androidx.core.app.NotificationCompat
@@ -41,14 +40,14 @@ class MusicService : Service() {
     private var currentIndex = 0
 
     companion object {
-        const val NOTIFICATION_ID = 1
-        const val CHANNEL_ID = "music_channel"
+        const val NOTIFICATION_ID = 1001
+        const val CHANNEL_ID = "music_player_channel"
 
-        const val ACTION_PLAY = "action_play"
-        const val ACTION_PAUSE = "action_pause"
-        const val ACTION_NEXT = "action_next"
-        const val ACTION_PREVIOUS = "action_previous"
-        const val ACTION_STOP = "action_stop"
+        const val ACTION_PLAY = "com.unicorn.player.action.PLAY"
+        const val ACTION_PAUSE = "com.unicorn.player.action.PAUSE"
+        const val ACTION_NEXT = "com.unicorn.player.action.NEXT"
+        const val ACTION_PREVIOUS = "com.unicorn.player.action.PREVIOUS"
+        const val ACTION_STOP = "com.unicorn.player.action.STOP"
     }
 
     inner class MusicBinder : Binder() {
@@ -73,36 +72,153 @@ class MusicService : Service() {
         }
 
         mediaSession = MediaSessionCompat(this, "MusicService")
+        mediaSession.isActive = true
+
+        // 设置MediaSession回调
+        mediaSession.setCallback(object : MediaSessionCompat.Callback() {
+            override fun onPlay() {
+                play()
+            }
+
+            override fun onPause() {
+                pause()
+            }
+
+            override fun onSkipToNext() {
+                playNext()
+            }
+
+            override fun onSkipToPrevious() {
+                playPrevious()
+            }
+
+            override fun onStop() {
+                stopSelf()
+            }
+        })
 
         // Start position updates
         startPositionUpdates()
+
+        // 确保服务在前台运行
+        if (_currentSong.value != null) {
+            showNotification(_currentSong.value)
+        } else {
+            // 创建空通知确保服务在前台
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_music_note)
+                .setContentTitle("Unicorn Player")
+                .setContentText("音乐播放中")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .build()
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.notification_channel_name),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = getString(R.string.notification_channel_description)
-                setShowBadge(false)
-            }
-
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.notification_channel_name),
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = getString(R.string.notification_channel_description)
+            setShowBadge(false)
+            enableVibration(false)
+            setVibrationPattern(null)
+            enableLights(false)
+            setSound(null, null)
+            setBypassDnd(true)  // 绕过勿扰模式
         }
+
+        val notificationManager =
+            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_PLAY -> play()
-            ACTION_PAUSE -> pause()
-            ACTION_NEXT -> playNext()
-            ACTION_PREVIOUS -> playPrevious()
-            ACTION_STOP -> stopSelf()
+        val action = intent?.action
+
+        // 确保MediaPlayer已初始化
+        if (!::mediaPlayer.isInitialized) {
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build()
+                )
+                setOnCompletionListener {
+                    playNext()
+                }
+            }
+        }
+
+        when (action) {
+            ACTION_PLAY -> {
+                val songId = intent.getLongExtra("songId", -1L)
+                val position = intent.getIntExtra("position", 0)
+                val songListData = intent.getStringArrayListExtra("songList")
+
+                if (songListData != null) {
+                    // 将字符串数组转换回Song列表
+                    val songs = songListData.map { songData ->
+                        val parts = songData.split("|")
+                        Song(
+                            id = parts[0].toLong(),
+                            title = parts[1],
+                            artist = parts[2],
+                            album = parts[3],
+                            duration = parts[4].toLong(),
+                            path = parts[5],
+                            albumArt = parts[6].ifEmpty { null }
+                        )
+                    }
+                    setSongList(songs, position)
+
+                    // 如果有传递songId，播放对应的歌曲
+                    if (songId != -1L) {
+                        val song = songs.find { it.id == songId }
+                        if (song != null) {
+                            playSong(song)
+                        } else {
+                            // 如果找不到对应的歌曲，播放当前位置的歌曲
+                            play()
+                        }
+                    } else {
+                        // 如果没有传递songId，播放当前位置的歌曲
+                        play()
+                    }
+                }
+                updateNotification()
+            }
+
+            ACTION_PAUSE -> {
+                pause()
+                updateNotification()
+            }
+
+            ACTION_NEXT -> {
+                playNext()
+                updateNotification()
+            }
+
+            ACTION_PREVIOUS -> {
+                playPrevious()
+                updateNotification()
+            }
+
+            ACTION_STOP -> {
+                stopSelf()
+            }
+
+            else -> {
+                // 如果action为null但有当前歌曲，确保通知显示
+                if (_currentSong.value != null) {
+                    updateNotification()
+                }
+            }
         }
         return START_STICKY
     }
@@ -122,7 +238,9 @@ class MusicService : Service() {
     }
 
     fun playCurrentSong() {
-        if (songList.isEmpty()) return
+        if (songList.isEmpty()) {
+            return
+        }
 
         val song = songList[currentIndex]
         _currentSong.postValue(song)
@@ -133,7 +251,7 @@ class MusicService : Service() {
             mediaPlayer.prepare()
             mediaPlayer.start()
             _isPlaying.postValue(true)
-            showNotification(song)
+            showNotification(song)  // 直接显示当前歌曲的通知
         } catch (e: IOException) {
             e.printStackTrace()
         }
@@ -143,7 +261,7 @@ class MusicService : Service() {
         if (!mediaPlayer.isPlaying) {
             mediaPlayer.start()
             _isPlaying.postValue(true)
-            showNotification(_currentSong.value)
+            updateNotification()
         }
     }
 
@@ -151,7 +269,7 @@ class MusicService : Service() {
         if (mediaPlayer.isPlaying) {
             mediaPlayer.pause()
             _isPlaying.postValue(false)
-            showNotification(_currentSong.value)
+            updateNotification()
         }
     }
 
@@ -195,6 +313,7 @@ class MusicService : Service() {
                     }
                     Thread.sleep(1000)
                 } catch (e: InterruptedException) {
+                    e.printStackTrace()
                     break
                 }
             }
@@ -248,19 +367,38 @@ class MusicService : Service() {
                     .setMediaSession(mediaSession.sessionToken)
                     .setShowActionsInCompactView(0, 1, 2)
             )
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(_isPlaying.value == true)
             .build()
 
         startForeground(NOTIFICATION_ID, notification)
     }
 
+    private fun updateNotification(currentSong: Song? = _currentSong.value) {
+        // Only update notification if we have a current song
+        if (currentSong != null) {
+            showNotification(currentSong)
+        }
+    }
+
     private fun createActionPendingIntent(action: String): PendingIntent {
-        val intent = Intent(this, MusicService::class.java).apply {
+        // 创建明确的Intent，确保包含组件名称
+        val intent = Intent().apply {
             this.action = action
+            component = ComponentName(this@MusicService, MusicService::class.java)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        // 使用不同的requestCode确保每个action都有独立的PendingIntent
+        val requestCode = when (action) {
+            ACTION_PLAY -> 1001
+            ACTION_PAUSE -> 1002
+            ACTION_NEXT -> 1003
+            ACTION_PREVIOUS -> 1004
+            ACTION_STOP -> 1005
+            else -> action.hashCode()
         }
         return PendingIntent.getService(
-            this, action.hashCode(), intent,
+            this, requestCode, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }

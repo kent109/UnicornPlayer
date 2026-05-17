@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.widget.Toast
@@ -21,7 +22,6 @@ import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
-import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
@@ -48,6 +48,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             val binder = service as MusicService.MusicBinder
             musicService = binder.getService()
             isServiceBound = true
+            setupBottomPlayerObservers()  // 服务连接成功后设置观察者
+            updateBottomPlayerUI()  // 立即更新UI状态
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -83,7 +85,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         }
 
         viewModel.isLoading.observe(this) { isLoading ->
-            binding.progressBar.visibility = if (isLoading) android.view.View.VISIBLE else android.view.View.GONE
+            binding.progressBar.visibility =
+                if (isLoading) android.view.View.VISIBLE else android.view.View.GONE
         }
     }
 
@@ -96,7 +99,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     }
 
     private fun setupSearchView() {
-        binding.searchView.setOnQueryTextListener(object : androidx.appcompat.widget.SearchView.OnQueryTextListener {
+        binding.searchView.setOnQueryTextListener(object :
+            androidx.appcompat.widget.SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean {
                 return false
             }
@@ -113,6 +117,49 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             val intent = Intent(this, PlayerActivity::class.java)
             startActivity(intent)
         }
+
+        binding.playButton.setOnClickListener {
+            musicService?.let { service ->
+                if (service.isPlaying.value == true) {
+                    service.pause()
+                } else {
+                    service.play()
+                }
+            }
+        }
+
+        binding.previousButton.setOnClickListener {
+            musicService?.playPrevious()
+        }
+
+        binding.nextButton.setOnClickListener {
+            musicService?.playNext()
+        }
+    }
+
+    private fun setupBottomPlayerObservers() {
+        // Observe playing state to update play button icon
+        musicService?.isPlaying?.observe(this) { isPlaying ->
+            binding.playButton.setImageResource(
+                if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+            )
+        }
+
+        // Observe current song to update bottom player info
+        musicService?.currentSong?.observe(this) { song ->
+            song?.let { updateBottomPlayer(it) }
+        }
+    }
+
+    private fun updateBottomPlayerUI() {
+        // Update UI with current playing state
+        val service = musicService ?: return
+        if (service.currentSong.value != null) {
+            updateBottomPlayer(service.currentSong.value!!)
+        }
+        binding.playButton.setImageResource(
+            if (service.isPlaying.value == true) R.drawable.ic_pause else R.drawable.ic_play
+        )
     }
 
     private fun checkPermissions() {
@@ -123,15 +170,21 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             ) == PackageManager.PERMISSION_GRANTED -> {
                 loadMusic()
             }
+
             ActivityCompat.shouldShowRequestPermissionRationale(
                 this,
                 Manifest.permission.READ_MEDIA_AUDIO
             ) -> {
                 // Show explanation if needed
-                permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+                }
             }
+
             else -> {
-                permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+                }
             }
         }
     }
@@ -142,14 +195,38 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
     private fun bindMusicService() {
         val intent = Intent(this, MusicService::class.java)
+        // 先startService确保服务在前台运行
+        startService(intent)
+        // 再bindService确保能正确绑定
         bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    private fun ensureServiceRunning() {
+        val intent = Intent(this, MusicService::class.java)
         startService(intent)
     }
 
     override fun onSongClick(song: Song, position: Int) {
         viewModel.allSongs.value?.let { songs ->
-            musicService?.setSongList(songs, position)
-            musicService?.playSong(song)
+            // 使用binder方式与服务通信
+            if (isServiceBound) {
+                musicService?.setSongList(songs, position)
+                musicService?.playSong(song)
+            } else {
+                // 如果服务未绑定，先确保服务运行，然后通过startService传递播放参数
+                val intent = Intent(this, MusicService::class.java).apply {
+                    action = MusicService.ACTION_PLAY
+                    putExtra("songId", song.id)
+                    putExtra("position", position)
+                    putExtra("songListSize", songs.size)
+                    // 将songList转换为可序列化的数据
+                    val songDataList = songs.map { song ->
+                        "${song.id}|${song.title}|${song.artist}|${song.album}|${song.duration}|${song.path}|${song.albumArt ?: ""}"
+                    }
+                    putStringArrayListExtra("songList", ArrayList(songDataList))
+                }
+                startService(intent)
+            }
 
             updateBottomPlayer(song)
         }
@@ -169,10 +246,10 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
     override fun onResume() {
         super.onResume()
+        ensureServiceRunning()  // 确保服务在运行
         // Update UI with current playing song
-        musicService?.currentSong?.observe(this) { song ->
-            song?.let { updateBottomPlayer(it) }
-        }
+        setupBottomPlayerObservers()  // 重新设置观察者
+        updateBottomPlayerUI()  // 更新UI状态
     }
 
     override fun onDestroy() {

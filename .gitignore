@@ -1,4 +1,5 @@
 *.iml
+.claude
 .gradle
 .idea
 .kotlin

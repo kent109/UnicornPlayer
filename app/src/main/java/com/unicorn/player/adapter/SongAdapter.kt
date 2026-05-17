@@ -1,5 +1,6 @@
 package com.unicorn.player
 
+import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
@@ -7,6 +8,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.databinding.ItemSongBinding
 import com.unicorn.player.model.Song
+import java.util.Locale
 
 class SongAdapter(
     private val listener: OnSongClickListener
@@ -18,9 +20,7 @@ class SongAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SongViewHolder {
         val binding = ItemSongBinding.inflate(
-            LayoutInflater.from(parent.context),
-            parent,
-            false
+            LayoutInflater.from(parent.context), parent, false
         )
         return SongViewHolder(binding)
     }
@@ -38,12 +38,14 @@ class SongAdapter(
             binding.apply {
                 songTitle.text = song.title
                 artistName.text = song.artist
-                albumName.text = song.album
+                albumName.text =
+                    if (TextUtils.equals(song.album, "Music")) "<unknown>" else song.album
 
                 // Format duration
                 val durationMinutes = song.duration / 60000
                 val durationSeconds = (song.duration % 60000) / 1000
-                duration.text = String.format("%d:%02d", durationMinutes, durationSeconds)
+                duration.text =
+                    String.format(Locale.getDefault(), "%d:%02d", durationMinutes, durationSeconds)
 
                 root.setOnClickListener {
                     listener.onSongClick(song, position)

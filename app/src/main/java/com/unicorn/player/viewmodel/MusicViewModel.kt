@@ -17,7 +17,6 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
     val isLoading: LiveData<Boolean> = _isLoading
 
     init {
-        loadMusic()
         collectSongs()
     }
 
