@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     private var musicService: MusicService? = null
     private var isServiceBound = false
 
-    private val permissionLauncher = registerForActivityResult(
+    private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
@@ -41,6 +41,14 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         } else {
             Toast.makeText(this, "需要存储权限才能访问音乐文件", Toast.LENGTH_LONG).show()
             finish()
+        }
+    }
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(this, "通知权限被拒绝，通知功能可能受限", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -170,6 +178,18 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     }
 
     private fun checkPermissions() {
+        // 先检查通知权限（Android 13及以上）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // 检查存储权限
         when {
             ContextCompat.checkSelfPermission(
                 this,
@@ -184,13 +204,13 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             ) -> {
                 // Show explanation if needed
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+                    storagePermissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
                 }
             }
 
             else -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    permissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
+                    storagePermissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
                 }
             }
         }
