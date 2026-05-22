@@ -218,7 +218,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             // 使用binder方式与服务通信
             if (isServiceBound) {
                 musicService?.setSongList(songs, position)
-                musicService?.playSong(song)
+                musicService?.requestAudioFocusAndPlayCurrentSong()
             } else {
                 // 如果服务未绑定，先确保服务运行，然后通过startService传递播放参数
                 val intent = Intent(this, MusicService::class.java).apply {

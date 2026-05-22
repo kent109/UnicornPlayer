@@ -8,10 +8,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Binder
-import android.os.FileObserver
 import android.os.IBinder
 import android.os.SystemClock
 import android.support.v4.media.session.MediaSessionCompat
@@ -50,6 +50,10 @@ class MusicService : Service() {
 
     // 音频管理器
     private lateinit var audioManager: AudioManager
+
+    private var _wasPlayingBeforeFocusLoss = false
+
+    private lateinit var audioFocusRequest: AudioFocusRequest
     private var currentIndex = 0
 
     // 播放模式 - 默认为全部循环
@@ -96,9 +100,8 @@ class MusicService : Service() {
         mediaSession = MediaSessionCompat(this, "MusicService")
         mediaSession.isActive = true
 
-        // 初始化音频焦点管理
+        // 初始化音频管理器（但不请求焦点）
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        setupAudioFocus()
 
         // 启动文件监听
         startFileObserver()
@@ -106,7 +109,7 @@ class MusicService : Service() {
         // 设置MediaSession回调
         mediaSession.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
-                play()
+                requestAudioFocusAndPlay()
             }
 
             override fun onPause() {
@@ -114,11 +117,11 @@ class MusicService : Service() {
             }
 
             override fun onSkipToNext() {
-                playNext()
+                requestAudioFocusAndPlayNext()
             }
 
             override fun onSkipToPrevious() {
-                playPrevious()
+                requestAudioFocusAndPlayPrevious()
             }
 
             override fun onStop() {
@@ -206,19 +209,8 @@ class MusicService : Service() {
                     }
                     setSongList(songs, position)
 
-                    // 如果有传递songId，播放对应的歌曲
-                    if (songId != -1L) {
-                        val song = songs.find { it.id == songId }
-                        if (song != null) {
-                            playSong(song)
-                        } else {
-                            // 如果找不到对应的歌曲，播放当前位置的歌曲
-                            play()
-                        }
-                    } else {
-                        // 如果没有传递songId，播放当前位置的歌曲
-                        play()
-                    }
+                    // 请求音频焦点，然后播放
+                    requestAudioFocusAndPlayCurrentSong()
                 }
                 updateNotification()
             }
@@ -258,14 +250,6 @@ class MusicService : Service() {
         currentIndex = startIndex
     }
 
-    fun playSong(song: Song) {
-        val index = songList.indexOfFirst { it.id == song.id }
-        if (index != -1) {
-            currentIndex = index
-            playCurrentSong()
-        }
-    }
-
     fun playCurrentSong() {
         if (songList.isEmpty()) {
             return
@@ -286,6 +270,32 @@ class MusicService : Service() {
         }
     }
 
+    fun requestAudioFocusAndPlayCurrentSong() {
+        // 请求音频焦点
+        val result = requestAudioFocus()
+
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            // 获得音频焦点，播放当前歌曲
+            playCurrentSong()
+        }
+    }
+
+    private fun requestAudioFocus(): Int {
+        // 使用新的AudioFocusRequest API
+        if (!::audioFocusRequest.isInitialized) {
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build()
+                )
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                .build()
+        }
+        return audioManager.requestAudioFocus(audioFocusRequest)
+    }
+
     fun play() {
         if (!mediaPlayer.isPlaying) {
             mediaPlayer.start()
@@ -296,11 +306,7 @@ class MusicService : Service() {
 
     fun requestAudioFocusAndPlay() {
         // 请求音频焦点
-        val result = audioManager.requestAudioFocus(
-            audioFocusChangeListener,
-            AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN
-        )
+        val result = requestAudioFocus()
 
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             // 获得音频焦点，可以播放
@@ -315,6 +321,8 @@ class MusicService : Service() {
         if (mediaPlayer.isPlaying) {
             mediaPlayer.pause()
             _isPlaying.postValue(false)
+            // 暂停时放弃音频焦点
+            // abandonAudioFocus()
             updateNotification()
         }
     }
@@ -331,9 +339,11 @@ class MusicService : Service() {
                     0
                 }
             }
+
             PlayMode.SINGLE_LOOP -> {
                 // 单曲循环：保持当前索引不变
             }
+
             PlayMode.SEQUENCE -> {
                 // 顺序播放：到最后一首停止
                 if (currentIndex < songList.size - 1) {
@@ -361,11 +371,7 @@ class MusicService : Service() {
 
     fun requestAudioFocusAndPlayNext() {
         // 请求音频焦点
-        val result = audioManager.requestAudioFocus(
-            audioFocusChangeListener,
-            AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN
-        )
+        val result = requestAudioFocus()
 
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             // 获得音频焦点，播放下一首
@@ -375,11 +381,7 @@ class MusicService : Service() {
 
     fun requestAudioFocusAndPlayPrevious() {
         // 请求音频焦点
-        val result = audioManager.requestAudioFocus(
-            audioFocusChangeListener,
-            AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN
-        )
+        val result = requestAudioFocus()
 
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             // 获得音频焦点，播放上一首
@@ -392,8 +394,8 @@ class MusicService : Service() {
         _currentPosition.postValue(position)
     }
 
-    private var fileObserver: FileObserver? = null
-    private val executorService: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
+    private val executorService: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor()
     private var lastCheckTime = 0L
 
     // 音频焦点变化监听
@@ -406,28 +408,24 @@ class MusicService : Service() {
                     play()
                 }
             }
-            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // 失去音频焦点，需要暂停播放
+
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // 短暂失去音频焦点（如来电），需要暂停播放
+                _wasPlayingBeforeFocusLoss = mediaPlayer.isPlaying
+                pause()
+            }
+
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                // 长时间失去音频焦点，需要暂停播放
                 _wasPlayingBeforeFocusLoss = mediaPlayer.isPlaying
                 pause()
             }
         }
     }
 
-    private var _wasPlayingBeforeFocusLoss = false
-
-    private fun setupAudioFocus() {
-        // 请求音频焦点
-        val result = audioManager.requestAudioFocus(
-            audioFocusChangeListener,
-            AudioManager.STREAM_MUSIC,
-            AudioManager.AUDIOFOCUS_GAIN
-        )
-
-        if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            // 如果没有获得音频焦点，暂停播放
-            pause()
-        }
+    private fun abandonAudioFocus() {
+        // 放弃音频焦点
+        audioManager.abandonAudioFocusRequest(audioFocusRequest)
     }
 
     private fun startFileObserver() {
