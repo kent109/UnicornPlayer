@@ -15,17 +15,43 @@ import android.os.Binder
 import android.os.IBinder
 import android.os.SystemClock
 import android.support.v4.media.session.MediaSessionCompat
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.unicorn.player.MainActivity
 import com.unicorn.player.R
+import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.model.Song
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+
+// 使用全局Application Context的DataStore
+val Context.applicationDataStore: DataStore<Preferences> by preferencesDataStore(name = "music_player_state")
+
+object DataStoreKeys {
+    val CURRENT_SONG_ID = longPreferencesKey("current_song_id")
+    val CURRENT_POSITION = intPreferencesKey("current_position")
+    val IS_PLAYING = intPreferencesKey("is_playing") // 0=暂停, 1=播放
+    val SONG_TITLE = stringPreferencesKey("song_title")
+    val SONG_ARTIST = stringPreferencesKey("song_artist")
+    val SONG_PATH = stringPreferencesKey("song_path")
+}
 
 class MusicService : Service() {
 
@@ -56,6 +82,9 @@ class MusicService : Service() {
     private lateinit var audioFocusRequest: AudioFocusRequest
     private var currentIndex = 0
 
+    // 标记loadPlaybackState是否已经被调用过
+    private var isPlaybackStateLoaded = false
+
     // 播放模式 - 默认为全部循环
     private var playMode = PlayMode.ALL_LOOP
 
@@ -74,6 +103,8 @@ class MusicService : Service() {
         const val ACTION_NEXT = "com.unicorn.player.action.NEXT"
         const val ACTION_PREVIOUS = "com.unicorn.player.action.PREVIOUS"
         const val ACTION_STOP = "com.unicorn.player.action.STOP"
+
+        const val TAG = "MusicService"
     }
 
     inner class MusicBinder : Binder() {
@@ -222,10 +253,19 @@ class MusicService : Service() {
             }
 
             ACTION_STOP -> {
-                stopSelf()
+                // 停止前保存状态
+                savePlaybackState()
+                CoroutineScope(Dispatchers.IO).launch {
+                    kotlinx.coroutines.delay(100) // 短暂延迟确保保存完成
+                    stopSelf()
+                }
             }
 
             else -> {
+                // 如果action为null，尝试加载保存的状态
+                if (_currentSong.value == null) {
+                    loadPlaybackState()
+                }
                 // 如果action为null但有当前歌曲，确保通知显示
                 if (_currentSong.value != null) {
                     updateNotification()
@@ -243,10 +283,18 @@ class MusicService : Service() {
 
     fun playCurrentSong() {
         if (songList.isEmpty()) {
+            // 如果没有songList，尝试使用当前歌曲播放
+            _currentSong.value?.let { song ->
+                playSongDirectly(song)
+            }
             return
         }
 
         val song = songList[currentIndex]
+        playSongDirectly(song)
+    }
+
+    private fun playSongDirectly(song: Song) {
         // 使用setValue确保立即更新
         _currentSong.value = song
 
@@ -260,6 +308,7 @@ class MusicService : Service() {
             updateNotification(song)
             updateMediaSessionPlaybackState()
         } catch (e: IOException) {
+            Log.e(TAG, "Error playing song: ${e.message}")
             e.printStackTrace()
         }
     }
@@ -291,7 +340,29 @@ class MusicService : Service() {
     }
 
     fun play() {
+        // 如果当前没有歌曲，尝试加载或播放当前歌曲
+        if (_currentSong.value == null) {
+            loadPlaybackState()
+            return
+        }
+
         if (!mediaPlayer.isPlaying) {
+            // 检查媒体播放器是否已准备
+            if (mediaPlayer.duration == 0) {
+                // 重新准备播放
+                _currentSong.value?.let { song ->
+                    try {
+                        mediaPlayer.reset()
+                        mediaPlayer.setDataSource(song.path)
+                        mediaPlayer.prepare()
+                    } catch (e: IOException) {
+                        Log.e(TAG, "Error preparing media player: ${e.message}")
+                        e.printStackTrace()
+                        return
+                    }
+                }
+            }
+
             mediaPlayer.start()
             _isPlaying.postValue(true)
             updateNotification()
@@ -320,11 +391,44 @@ class MusicService : Service() {
             updateNotification()
             // 更新播放状态
             updateMediaSessionPlaybackState()
+            // 保存播放状态
+            savePlaybackState()
         }
     }
 
     fun playNext() {
-        if (songList.isEmpty()) return
+        if (songList.isEmpty()) {
+            // 如果songList为空，但我们有当前歌曲，尝试从数据库加载完整列表
+            _currentSong.value?.let { currentSong ->
+                // 在协程中加载歌曲列表
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        // 获取数据库中的歌曲列表
+                        val database = MusicDatabase.getDatabase(this@MusicService)
+                        database.songDao().getAllSongs().collect { songs ->
+                            if (songs.isNotEmpty()) {
+                                val currentIndexInList =
+                                    songs.indexOfFirst { it.id == currentSong.id }
+                                if (currentIndexInList >= 0) {
+                                    setSongList(songs, currentIndexInList)
+                                } else {
+                                    setSongList(songs, 0)
+                                }
+                                // 使用 Handler 延迟执行 playNext
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    playNext() // 递归调用，现在有songList了
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error loading song list from database: ${e.message}")
+                        e.printStackTrace()
+                    }
+                }
+            }
+            // 没有当前歌曲，无法播放
+            return
+        }
 
         when (playMode) {
             PlayMode.ALL_LOOP -> {
@@ -356,7 +460,38 @@ class MusicService : Service() {
     }
 
     fun playPrevious() {
-        if (songList.isEmpty()) return
+        if (songList.isEmpty()) {
+            // 如果songList为空，但我们有当前歌曲，尝试从数据库加载完整列表
+            _currentSong.value?.let { currentSong ->
+                // 在协程中加载歌曲列表
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        // 获取数据库中的歌曲列表
+                        val database = MusicDatabase.getDatabase(this@MusicService)
+                        database.songDao().getAllSongs().collect { songs ->
+                            if (songs.isNotEmpty()) {
+                                val currentIndexInList =
+                                    songs.indexOfFirst { it.id == currentSong.id }
+                                if (currentIndexInList >= 0) {
+                                    setSongList(songs, currentIndexInList)
+                                } else {
+                                    setSongList(songs, 0)
+                                }
+                                // 使用 Handler 延迟执行 playPrevious
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    playPrevious() // 递归调用，现在有songList了
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error loading song list from database: ${e.message}")
+                        e.printStackTrace()
+                    }
+                }
+            }
+            // 没有当前歌曲，无法播放
+            return
+        }
 
         currentIndex = if (currentIndex > 0) {
             currentIndex - 1
@@ -441,7 +576,8 @@ class MusicService : Service() {
         // 创建一个定期检查文件变化的定时任务
         executorService.scheduleWithFixedDelay({
             checkCurrentSongFile()
-        }, 0, 5, TimeUnit.SECONDS)
+            // savePlaybackState()
+        }, 0, 10, TimeUnit.SECONDS)
     }
 
     private fun stopFileObserver() {
@@ -691,8 +827,115 @@ class MusicService : Service() {
         )
     }
 
+    fun savePlaybackState() {
+        CoroutineScope(Dispatchers.IO).launch {
+            applicationDataStore.edit { preferences ->
+                val currentSong = _currentSong.value
+                if (currentSong != null) {
+                    preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
+                    preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
+                    preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
+                    preferences[DataStoreKeys.SONG_PATH] = currentSong.path
+                    preferences[DataStoreKeys.CURRENT_POSITION] = mediaPlayer.currentPosition
+                    preferences[DataStoreKeys.IS_PLAYING] = if (mediaPlayer.isPlaying) 1 else 0
+                } else {
+                    // 清除保存的状态
+                    preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
+                    preferences.remove(DataStoreKeys.SONG_TITLE)
+                    preferences.remove(DataStoreKeys.SONG_ARTIST)
+                    preferences.remove(DataStoreKeys.SONG_PATH)
+                    preferences.remove(DataStoreKeys.CURRENT_POSITION)
+                    preferences.remove(DataStoreKeys.IS_PLAYING)
+                }
+            }
+        }
+    }
+
+    fun loadPlaybackState() {
+        // 如果已经加载过播放状态，不需要重复加载
+        if (isPlaybackStateLoaded) {
+            Log.i(TAG, "loadPlaybackState: already loaded, skip")
+            return
+        }
+        isPlaybackStateLoaded = true
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val preferences = applicationDataStore.data.first()
+                val songId = preferences[DataStoreKeys.CURRENT_SONG_ID] ?: run {
+                    return@launch
+                }
+                val songTitle = preferences[DataStoreKeys.SONG_TITLE] ?: run {
+                    return@launch
+                }
+                val songArtist = preferences[DataStoreKeys.SONG_ARTIST] ?: run {
+                    return@launch
+                }
+                val songPath = preferences[DataStoreKeys.SONG_PATH] ?: run {
+                    return@launch
+                }
+                val currentPosition = preferences[DataStoreKeys.CURRENT_POSITION] ?: 0
+                val isPlaying = preferences[DataStoreKeys.IS_PLAYING] ?: 0
+
+                Log.d(
+                    TAG,
+                    "loadPlaybackState, songId=$songId, songTitle=$songTitle, currentPosition=$currentPosition, isPlaying=$isPlaying"
+                )
+
+                // 检查文件是否存在
+                val file = java.io.File(songPath)
+                if (!file.exists()) {
+                    Log.e(TAG, "Song file not found: $songPath")
+                    return@launch
+                }
+
+                // 恢复歌曲信息（在主线程更新）
+                withContext(Dispatchers.Main) {
+                    val restoredSong = Song(
+                        id = songId,
+                        title = songTitle,
+                        artist = songArtist,
+                        album = "",
+                        duration = 0,
+                        path = songPath
+                    )
+                    _currentSong.value = restoredSong
+
+                    // 准备媒体播放器但不立即播放
+                    try {
+                        mediaPlayer.reset()
+                        mediaPlayer.setDataSource(songPath)
+                        mediaPlayer.prepare()
+                        seekTo(currentPosition)
+
+                        // 不再自动恢复播放，只准备媒体播放器
+                        // 如果之前是播放状态，只更新UI状态，不自动播放
+                        if (isPlaying == 1) {
+                            // 更新通知和UI，显示暂停状态
+                            updateNotification(restoredSong)
+                            updateMediaSessionPlaybackState()
+                        } else {
+                            // 更新通知和UI
+                            updateNotification(restoredSong)
+                            updateMediaSessionPlaybackState()
+                        }
+                    } catch (e: IOException) {
+                        Log.e(TAG, "Error preparing media player: ${e.message}")
+                        e.printStackTrace()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading playback state: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        Log.d(TAG, "onDestroy")
+        // 保存播放状态
+        savePlaybackState()
         mediaPlayer.release()
         mediaSession.release()
 
@@ -704,5 +947,23 @@ class MusicService : Service() {
 
         // Cancel the notification
         NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        Log.d(TAG, "onLowMemory")
+        // 尝试保存状态
+        savePlaybackState()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.d(TAG, "onTaskRemoved")
+        // 尝试保存状态
+        savePlaybackState();
+        CoroutineScope(Dispatchers.IO).launch {
+            kotlinx.coroutines.delay(300)
+            stopSelf()
+        }
     }
 }

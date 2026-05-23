@@ -9,10 +9,10 @@ import android.os.IBinder
 import android.text.TextUtils
 import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
+import com.bumptech.glide.Glide
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.service.MusicService
-import com.bumptech.glide.Glide
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -49,7 +49,8 @@ class PlayerActivity : AppCompatActivity() {
     private fun setupClickListeners() {
         binding.playPauseButton.setOnClickListener {
             musicService?.let { service ->
-                if (service.isPlaying.value == true) {
+                val isPlaying = service.isPlaying.value ?: false
+                if (isPlaying) {
                     service.pause()
                 } else {
                     // 请求音频焦点，如果获得焦点就播放
@@ -59,11 +60,17 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         binding.nextButton.setOnClickListener {
-            musicService?.requestAudioFocusAndPlayNext()
+            musicService?.let { service ->
+                // 确保有歌曲列表或当前歌曲
+                service.requestAudioFocusAndPlayNext()
+            }
         }
 
         binding.previousButton.setOnClickListener {
-            musicService?.requestAudioFocusAndPlayPrevious()
+            musicService?.let { service ->
+                // 确保有歌曲列表或当前歌曲
+                service.requestAudioFocusAndPlayPrevious()
+            }
         }
 
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -153,6 +160,11 @@ class PlayerActivity : AppCompatActivity() {
         val minutes = TimeUnit.MILLISECONDS.toMinutes(milliseconds.toLong())
         val seconds = TimeUnit.MILLISECONDS.toSeconds(milliseconds.toLong()) % 60
         return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        musicService?.savePlaybackState()
     }
 
     override fun onDestroy() {

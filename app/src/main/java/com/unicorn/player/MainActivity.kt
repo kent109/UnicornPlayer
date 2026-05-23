@@ -16,13 +16,13 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.bumptech.glide.Glide
 import com.unicorn.player.databinding.ActivityMainBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
-import com.bumptech.glide.Glide
 
 class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
@@ -279,6 +279,11 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         // Update UI with current playing song
         setupBottomPlayerObservers()  // 重新设置观察者
         updateBottomPlayerUI()  // 更新UI状态
+    }
+
+    override fun onPause() {
+        super.onPause()
+        musicService?.savePlaybackState()
     }
 
     override fun onDestroy() {
