@@ -90,8 +90,7 @@ class MusicService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
             Log.d(
-                TAG,
-                "Notification button clicked: $action, current isPlaying: ${_isPlaying.value}"
+                TAG, "Notification button clicked: $action, current isPlaying: ${_isPlaying.value}"
             )
 
             when (action) {
@@ -117,6 +116,82 @@ class MusicService : Service() {
             // 立即更新通知
             updateNotification()
             Log.d(TAG, "After button click: isPlaying: ${_isPlaying.value}")
+        }
+    }
+
+    // 广播接收器用于监听耳机插拔和蓝牙连接状态
+    private val audioDeviceReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
+            Log.d(TAG, "Audio device event: $action")
+
+            when (action) {
+                // 有线耳机插拔
+                Intent.ACTION_HEADSET_PLUG -> {
+                    val state = intent.getIntExtra("state", 0)
+                    Log.d(TAG, "Headset plug state: $state")
+                    if (state == 0) { // 0表示断开，1表示插入
+                        // 有线耳机断开，暂停播放
+                        if (_isPlaying.value == true) {
+                            pause()
+                        }
+                    }
+                }
+
+                // 蓝牙设备连接状态变化
+                android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                    // 蓝牙设备断开连接
+                    Log.d(TAG, "Bluetooth device disconnected")
+                    if (_isPlaying.value == true) {
+                        pause()
+                    }
+                }
+
+                // 蓝牙音频连接状态变化
+                android.bluetooth.BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED -> {
+                    val state = intent.getIntExtra(
+                        android.bluetooth.BluetoothAdapter.EXTRA_CONNECTION_STATE,
+                        android.bluetooth.BluetoothAdapter.STATE_DISCONNECTED
+                    )
+                    Log.d(TAG, "Bluetooth connection state changed: $state")
+                    if (state == android.bluetooth.BluetoothAdapter.STATE_DISCONNECTED) {
+                        // 蓝牙音频断开，暂停播放
+                        if (_isPlaying.value == true) {
+                            pause()
+                        }
+                    }
+                }
+
+                // A2DP音频流连接状态变化
+                android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> {
+                    val state = intent.getIntExtra(
+                        android.bluetooth.BluetoothAdapter.EXTRA_CONNECTION_STATE,
+                        android.bluetooth.BluetoothA2dp.STATE_DISCONNECTED
+                    )
+                    Log.d(TAG, "A2DP audio stream connection state changed: $state")
+                    if (state == android.bluetooth.BluetoothA2dp.STATE_DISCONNECTED) {
+                        // A2DP音频流断开，暂停播放
+                        if (_isPlaying.value == true) {
+                            pause()
+                        }
+                    }
+                }
+
+                // 蓝牙设备配对状态变化
+                android.bluetooth.BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
+                    val state = intent.getIntExtra(
+                        android.bluetooth.BluetoothDevice.EXTRA_BOND_STATE,
+                        android.bluetooth.BluetoothDevice.BOND_NONE
+                    )
+                    Log.d(TAG, "Bluetooth device bond state changed: $state")
+                    if (state == android.bluetooth.BluetoothDevice.BOND_NONE) {
+                        // 蓝牙设备未配对，暂停播放
+                        if (_isPlaying.value == true) {
+                            pause()
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -156,10 +231,8 @@ class MusicService : Service() {
 
         mediaPlayer = MediaPlayer().apply {
             setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .build()
+                AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .setUsage(AudioAttributes.USAGE_MEDIA).build()
             )
             setOnCompletionListener {
                 playNext()
@@ -213,7 +286,7 @@ class MusicService : Service() {
         }
 
         // 注册通知栏按钮点击接收器
-        val filter = IntentFilter().apply {
+        val notificationFilter = IntentFilter().apply {
             addAction(ACTION_PLAY)
             addAction(ACTION_PAUSE)
             addAction(ACTION_NEXT)
@@ -221,10 +294,25 @@ class MusicService : Service() {
         }
         // 使用ContextCompat来处理不同API版本的广播注册
         ContextCompat.registerReceiver(
-            this,
-            notificationButtonReceiver,
-            filter,
-            ContextCompat.RECEIVER_EXPORTED
+            this, notificationButtonReceiver, notificationFilter, ContextCompat.RECEIVER_EXPORTED
+        )
+
+        // 注册音频设备监听接收器
+        val audioDeviceFilter = IntentFilter().apply {
+            // 有线耳机插拔
+            addAction(Intent.ACTION_HEADSET_PLUG)
+            // 蓝牙设备连接状态变化
+            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            // 蓝牙音频连接状态变化
+            addAction(android.bluetooth.BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
+            // A2DP音频流状态变化
+            addAction(android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+            // 蓝牙设备配对状态变化
+            addAction(android.bluetooth.BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        }
+        // 使用ContextCompat来处理不同API版本的广播注册
+        ContextCompat.registerReceiver(
+            this, audioDeviceReceiver, audioDeviceFilter, ContextCompat.RECEIVER_EXPORTED
         )
     }
 
@@ -279,10 +367,8 @@ class MusicService : Service() {
         if (!::mediaPlayer.isInitialized) {
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build()
+                    AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA).build()
                 )
                 setOnCompletionListener {
                     playNext()
@@ -306,8 +392,7 @@ class MusicService : Service() {
                             album = parts[3],
                             duration = parts[4].toLong(),
                             path = parts[5],
-                            albumArt = parts[6].ifEmpty { null }
-                        )
+                            albumArt = parts[6].ifEmpty { null })
                     }
                     setSongList(songs, position)
                 }
@@ -422,15 +507,11 @@ class MusicService : Service() {
     private fun requestAudioFocus(): Int {
         // 使用新的AudioFocusRequest API
         if (!::audioFocusRequest.isInitialized) {
-            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build()
-                )
-                .setOnAudioFocusChangeListener(audioFocusChangeListener)
-                .build()
+            audioFocusRequest =
+                AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(
+                    AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA).build()
+                ).setOnAudioFocusChangeListener(audioFocusChangeListener).build()
         }
         return audioManager.requestAudioFocus(audioFocusRequest)
     }
@@ -751,15 +832,9 @@ class MusicService : Service() {
                 android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
             }
             android.support.v4.media.session.PlaybackStateCompat.Builder()
-                .setState(state, player.currentPosition.toLong(), 1.0f)
-                .setActions(
-                    android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or
-                            android.support.v4.media.session.PlaybackStateCompat.ACTION_PAUSE or
-                            android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                            android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                            android.support.v4.media.session.PlaybackStateCompat.ACTION_SEEK_TO
-                )
-                .build()
+                .setState(state, player.currentPosition.toLong(), 1.0f).setActions(
+                    android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or android.support.v4.media.session.PlaybackStateCompat.ACTION_PAUSE or android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT or android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or android.support.v4.media.session.PlaybackStateCompat.ACTION_SEEK_TO
+                ).build()
         }
         mediaSession.setPlaybackState(playbackState)
 
@@ -769,24 +844,16 @@ class MusicService : Service() {
 
     private fun updateMediaSessionMetadata() {
         val currentSong = _currentSong.value ?: return
-        val metadata = android.support.v4.media.MediaMetadataCompat.Builder()
-            .putString(
-                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE,
-                currentSong.title
-            )
-            .putString(
-                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST,
-                currentSong.artist
-            )
-            .putString(
-                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM,
-                currentSong.album
-            )
-            .putLong(
-                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DURATION,
-                mediaPlayer.duration.toLong()
-            )
-            .build()
+        val metadata = android.support.v4.media.MediaMetadataCompat.Builder().putString(
+            android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE, currentSong.title
+        ).putString(
+            android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST, currentSong.artist
+        ).putString(
+            android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM, currentSong.album
+        ).putLong(
+            android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DURATION,
+            mediaPlayer.duration.toLong()
+        ).build()
         mediaSession.setMetadata(metadata)
     }
 
@@ -813,48 +880,29 @@ class MusicService : Service() {
         val isPlaying = _isPlaying.value == true
         val playPauseAction = if (isPlaying) {
             NotificationCompat.Action(
-                R.drawable.ic_pause,
-                "Pause",
-                createActionPendingIntent(ACTION_PAUSE)
+                R.drawable.ic_pause, "Pause", createActionPendingIntent(ACTION_PAUSE)
             )
         } else {
             NotificationCompat.Action(
-                R.drawable.ic_play,
-                "Play",
-                createActionPendingIntent(ACTION_PLAY)
+                R.drawable.ic_play, "Play", createActionPendingIntent(ACTION_PLAY)
             )
         }
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(song.title)
-            .setContentText("${song.artist} - ${song.album}")
-            .setSmallIcon(R.drawable.ic_music_note)
-            .setContentIntent(pendingIntent)
-            .addAction(
+        return NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle(song.title)
+            .setContentText("${song.artist} - ${song.album}").setSmallIcon(R.drawable.ic_music_note)
+            .setContentIntent(pendingIntent).addAction(
                 NotificationCompat.Action(
-                    R.drawable.ic_previous,
-                    "Previous",
-                    createActionPendingIntent(ACTION_PREVIOUS)
+                    R.drawable.ic_previous, "Previous", createActionPendingIntent(ACTION_PREVIOUS)
                 )
-            )
-            .addAction(playPauseAction)
-            .addAction(
+            ).addAction(playPauseAction).addAction(
                 NotificationCompat.Action(
-                    R.drawable.ic_next,
-                    "Next",
-                    createActionPendingIntent(ACTION_NEXT)
+                    R.drawable.ic_next, "Next", createActionPendingIntent(ACTION_NEXT)
                 )
-            )
-            .setStyle(
+            ).setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
-                    .setMediaSession(mediaSession.sessionToken)
-                    .setShowActionsInCompactView(0, 1, 2)
-            )
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setOngoing(isPlaying)
-            .setOnlyAlertOnce(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .build()
+                    .setMediaSession(mediaSession.sessionToken).setShowActionsInCompactView(0, 1, 2)
+            ).setPriority(NotificationCompat.PRIORITY_HIGH).setOngoing(isPlaying)
+            .setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).build()
     }
 
     private fun createActionPendingIntent(action: String): PendingIntent {
@@ -874,7 +922,9 @@ class MusicService : Service() {
             else -> action.hashCode()
         }
         return PendingIntent.getService(
-            this, requestCode, intent,
+            this,
+            requestCode,
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }
