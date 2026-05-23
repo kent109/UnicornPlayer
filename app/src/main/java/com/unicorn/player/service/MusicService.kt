@@ -497,10 +497,8 @@ class MusicService : Service() {
         val result = requestAudioFocus()
 
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            // 只有在没有正在播放时才播放
-            if (!_isPlaying.value!! && !mediaPlayer.isPlaying) {
-                playCurrentSong()
-            }
+            // 获得音频焦点，播放当前歌曲
+            playCurrentSong()
         }
     }
 

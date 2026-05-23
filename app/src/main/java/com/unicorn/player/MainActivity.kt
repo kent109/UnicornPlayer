@@ -233,11 +233,20 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             if (isServiceBound) {
                 musicService?.setSongList(songs, position)
                 // 检查是否已经在播放同一首歌
-                if (musicService?.currentSong?.value?.id == song.id && musicService?.isPlaying?.value == true) {
-                    // 如果正在播放同一首歌，只做UI更新
-                    updateBottomPlayer(song)
-                    return@let
+                if (musicService?.currentSong?.value?.id == song.id) {
+                    if (musicService?.isPlaying?.value == true) {
+                        // 如果正在播放同一首歌，只做UI更新
+                        updateBottomPlayer(song)
+                        return@let
+                    } else {
+                        // 如果是同一首歌但暂停状态，恢复播放
+                        musicService?.requestAudioFocusAndPlay()
+                        musicService?.updateNotification()
+                        updateBottomPlayer(song)
+                        return@let
+                    }
                 }
+                // 播放新歌曲
                 musicService?.requestAudioFocusAndPlayCurrentSong()
                 // 立即更新通知栏
                 musicService?.updateNotification()
