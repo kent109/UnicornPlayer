@@ -239,6 +239,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
                     return@let
                 }
                 musicService?.requestAudioFocusAndPlayCurrentSong()
+                // 立即更新通知栏
+                musicService?.updateNotification()
             } else {
                 // 如果服务未绑定，先确保服务运行，然后通过startService传递播放参数
                 val intent = Intent(this, MusicService::class.java).apply {

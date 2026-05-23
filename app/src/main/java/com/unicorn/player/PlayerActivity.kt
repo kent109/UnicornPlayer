@@ -56,6 +56,8 @@ class PlayerActivity : AppCompatActivity() {
                     // 请求音频焦点，如果获得焦点就播放
                     service.requestAudioFocusAndPlay()
                 }
+                // 立即更新通知栏
+                service.updateNotification()
             }
         }
 
@@ -63,6 +65,8 @@ class PlayerActivity : AppCompatActivity() {
             musicService?.let { service ->
                 // 确保有歌曲列表或当前歌曲
                 service.requestAudioFocusAndPlayNext()
+                // 立即更新通知栏
+                service.updateNotification()
             }
         }
 
@@ -70,6 +74,8 @@ class PlayerActivity : AppCompatActivity() {
             musicService?.let { service ->
                 // 确保有歌曲列表或当前歌曲
                 service.requestAudioFocusAndPlayPrevious()
+                // 立即更新通知栏
+                service.updateNotification()
             }
         }
 

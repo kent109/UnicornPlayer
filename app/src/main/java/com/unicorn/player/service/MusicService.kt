@@ -461,8 +461,11 @@ class MusicService : Service() {
             }
 
             mediaPlayer.start()
-            _isPlaying.postValue(true)
+            // 立即更新播放状态为true，确保通知栏能正确显示
+            _isPlaying.value = true
+            // 立即更新通知栏和MediaSession状态
             updateNotification()
+            updateMediaSessionPlaybackState()
         }
     }
 
@@ -482,11 +485,12 @@ class MusicService : Service() {
     fun pause() {
         if (mediaPlayer.isPlaying) {
             mediaPlayer.pause()
-            _isPlaying.postValue(false)
+            // 立即更新播放状态为false，确保通知栏能正确显示
+            _isPlaying.value = false
             // 暂停时放弃音频焦点
             // abandonAudioFocus()
+            // 立即更新通知栏和MediaSession状态
             updateNotification()
-            // 更新播放状态
             updateMediaSessionPlaybackState()
             // 保存播放状态
             savePlaybackState()
@@ -554,6 +558,8 @@ class MusicService : Service() {
         }
         // 直接调用playCurrentSong，它会自动更新通知
         playCurrentSong()
+        // 保存进度
+        savePlaybackState()
     }
 
     fun playPrevious() {
@@ -602,6 +608,8 @@ class MusicService : Service() {
         // 立即更新通知和MediaSession状态
         updateNotification(previousSong)
         updateMediaSessionPlaybackState()
+        // 保存进度
+        savePlaybackState()
     }
 
     fun requestAudioFocusAndPlayNext() {
@@ -782,7 +790,7 @@ class MusicService : Service() {
         mediaSession.setMetadata(metadata)
     }
 
-    private fun updateNotification(currentSong: Song? = _currentSong.value) {
+    fun updateNotification(currentSong: Song? = _currentSong.value) {
         // Only update notification if we have a current song
         if (currentSong != null) {
             // 检查是否具有通知权限
