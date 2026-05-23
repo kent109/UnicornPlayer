@@ -4,9 +4,11 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -18,6 +20,7 @@ import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -81,6 +84,41 @@ class MusicService : Service() {
 
     private lateinit var audioFocusRequest: AudioFocusRequest
     private var currentIndex = 0
+
+    // 广播接收器用于处理通知栏按钮点击
+    private val notificationButtonReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
+            Log.d(
+                TAG,
+                "Notification button clicked: $action, current isPlaying: ${_isPlaying.value}"
+            )
+
+            when (action) {
+                ACTION_PLAY -> {
+                    _isPlaying.value = true
+                    play()
+                }
+
+                ACTION_PAUSE -> {
+                    _isPlaying.value = false
+                    pause()
+                }
+
+                ACTION_NEXT -> {
+                    playNext()
+                }
+
+                ACTION_PREVIOUS -> {
+                    playPrevious()
+                }
+            }
+
+            // 立即更新通知
+            updateNotification()
+            Log.d(TAG, "After button click: isPlaying: ${_isPlaying.value}")
+        }
+    }
 
     // 标记loadPlaybackState是否已经被调用过
     private var isPlaybackStateLoaded = false
@@ -158,6 +196,12 @@ class MusicService : Service() {
             override fun onStop() {
                 stopSelf()
             }
+
+            override fun onSeekTo(pos: Long) {
+                // 处理通知栏进度条拖动事件
+                seekTo(pos.toInt())
+                updateMediaSessionPlaybackState()
+            }
         })
 
         // Start position updates
@@ -167,6 +211,43 @@ class MusicService : Service() {
         if (_currentSong.value != null) {
             updateNotification(_currentSong.value)
         }
+
+        // 注册通知栏按钮点击接收器
+        val filter = IntentFilter().apply {
+            addAction(ACTION_PLAY)
+            addAction(ACTION_PAUSE)
+            addAction(ACTION_NEXT)
+            addAction(ACTION_PREVIOUS)
+        }
+        // 使用ContextCompat来处理不同API版本的广播注册
+        ContextCompat.registerReceiver(
+            this,
+            notificationButtonReceiver,
+            filter,
+            ContextCompat.RECEIVER_EXPORTED
+        )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d(TAG, "onDestroy")
+
+        // 取消注册广播接收器
+        unregisterReceiver(notificationButtonReceiver)
+
+        // 保存播放状态
+        savePlaybackState()
+        mediaPlayer.release()
+        mediaSession.release()
+
+        // 停止文件监听
+        stopFileObserver()
+
+        // Use modern API for stopping foreground service
+        stopForeground(STOP_FOREGROUND_REMOVE)
+
+        // Cancel the notification
+        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
     }
 
     private fun createNotificationChannel() {
@@ -216,7 +297,6 @@ class MusicService : Service() {
                 val songListData = intent.getStringArrayListExtra("songList")
 
                 if (songListData != null) {
-                    // 将字符串数组转换回Song列表
                     val songs = songListData.map { songData ->
                         val parts = songData.split("|")
                         Song(
@@ -230,14 +310,26 @@ class MusicService : Service() {
                         )
                     }
                     setSongList(songs, position)
+                }
 
-                    // 请求音频焦点，然后播放
-                    requestAudioFocusAndPlayCurrentSong()
+                // 如果已经有当前歌曲且处于暂停状态，直接调用play()从暂停位置继续播放
+                // 只有在新传入songList时才调用playCurrentSong()重新播放
+                if (songListData != null && _currentSong.value != null && !mediaPlayer.isPlaying) {
+                    // 新传入的歌曲列表，重新播放
+                    _isPlaying.value = true
+                    playCurrentSong()
+                } else {
+                    // 没有新传入歌曲列表，或者当前没有歌曲，或者已经在播放
+                    // 调用play()方法，它会智能处理暂停恢复或重新播放
+                    _isPlaying.value = true
+                    play()
                 }
                 updateNotification()
             }
 
             ACTION_PAUSE -> {
+                // 强制暂停并更新状态
+                _isPlaying.value = false
                 pause()
                 updateNotification()
             }
@@ -297,19 +389,21 @@ class MusicService : Service() {
     private fun playSongDirectly(song: Song) {
         // 使用setValue确保立即更新
         _currentSong.value = song
+        _isPlaying.value = true  // 确保立即更新状态
 
         try {
             mediaPlayer.reset()
             mediaPlayer.setDataSource(song.path)
             mediaPlayer.prepare()
             mediaPlayer.start()
-            _isPlaying.value = true
             // 播放后立即更新通知和状态
             updateNotification(song)
             updateMediaSessionPlaybackState()
         } catch (e: IOException) {
             Log.e(TAG, "Error playing song: ${e.message}")
             e.printStackTrace()
+            // 播放失败时重置状态
+            _isPlaying.value = false
         }
     }
 
@@ -318,8 +412,10 @@ class MusicService : Service() {
         val result = requestAudioFocus()
 
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            // 获得音频焦点，播放当前歌曲
-            playCurrentSong()
+            // 只有在没有正在播放时才播放
+            if (!_isPlaying.value!! && !mediaPlayer.isPlaying) {
+                playCurrentSong()
+            }
         }
     }
 
@@ -347,8 +443,9 @@ class MusicService : Service() {
         }
 
         if (!mediaPlayer.isPlaying) {
-            // 检查媒体播放器是否已准备
-            if (mediaPlayer.duration == 0) {
+            // 检查媒体播放器是否已准备，只有在未准备时才重新准备
+            // 如果已经准备但处于暂停状态，直接start()会从暂停位置继续播放
+            if (mediaPlayer.currentPosition == 0 && mediaPlayer.duration == 0) {
                 // 重新准备播放
                 _currentSong.value?.let { song ->
                     try {
@@ -587,6 +684,7 @@ class MusicService : Service() {
                 executorService.shutdownNow()
             }
         } catch (e: InterruptedException) {
+            e.printStackTrace()
             executorService.shutdownNow()
         }
     }
@@ -684,62 +782,6 @@ class MusicService : Service() {
         mediaSession.setMetadata(metadata)
     }
 
-    private fun showNotification(song: Song?) {
-        if (song == null) return
-
-        val intent = Intent(this, MainActivity::class.java)
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val playPauseAction = if (_isPlaying.value == true) {
-            NotificationCompat.Action(
-                R.drawable.ic_pause,
-                "Pause",
-                createActionPendingIntent(ACTION_PAUSE)
-            )
-        } else {
-            NotificationCompat.Action(
-                R.drawable.ic_play,
-                "Play",
-                createActionPendingIntent(ACTION_PLAY)
-            )
-        }
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(song.title)
-            .setContentText("${song.artist} - ${song.album}")
-            .setSmallIcon(R.drawable.ic_music_note)
-            .setContentIntent(pendingIntent)
-            .addAction(
-                NotificationCompat.Action(
-                    R.drawable.ic_previous,
-                    "Previous",
-                    createActionPendingIntent(ACTION_PREVIOUS)
-                )
-            )
-            .addAction(playPauseAction)
-            .addAction(
-                NotificationCompat.Action(
-                    R.drawable.ic_next,
-                    "Next",
-                    createActionPendingIntent(ACTION_NEXT)
-                )
-            )
-            .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setMediaSession(mediaSession.sessionToken)
-                    .setShowActionsInCompactView(0, 1, 2)
-            )
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setOngoing(_isPlaying.value == true)
-            .setOnlyAlertOnce(true)  // 避免重复提示
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)  // 确保在锁屏界面显示
-            .build()
-
-        startForeground(NOTIFICATION_ID, notification)
-    }
-
     private fun updateNotification(currentSong: Song? = _currentSong.value) {
         // Only update notification if we have a current song
         if (currentSong != null) {
@@ -759,7 +801,9 @@ class MusicService : Service() {
             this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val playPauseAction = if (_isPlaying.value == true) {
+        // 根据当前播放状态决定按钮图标和动作
+        val isPlaying = _isPlaying.value == true
+        val playPauseAction = if (isPlaying) {
             NotificationCompat.Action(
                 R.drawable.ic_pause,
                 "Pause",
@@ -799,7 +843,7 @@ class MusicService : Service() {
                     .setShowActionsInCompactView(0, 1, 2)
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setOngoing(_isPlaying.value == true)
+            .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
@@ -929,24 +973,6 @@ class MusicService : Service() {
                 e.printStackTrace()
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        Log.d(TAG, "onDestroy")
-        // 保存播放状态
-        savePlaybackState()
-        mediaPlayer.release()
-        mediaSession.release()
-
-        // 停止文件监听
-        stopFileObserver()
-
-        // Use modern API for stopping foreground service
-        stopForeground(STOP_FOREGROUND_REMOVE)
-
-        // Cancel the notification
-        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
     }
 
     override fun onLowMemory() {

@@ -228,16 +228,16 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
 
-    private fun ensureServiceRunning() {
-        val intent = Intent(this, MusicService::class.java)
-        startService(intent)
-    }
-
     override fun onSongClick(song: Song, position: Int) {
         viewModel.allSongs.value?.let { songs ->
-            // 使用binder方式与服务通信
             if (isServiceBound) {
                 musicService?.setSongList(songs, position)
+                // 检查是否已经在播放同一首歌
+                if (musicService?.currentSong?.value?.id == song.id && musicService?.isPlaying?.value == true) {
+                    // 如果正在播放同一首歌，只做UI更新
+                    updateBottomPlayer(song)
+                    return@let
+                }
                 musicService?.requestAudioFocusAndPlayCurrentSong()
             } else {
                 // 如果服务未绑定，先确保服务运行，然后通过startService传递播放参数
@@ -275,10 +275,10 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
     override fun onResume() {
         super.onResume()
-        ensureServiceRunning()  // 确保服务在运行
-        // Update UI with current playing song
-        setupBottomPlayerObservers()  // 重新设置观察者
-        updateBottomPlayerUI()  // 更新UI状态
+        // 只更新UI状态，不重新设置观察者或加载播放状态
+        if (isServiceBound) {
+            updateBottomPlayerUI()
+        }
     }
 
     override fun onPause() {
