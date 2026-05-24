@@ -23,7 +23,7 @@
             android:layout_height="48dp"
             android:contentDescription="专辑封面"
             android:scaleType="centerCrop"
-            android:src="@drawable/ic_music_note"
+            android:src="@drawable/ic_disc"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />

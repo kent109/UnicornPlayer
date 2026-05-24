@@ -246,7 +246,12 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
         // Observe current song to update bottom player info
         musicService?.currentSong?.observe(this) { song ->
-            song?.let { updateBottomPlayer(it) }
+            song?.let {
+                updateBottomPlayer(it)
+                // 更新Adapter中的当前播放歌曲状态
+                songAdapter.currentPlayingSong = it
+                songAdapter.notifyDataSetChanged()
+            }
         }
 
         // 监听文件变化，自动刷新列表

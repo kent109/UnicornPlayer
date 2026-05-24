@@ -12,7 +12,8 @@ import com.unicorn.player.model.Song
 import java.util.Locale
 
 class SongAdapter(
-    private val listener: OnSongClickListener
+    private val listener: OnSongClickListener,
+    var currentPlayingSong: Song? = null
 ) : ListAdapter<Song, SongAdapter.SongViewHolder>(SongDiffCallback()) {
 
     interface OnSongClickListener {
@@ -28,14 +29,14 @@ class SongAdapter(
 
     override fun onBindViewHolder(holder: SongViewHolder, position: Int) {
         val song = getItem(position)
-        holder.bind(song, position)
+        holder.bind(song, position, currentPlayingSong)
     }
 
     inner class SongViewHolder(
         private val binding: ItemSongBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(song: Song, position: Int) {
+        fun bind(song: Song, position: Int, currentPlayingSong: Song?) {
             binding.apply {
                 songTitle.text = song.title
                 artistName.text = song.artist
@@ -48,13 +49,30 @@ class SongAdapter(
                 duration.text =
                     String.format(Locale.getDefault(), "%d:%02d", durationMinutes, durationSeconds)
 
+                // 获取context
+                val context = binding.root.context
+
+                // 动态设置颜色 - 如果是当前播放的歌曲
+                if (currentPlayingSong?.id == song.id) {
+                    songTitle.setTextColor(context.getColor(android.R.color.holo_red_light))
+                    artistName.setTextColor(context.getColor(android.R.color.holo_red_light))
+                    albumName.setTextColor(context.getColor(android.R.color.holo_red_light))
+                    duration.setTextColor(context.getColor(android.R.color.holo_red_light))
+                    albumArt.setImageResource(R.drawable.ic_disc_playing)
+                } else {
+                    songTitle.setTextColor(context.getColor(R.color.onSurface))
+                    artistName.setTextColor(context.getColor(R.color.onSurfaceVariant))
+                    albumName.setTextColor(context.getColor(R.color.onSurfaceVariant))
+                    duration.setTextColor(context.getColor(R.color.onSurfaceVariant))
+                    albumArt.setImageResource(R.drawable.ic_disc)
+                }
+
                 root.setOnClickListener {
                     listener.onSongClick(song, position)
                 }
 
                 root.setOnLongClickListener {
                     // 显示文件全路径的弱提示
-                    val context = binding.root.context
                     Toast.makeText(
                         context,
                         song.path,

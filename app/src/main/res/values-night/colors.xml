@@ -36,4 +36,7 @@
     <color name="inverseSurface">#E6E1E5</color>
     <color name="inverseOnSurface">#313033</color>
     <color name="inversePrimary">#6750A4</color>
+
+    <!-- Icon colors for day/night mode -->
+    <color name="icon_color">#E6E1E5</color>
 </resources>
