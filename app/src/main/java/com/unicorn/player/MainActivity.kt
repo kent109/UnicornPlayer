@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -32,6 +33,15 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
     private var musicService: MusicService? = null
     private var isServiceBound = false
+
+    private val hideHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var hideRunnable: Runnable = Runnable {
+        binding.btnScrollToCurrent.visibility = android.view.View.GONE
+    }
+
+    companion object {
+        const val TAG = "MainActivity"
+    }
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -105,6 +115,85 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = songAdapter
         }
+
+        // 初始化滚动状态监听
+        setupScrollStateListener()
+    }
+
+    private fun setupScrollStateListener() {
+        var isScrolling = false
+        var scrollToContentClick = false;
+
+        // 监听滚动状态
+        binding.recyclerView.addOnScrollListener(object :
+            androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(
+                recyclerView: androidx.recyclerview.widget.RecyclerView, newState: Int
+            ) {
+                when (newState) {
+                    // 开始滚动
+                    androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_DRAGGING -> {
+                        Log.d(TAG, "SCROLL_STATE_DRAGGING")
+                        isScrolling = true
+                        // 滑动过程中隐藏定位按钮
+                        binding.btnScrollToCurrent.visibility = android.view.View.GONE
+                        // 移除延迟消息
+                        hideRunnable.let { hideHandler.removeCallbacks(it) }
+                    }
+                    // 停止滚动
+                    androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE -> {
+                        Log.d(TAG, "SCROLL_STATE_IDLE, scrollToContentClick=$scrollToContentClick")
+                        isScrolling = false
+                        if (!scrollToContentClick) {
+                            binding.btnScrollToCurrent.visibility = android.view.View.VISIBLE
+                            // 设置延迟隐藏
+                            hideRunnable.let { hideHandler.removeCallbacks(it) }
+                            hideHandler.postDelayed(hideRunnable, 2000)
+                        } else {
+                            binding.btnScrollToCurrent.visibility = android.view.View.GONE
+                        }
+                        scrollToContentClick = false;
+                    }
+                }
+            }
+
+            override fun onScrolled(
+                recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int
+            ) {
+                Log.d(TAG, "onScrolled, isScrolling=$isScrolling")
+                // 滑动过程中保持按钮隐藏
+                if (isScrolling) {
+                    binding.btnScrollToCurrent.visibility = android.view.View.GONE
+                }
+            }
+        })
+
+        // 点击定位按钮的处理逻辑
+        binding.btnScrollToCurrent.setOnClickListener {
+            scrollToContentClick = true
+            // 移除延迟消息
+            hideRunnable.let { hideHandler.removeCallbacks(it) }
+            scrollToCurrentlyPlayingSong()
+        }
+    }
+
+    private fun scrollToCurrentlyPlayingSong() {
+        val currentSong = musicService?.currentSong?.value ?: return
+        val allSongs = viewModel.allSongs.value ?: return
+
+        // 查找当前播放歌曲在列表中的位置
+        val position = allSongs.indexOfFirst { it.id == currentSong.id }
+        if (position != -1) {
+            binding.btnScrollToCurrent.visibility = android.view.View.GONE
+            binding.recyclerView.smoothScrollToPosition(position)
+            // 可选：高亮显示当前歌曲
+            highlightCurrentSong(position)
+        }
+    }
+
+    private fun highlightCurrentSong(position: Int) {
+        // 实现高亮逻辑，例如改变背景颜色或显示指示器
+        // 这里可以调用SongAdapter中的方法来高亮显示指定位置的歌曲
     }
 
     private fun setupSearchView() {
@@ -181,8 +270,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         // 先检查通知权限（Android 13及以上）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
+                    this, Manifest.permission.POST_NOTIFICATIONS
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -192,15 +280,13 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         // 检查存储权限
         when {
             ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.READ_MEDIA_AUDIO
+                this, Manifest.permission.READ_MEDIA_AUDIO
             ) == PackageManager.PERMISSION_GRANTED -> {
                 loadMusic()
             }
 
             ActivityCompat.shouldShowRequestPermissionRationale(
-                this,
-                Manifest.permission.READ_MEDIA_AUDIO
+                this, Manifest.permission.READ_MEDIA_AUDIO
             ) -> {
                 // Show explanation if needed
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -282,9 +368,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         }
 
         // 使用Glide加载专辑封面并添加圆角
-        Glide.with(this)
-            .load(song.albumArt)
-            .placeholder(R.drawable.ic_music_note)
+        Glide.with(this).load(song.albumArt).placeholder(R.drawable.ic_music_note)
             .error(R.drawable.ic_music_note)
             .transform(com.bumptech.glide.load.resource.bitmap.RoundedCorners(20))
             .into(binding.albumArt)

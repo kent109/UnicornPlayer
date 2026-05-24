@@ -38,20 +38,21 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- 定位到当前播放歌曲的悬浮按钮 -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
+    <!-- 定位到当前播放歌曲的图标 -->
+    <ImageView
         android:id="@+id/btnScrollToCurrent"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
         android:layout_marginBottom="88dp"
         android:clickable="true"
         android:focusable="true"
+        android:padding="12dp"
         android:visibility="gone"
-        app:fabSize="mini"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:srcCompat="@drawable/ic_music_note" />
+        app:srcCompat="@drawable/ic_location"
+        tools:ignore="ContentDescription" />
 
     <androidx.cardview.widget.CardView
         android:id="@+id/bottomPlayer"
@@ -72,8 +73,8 @@
 
             <ImageView
                 android:id="@+id/albumArt"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
                 android:contentDescription="专辑封面"
                 android:scaleType="centerCrop"
                 android:src="@drawable/ic_music_note"
@@ -92,8 +93,8 @@
                 android:focusableInTouchMode="true"
                 android:marqueeRepeatLimit="marquee_forever"
                 android:maxLines="1"
-                android:singleLine="true"
                 android:scrollHorizontally="true"
+                android:singleLine="true"
                 android:text="歌曲标题"
                 android:textColor="@color/onSurface"
                 android:textSize="16sp"
