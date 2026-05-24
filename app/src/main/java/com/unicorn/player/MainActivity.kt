@@ -275,6 +275,12 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         binding.songTitle.text = song.title
         binding.artistName.text = song.artist
 
+        // 激活跑马灯效果
+        binding.songTitle.post {
+            binding.songTitle.isSelected = true
+            binding.songTitle.requestFocus()
+        }
+
         // 使用Glide加载专辑封面并添加圆角
         Glide.with(this)
             .load(song.albumArt)
