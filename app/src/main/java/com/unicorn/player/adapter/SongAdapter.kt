@@ -13,8 +13,27 @@ import java.util.Locale
 
 class SongAdapter(
     private val listener: OnSongClickListener,
-    var currentPlayingSong: Song? = null
+    var currentPlayingSong: Song? = null,
+    var isPlaying: Boolean = false
 ) : ListAdapter<Song, SongAdapter.SongViewHolder>(SongDiffCallback()) {
+
+    companion object {
+        const val TAG = "SongAdapter"
+    }
+
+    /**
+     * 停止所有动画 - 用于Activity onPause时
+     */
+    fun stopAllAnimations() {
+        isPlaying = false
+        currentPlayingSong?.let { song ->
+            // 查找当前播放歌曲在列表中的位置
+            val currentPosition = currentList.indexOfFirst { it.id == song.id }
+            if (currentPosition != -1) {
+                notifyItemChanged(currentPosition)
+            }
+        }
+    }
 
     interface OnSongClickListener {
         fun onSongClick(song: Song, position: Int)
@@ -36,6 +55,9 @@ class SongAdapter(
         private val binding: ItemSongBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
+        // 保存当前动画的引用，以便可以停止
+        private var currentAnimator: android.animation.ObjectAnimator? = null
+
         fun bind(song: Song, position: Int, currentPlayingSong: Song?) {
             binding.apply {
                 songTitle.text = song.title
@@ -52,19 +74,43 @@ class SongAdapter(
                 // 获取context
                 val context = binding.root.context
 
-                // 动态设置颜色 - 如果是当前播放的歌曲
-                if (currentPlayingSong?.id == song.id) {
+                // 检查是否是当前播放的歌曲
+                val isCurrentPlaying = currentPlayingSong?.id == song.id
+
+                // 动态设置颜色
+                if (isCurrentPlaying) {
                     songTitle.setTextColor(context.getColor(android.R.color.holo_red_light))
                     artistName.setTextColor(context.getColor(android.R.color.holo_red_light))
                     albumName.setTextColor(context.getColor(android.R.color.holo_red_light))
                     duration.setTextColor(context.getColor(android.R.color.holo_red_light))
-                    albumArt.setImageResource(R.drawable.ic_disc_playing)
+                    albumArt.isSelected = true
                 } else {
                     songTitle.setTextColor(context.getColor(R.color.onSurface))
                     artistName.setTextColor(context.getColor(R.color.onSurfaceVariant))
                     albumName.setTextColor(context.getColor(R.color.onSurfaceVariant))
                     duration.setTextColor(context.getColor(R.color.onSurfaceVariant))
-                    albumArt.setImageResource(R.drawable.ic_disc)
+                    albumArt.isSelected = false
+                }
+
+                // 先停止之前的动画
+                currentAnimator?.end()
+                currentAnimator = null
+                binding.albumArt.rotation = 0f
+
+                if (isCurrentPlaying && isPlaying) {
+                    // 播放时：开始旋转动画
+                    val animator = android.animation.ObjectAnimator.ofFloat(
+                        binding.albumArt,
+                        "rotation",
+                        0f,
+                        360f
+                    )
+                    animator.duration = 8000
+                    animator.interpolator = android.view.animation.LinearInterpolator()
+                    animator.repeatCount = android.animation.ValueAnimator.INFINITE
+                    animator.start()
+                    // 保存动画引用
+                    currentAnimator = animator
                 }
 
                 root.setOnClickListener {

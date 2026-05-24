@@ -237,11 +237,23 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     }
 
     private fun setupBottomPlayerObservers() {
-        // Observe playing state to update play button icon
+        // Observe playing state to update play button icon and animation
         musicService?.isPlaying?.observe(this) { isPlaying ->
             binding.playButton.setImageResource(
                 if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
             )
+            // 更新Adapter的播放状态以控制动画
+            songAdapter.isPlaying = isPlaying
+            if (songAdapter.currentPlayingSong != null) {
+                // 只更新当前播放的歌曲item
+                viewModel.allSongs.value?.let { songs ->
+                    val currentPosition =
+                        songs.indexOfFirst { s -> s.id == songAdapter.currentPlayingSong!!.id }
+                    if (currentPosition != -1) {
+                        songAdapter.notifyItemChanged(currentPosition)
+                    }
+                }
+            }
         }
 
         // Observe current song to update bottom player info
@@ -384,12 +396,26 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         // 只更新UI状态，不重新设置观察者或加载播放状态
         if (isServiceBound) {
             updateBottomPlayerUI()
+            // 恢复Adapter中的播放状态和动画
+            songAdapter.isPlaying = musicService?.isPlaying?.value == true
+            songAdapter.currentPlayingSong = musicService?.currentSong?.value
+            if (songAdapter.currentPlayingSong != null) {
+                // 只更新当前播放的歌曲item
+                viewModel.allSongs.value?.let { songs ->
+                    val currentPosition = songs.indexOfFirst { s -> s.id == songAdapter.currentPlayingSong!!.id }
+                    if (currentPosition != -1) {
+                        songAdapter.notifyItemChanged(currentPosition)
+                    }
+                }
+            }
         }
     }
 
     override fun onPause() {
         super.onPause()
         musicService?.savePlaybackState()
+        // 停止Adapter中的动画
+        songAdapter.stopAllAnimations()
     }
 
     override fun onDestroy() {
