@@ -246,7 +246,7 @@ class MusicService : Service() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
         // 启动文件监听
-        startFileObserver()
+        // startFileObserver()
 
         // 设置MediaSession回调
         mediaSession.setCallback(object : MediaSessionCompat.Callback() {
@@ -329,7 +329,7 @@ class MusicService : Service() {
         mediaSession.release()
 
         // 停止文件监听
-        stopFileObserver()
+        // stopFileObserver()
 
         // Use modern API for stopping foreground service
         stopForeground(STOP_FOREGROUND_REMOVE)
