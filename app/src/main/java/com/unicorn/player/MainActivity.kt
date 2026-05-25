@@ -82,13 +82,21 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupViewModel()
-        setupRecyclerView()
-        setupSearchView()
-        setupBottomPlayer()
+        // 添加异常处理，避免crash
+        try {
+            setupViewModel()
+            setupRecyclerView()
+            setupSearchView()
+            setupBottomPlayer()
 
-        checkPermissions()
-        bindMusicService()
+            checkPermissions()
+            bindMusicService()
+        } catch (e: Exception) {
+            Log.e(TAG, "onCreate error", e)
+            // 如果出错，尝试重新初始化
+            finish()
+            startActivity(Intent(this, MainActivity::class.java))
+        }
     }
 
     private fun setupViewModel() {
