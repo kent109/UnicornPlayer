@@ -65,6 +65,11 @@ class MusicService : Service() {
     private val _currentSong = MutableLiveData<Song?>()
     val currentSong: LiveData<Song?> = _currentSong
 
+    // 公共方法设置当前歌曲
+    fun setCurrentSong(song: Song) {
+        _currentSong.value = song
+    }
+
     private val _isPlaying = MutableLiveData(false)
     val isPlaying: LiveData<Boolean> = _isPlaying
 
@@ -76,6 +81,7 @@ class MusicService : Service() {
     val fileChanged: LiveData<Unit> = _fileChanged
 
     private var songList = mutableListOf<Song>()
+    private val _songList = MutableLiveData<List<Song>>(emptyList())
 
     // 音频管理器
     private lateinit var audioManager: AudioManager
@@ -83,7 +89,8 @@ class MusicService : Service() {
     private var _wasPlayingBeforeFocusLoss = false
 
     private lateinit var audioFocusRequest: AudioFocusRequest
-    private var currentIndex = 0
+    var currentIndex = 0
+    var isChangingSong = false
 
     // 广播接收器用于处理通知栏按钮点击
     private val notificationButtonReceiver = object : BroadcastReceiver() {
@@ -240,6 +247,9 @@ class MusicService : Service() {
         }
 
         mediaSession = MediaSessionCompat(this, "MusicService")
+
+        // 加载上次播放状态
+        loadPlaybackState()
         mediaSession.isActive = true
 
         // 初始化音频管理器（但不请求焦点）
@@ -455,8 +465,12 @@ class MusicService : Service() {
     fun setSongList(songs: List<Song>, startIndex: Int = 0) {
         songList.clear()
         songList.addAll(songs)
+        _songList.value = songs
         currentIndex = startIndex
+        isChangingSong = true
     }
+
+    fun getSongList(): List<Song> = songList
 
     fun playCurrentSong() {
         if (songList.isEmpty()) {
@@ -468,12 +482,13 @@ class MusicService : Service() {
         }
 
         val song = songList[currentIndex]
+        isChangingSong = false
         playSongDirectly(song)
     }
 
     private fun playSongDirectly(song: Song) {
-        // 使用setValue确保立即更新
-        _currentSong.value = song
+        // 使用setCurrentSong确保立即更新
+        setCurrentSong(song)
         _isPlaying.value = true  // 确保立即更新状态
 
         try {
@@ -999,7 +1014,7 @@ class MusicService : Service() {
                         duration = 0,
                         path = songPath
                     )
-                    _currentSong.value = restoredSong
+                    setCurrentSong(restoredSong)
 
                     // 准备媒体播放器但不立即播放
                     try {
