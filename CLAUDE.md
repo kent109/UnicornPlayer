@@ -1,48 +1,26 @@
-# Unicorn Player - Development Guide
+# Unicorn Player - 开发指南
 
-## Project Overview
+## 项目简介
 
-This is a complete Android music player application built with modern Android development practices. The app allows users to browse, search, and play local music files with a beautiful Material Design 3 interface.
+Android音乐播放器，使用Material Design风格，提供音乐文件浏览、搜索、播放等功能。
 
-## Current Implementation Status
+## 当前功能状态
 
-✅ **Completed Components:**
-- Song data model with Room database
-- Music scanning from device storage
-- Main activity with music list and search
-- Player activity with full controls
-- Background music service with notifications
-- Material Design 3 theming
-- MVVM architecture with LiveData
-- RecyclerView for music list
-- Database operations (SongDao, PlaylistDao)
-- Repository pattern for data access
+✅ **已完成的组件:**
+- Room数据库管理音乐文件(SongDao, PlaylistDao)
+- 扫描设备音乐文件
+- 主界面展示音乐列表和搜索功能
+- 播放界面控件操作
+- 背景音乐服务及通知栏操作
+- Material Design 3 主题
+- LiveData及MVVM架构
+- 使用RecyclerView展示列表
 
-## Architecture Decisions
+## 关键实现细节
 
-### Why MVVM?
-- Clean separation of concerns
-- Testable ViewModels
-- Reactive UI updates with LiveData
-- Lifecycle-aware components
-
-### Why Room Database?
-- Type-safe database queries
-- Compile-time verification
-- Reactive queries with Flow/LiveData
-- Easy migration support
-
-### Why Foreground Service?
-- Proper background playback
-- System notification controls
-- Media session integration
-- Battery optimization compliance
-
-## Key Implementation Details
-
-### Music Scanning
+### 音乐扫描
 ```kotlin
-// Uses MediaStore API to scan for music files
+// 使用MediaStore API扫描音乐文件
 context.contentResolver.query(
     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
     projection,
@@ -52,28 +30,28 @@ context.contentResolver.query(
 )
 ```
 
-### Service Binding
+### 服务绑定
 ```kotlin
-// MainActivity binds to MusicService
+// MainActivity绑定MusicService
 bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
 ```
 
-### Reactive UI
+### 交互式UI
 ```kotlin
-// ViewModel exposes LiveData for UI observation
+// ViewModel为UI暴露LiveData
 val allSongs: LiveData<List<Song>> = _allSongs
 ```
 
-### Database Relations
+### 数据库关联
 ```kotlin
-// Many-to-many relationship between playlists and songs
+// 播放列表和歌曲多对多关联
 @Entity(
     tableName = "playlist_songs",
     primaryKeys = ["playlistId", "songId"]
 )
 ```
 
-## File Structure
+## 代码结构
 
 ```
 src/main/java/com/unicorn/player/
@@ -97,38 +75,32 @@ src/main/java/com/unicorn/player/
     └── MusicService.kt      # Background playback
 ```
 
-## Development Guidelines
+## 开发指导
 
-### Adding New Features
-1. **Database Changes**: Update entities → create migration → update DAOs
-2. **UI Changes**: Update layouts → modify ViewModel → update Activities
-3. **Service Changes**: Test background behavior → update notification
+### 添加新特性
+1. **修改数据库**: 更新entities → 创建数据迁移 → 更新DAOs
+2. **修改UI**: 更新layouts → 修改ViewModel → 修改Activities
+3. **修改服务**: 测试后台行为 → 更新通知栏
 
-### Code Style
-- Follow Kotlin coding conventions
-- Use meaningful variable names
-- Add comments for complex logic
-- Follow Material Design guidelines
+### 代码风格
+- 遵从Kotlin编码规范
+- 使用有意义的变量名
+- 复杂逻辑添加注释
+- 遵从Material Design规范
 
-### Testing Strategy
-- Unit tests for ViewModels
-- Integration tests for database
-- UI tests for Activities
-- Service tests for MusicService
+## 通用问题&解决方案
 
-## Common Issues & Solutions
-
-### Permission Handling
+### 权限处理
 ```kotlin
-// Always check and request permissions
+// 总是检查和申请权限
 if (ContextCompat.checkSelfPermission(...) != PERMISSION_GRANTED) {
     permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
 }
 ```
 
-### Service Lifecycle
+### 服务生命周期
 ```kotlin
-// Properly bind/unbind service
+// 正确bind/unbind服务
 override fun onDestroy() {
     if (isServiceBound) {
         unbindService(serviceConnection)
@@ -137,91 +109,91 @@ override fun onDestroy() {
 }
 ```
 
-### Database Operations
+### 数据库操作
 ```kotlin
-// Use coroutines for database operations
+// 数据库操作使用协程
 viewModelScope.launch {
     repository.scanMusicFiles()
 }
 ```
 
-## Performance Considerations
+## 性能考量
 
-- **Lazy Loading**: RecyclerView efficiently handles large music libraries
-- **Database Caching**: Room caches query results automatically
-- **Background Operations**: All file scanning and database operations use coroutines
-- **Memory Management**: MediaPlayer properly released in onDestroy
+- **Lazy Loading**: RecyclerView能有效加载大量文件
+- **Database Caching**: Room自动缓存查询结果
+- **Background Operations**: 使用协程扫描数据库
+- **Memory Management**: 应用退出时释放MediaPlayer资源
 
-## Extension Points
+## 扩展功能点
 
-### Easy to Add:
-1. **Equalizer**: Add Equalizer API integration
-2. **Themes**: Extend colors.xml with dark theme variants
-3. **Widgets**: Create app widget for quick controls
-4. **Lyrics**: Add lyrics display in PlayerActivity
+### 容易增加:
+1. **Equalizer**: 添加均衡器API
+2. **Themes**: 提供暗色模式的资源
+3. **Widgets**: 创建app widget能够快速操作
+4. **Lyrics**: 在PlayerActivity中增加歌词显示
 
-### Moderate Complexity:
-1. **Playlists**: Implement playlist management UI
-2. **Cloud Sync**: Add cloud storage integration
-3. **Audio Effects**: Implement audio processing
-4. **Social Features**: Share songs, create collaborative playlists
+### 适当的复杂度:
+1. **Playlists**: 实现播放列表管理功能
+2. **Cloud Sync**: 提供云端存储功能
+3. **Audio Effects**: 实现音频处理功能
+4. **Social Features**: 歌曲分享，创建协同的播放列表
 
-### Advanced Features:
-1. **Smart Playlists**: Auto-generated playlists based on listening habits
-2. **Audio Analysis**: BPM detection, key analysis
-3. **Streaming**: Online music streaming integration
-4. **Cross-device Sync**: Multi-device playback synchronization
+### 高级特性:
+1. **Smart Playlists**: 根据播放习惯自动生成播放列表
+2. **Audio Analysis**: BPM检测，关键分析
+3. **Streaming**: 集成在线流媒体播放
+4. **Cross-device Sync**: 多设备播放同步
 
-## Dependencies Management
+## 依赖管理
 
-### Core Dependencies:
-- **Material Design 3**: UI components and theming
-- **Room**: Database operations
-- **Lifecycle**: MVVM architecture support
-- **Media**: Audio playback capabilities
+### 核心依赖:
+- **Material Design 3**: UI组件和主题
+- **Room**: 数据库操作
+- **Lifecycle**: MVVM架构
+- **Media**: 音乐播放能力
 
-### Optional Enhancements:
-- **Glide/Picasso**: Image loading for album art
-- **ExoPlayer**: Advanced media playback features
-- **WorkManager**: Background task scheduling
-- **DataStore**: Modern preference storage
+### 可选增强:
+- **Glide/Picasso**: 加载专辑图片
+- **ExoPlayer**: 提供媒体播放高级特性
+- **WorkManager**: 后台任务调度
+- **DataStore**: 最新的preferences存储
 
-## Debugging Tips
+## 调试建议
 
-1. **Database Issues**: Use Android Studio's Database Inspector
-2. **Service Problems**: Check notification and foreground service status
-3. **Memory Leaks**: Monitor with Android Profiler
-4. **Performance**: Use Layout Inspector for UI optimization
+1. **数据库问题**: 使用Android Studio的数据库Inspector
+2. **服务问题**: 检查通知和后台服务状态
+3. **内存泄漏**: 使用Android Profiler监测
+4. **性能问题**: 使用Layout Inspector优化UI
 
-## Next Development Phase
+## 下个开发周期
 
-### Priority 1 - User Experience:
-- [ ] Implement playlist creation and management
-- [ ] Add shuffle and repeat modes
-- [ ] Improve album art display
-- [ ] Add playback speed control
+### 优先级1 - 用户体验:
+- [ ] 实现播放列表的创建和管理
+- [ ] 添加随机和重复播放模式
+- [ ] 提升专辑艺术展示
+- [ ] 添加播放速度控制
 
-### Priority 2 - Features:
-- [ ] Sleep timer functionality
-- [ ] Audio equalizer
-- [ ] Lyrics display
-- [ ] Crossfade between songs
+### 优先级2 - 特性:
+- [ ] 定时睡眠功能
+- [ ] 音频均衡器
+- [ ] 歌词显示
+- [ ] 淡入淡出切换
 
-### Priority 3 - Polish:
-- [ ] Dark theme implementation
-- [ ] App widget creation
-- [ ] Settings screen
-- [ ] Import/export playlists
+### 优先级3 - 润色:
+- [ ] 暗色模式支持
+- [ ] 创建桌面小部件
+- [ ] 设置界面
+- [ ] 导入/导出播放列表
 
-## Testing Checklist
+## 测试Checklist
 
-- [ ] Music scanning works on different Android versions
-- [ ] Background playback continues when app is closed
-- [ ] Notification controls work properly
-- [ ] Search functionality filters results correctly
-- [ ] Database operations handle large music libraries
-- [ ] UI responds properly to different screen sizes
-- [ ] Service properly handles system resource constraints
-- [ ] App handles permission denial gracefully
+- [ ] 音乐扫描要考虑不同的Android版本
+- [ ] 应用界面关闭时要保持后台播放
+- [ ] 通知栏控件正常工作
+- [ ] 搜索功能能正确过滤
+- [ ] 数据库操作能处理大数据量的乐库
+- [ ] 不同的手机屏幕UI展示正常
+- [ ] 后台服务要考虑系统资源约束
+- [ ] 优雅地处理权限拒绝
 
-This guide should help continue development effectively while maintaining the established architecture and code quality standards.
+本指南应在保持既定架构和代码质量标准的同时，有效推进开发工作。
