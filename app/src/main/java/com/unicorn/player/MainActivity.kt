@@ -39,6 +39,9 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         binding.btnScrollToCurrent.visibility = android.view.View.GONE
     }
 
+    // 将 scrollToContentClick 提升为类级别变量，解决作用域问题
+    private var scrollToContentClick = false
+
     companion object {
         const val TAG = "MainActivity"
     }
@@ -130,7 +133,6 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
     private fun setupScrollStateListener() {
         var isScrolling = false
-        var scrollToContentClick = false;
 
         // 监听滚动状态
         binding.recyclerView.addOnScrollListener(object :
@@ -156,7 +158,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
                             binding.btnScrollToCurrent.visibility = android.view.View.VISIBLE
                             // 设置延迟隐藏
                             hideRunnable.let { hideHandler.removeCallbacks(it) }
-                            hideHandler.postDelayed(hideRunnable, 2000)
+                            hideHandler.postDelayed(hideRunnable, 1000)
                         } else {
                             binding.btnScrollToCurrent.visibility = android.view.View.GONE
                         }
@@ -194,8 +196,12 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         if (position != -1) {
             binding.btnScrollToCurrent.visibility = android.view.View.GONE
             binding.recyclerView.smoothScrollToPosition(position)
-            // 可选：高亮显示当前歌曲
-            highlightCurrentSong(position)
+
+            // 修复：延迟重置 scrollToContentClick 标志
+            // 确保即使 smoothScrollToPosition 不触发滚动状态变化，也能正确重置
+            hideHandler.postDelayed({
+                scrollToContentClick = false
+            }, 500) // 500ms 延迟，足够覆盖 smoothScrollToPosition 的动画时间
         }
     }
 
