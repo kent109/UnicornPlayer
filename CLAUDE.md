@@ -7,7 +7,8 @@ Android音乐播放器，使用Material Design风格，提供音乐文件浏览�
 ## 当前功能状态
 
 ✅ **已完成的组件:**
-- Room数据库管理音乐文件(SongDao, PlaylistDao)
+
+- Room数据库管理音乐文件
 - 扫描设备音乐文件
 - 主界面展示音乐列表和搜索功能
 - 播放界面控件操作
@@ -19,6 +20,7 @@ Android音乐播放器，使用Material Design风格，提供音乐文件浏览�
 ## 关键实现细节
 
 ### 音乐扫描
+
 ```kotlin
 // 使用MediaStore API扫描音乐文件
 context.contentResolver.query(
@@ -31,19 +33,22 @@ context.contentResolver.query(
 ```
 
 ### 服务绑定
+
 ```kotlin
 // MainActivity绑定MusicService
 bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
 ```
 
 ### 交互式UI
+
 ```kotlin
 // ViewModel为UI暴露LiveData
 val allSongs: LiveData<List<Song>> = _allSongs
 ```
 
 ### 数据库关联
-```kotlin
+
+``` kotlin
 // 播放列表和歌曲多对多关联
 @Entity(
     tableName = "playlist_songs",
@@ -55,50 +60,60 @@ val allSongs: LiveData<List<Song>> = _allSongs
 
 ```
 src/main/java/com/unicorn/player/
-├── MainActivity.kt           # Entry point with music list
-├── PlayerActivity.kt         # Full-screen player UI
+├── MainActivity.kt           # 带音乐列表的主界面，包括底部播放条
+├── PlayerActivity.kt         # 单首歌曲的全屏播放界面
+├── PlayerFragment.kt         # PlayerActivity的Fragment
+├── PlayerPagerAdapter        # ViewPager切换歌曲适配器
 ├── model/
-│   ├── Song.kt              # Music track data
-│   └── Playlist.kt          # Playlist data
+│   ├── Song.kt              # 音轨信息
+│   └── Playlist.kt          # 播放列表
 ├── database/
-│   ├── SongDao.kt           # Song CRUD operations
-│   ├── PlaylistDao.kt       # Playlist operations
-│   └── MusicDatabase.kt     # Room configuration
+│   ├── SongDao.kt           # 提供歌曲CRUD操作
+│   ├── PlaylistDao.kt       # 歌曲列表数据库操作
+│   └── MusicDatabase.kt     # Room数据库
 ├── repository/
-│   └── MusicRepository.kt   # Data access layer
+│   └── MusicRepository.kt   # 数据库访问接口层
 ├── viewmodel/
-│   ├── MusicViewModel.kt    # UI state management
+│   ├── MusicViewModel.kt    # UI模型管理
 │   └── MusicViewModelFactory.kt
+├── widget/
+    └── PlayingAnimationView.kt   # 自定义播放动画视图
 ├── adapter/
-│   └── SongAdapter.kt       # RecyclerView adapter
+│   └── SongAdapter.kt       # RecyclerView适配器
 └── service/
-    └── MusicService.kt      # Background playback
+    └── MusicService.kt      # 后台播放服务
 ```
 
 ## 开发指导
 
 ### 添加新特性
+
 1. **修改数据库**: 更新entities → 创建数据迁移 → 更新DAOs
 2. **修改UI**: 更新layouts → 修改ViewModel → 修改Activities
 3. **修改服务**: 测试后台行为 → 更新通知栏
 
 ### 代码风格
+
 - 遵从Kotlin编码规范
 - 使用有意义的变量名
-- 复杂逻辑添加注释
+- 创建有意义的子包名
+- 复杂逻辑添加简体中文注释
+- 精简代码，提取公共方法，删除无引用的代码
 - 遵从Material Design规范
 
 ## 通用问题&解决方案
 
 ### 权限处理
+
 ```kotlin
 // 总是检查和申请权限
-if (ContextCompat.checkSelfPermission(...) != PERMISSION_GRANTED) {
+if (ContextCompat.checkSelfPermission(xxx) != PERMISSION_GRANTED) {
     permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
 }
 ```
 
 ### 服务生命周期
+
 ```kotlin
 // 正确bind/unbind服务
 override fun onDestroy() {
@@ -110,6 +125,7 @@ override fun onDestroy() {
 ```
 
 ### 数据库操作
+
 ```kotlin
 // 数据库操作使用协程
 viewModelScope.launch {
@@ -126,37 +142,47 @@ viewModelScope.launch {
 
 ## 扩展功能点
 
-### 容易增加:
+### 增强易用性:
+
 1. **Equalizer**: 添加均衡器API
 2. **Themes**: 提供暗色模式的资源
 3. **Widgets**: 创建app widget能够快速操作
 4. **Lyrics**: 在PlayerActivity中增加歌词显示
+5. **Music Scanning**: 指定目录、文件大小类型等手动扫描
+6. **Playback Mode**: 支持设置播放模式(列表循环、单曲循环、随机播放)
 
 ### 适当的复杂度:
+
 1. **Playlists**: 实现播放列表管理功能
 2. **Cloud Sync**: 提供云端存储功能
 3. **Audio Effects**: 实现音频处理功能
 4. **Social Features**: 歌曲分享，创建协同的播放列表
 
 ### 高级特性:
+
 1. **Smart Playlists**: 根据播放习惯自动生成播放列表
 2. **Audio Analysis**: BPM检测，关键分析
-3. **Streaming**: 集成在线流媒体播放
-4. **Cross-device Sync**: 多设备播放同步
+3. **Quality Detection**: 音频质量检测
+4. **Streaming**: 集成在线流媒体播放
+5. **Cross-device Sync**: 多设备播放同步
 
 ## 依赖管理
 
 ### 核心依赖:
+
 - **Material Design 3**: UI组件和主题
 - **Room**: 数据库操作
 - **Lifecycle**: MVVM架构
-- **Media**: 音乐播放能力
+- **Media**: 音频播放能力
 
 ### 可选增强:
+
 - **Glide/Picasso**: 加载专辑图片
 - **ExoPlayer**: 提供媒体播放高级特性
 - **WorkManager**: 后台任务调度
 - **DataStore**: 最新的preferences存储
+- **Restore Playback**: 重启应用后加载上次播放进度
+- **Audio Focus**: 正确管理音频焦点，暂停和恢复播放
 
 ## 调试建议
 
@@ -168,19 +194,22 @@ viewModelScope.launch {
 ## 下个开发周期
 
 ### 优先级1 - 用户体验:
+
 - [ ] 实现播放列表的创建和管理
 - [ ] 添加随机和重复播放模式
 - [ ] 提升专辑艺术展示
 - [ ] 添加播放速度控制
 
 ### 优先级2 - 特性:
+
 - [ ] 定时睡眠功能
 - [ ] 音频均衡器
 - [ ] 歌词显示
 - [ ] 淡入淡出切换
 
 ### 优先级3 - 润色:
-- [ ] 暗色模式支持
+
+- [ ] 支持暗色模式
 - [ ] 创建桌面小部件
 - [ ] 设置界面
 - [ ] 导入/导出播放列表
@@ -196,4 +225,4 @@ viewModelScope.launch {
 - [ ] 后台服务要考虑系统资源约束
 - [ ] 优雅地处理权限拒绝
 
-本指南应在保持既定架构和代码质量标准的同时，有效推进开发工作。
+本指南应在保持既定架构和代码质量标准的同时，根据用户需求不断演进。
