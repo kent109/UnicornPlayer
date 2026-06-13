@@ -300,20 +300,8 @@ class PlayerActivity : AppCompatActivity() {
                         // 只更新当前歌曲，不播放
                         service.setCurrentSong(songs[startPosition])
 
-                        // 检查是否需要播放
-                        val isPlaying = service.isPlaying.value == true
-                        Log.d(
-                            "PlayerActivity",
-                            "Current song: ${currentSong?.title}, Is playing: $isPlaying, Is initial setup: $isInitialSetup"
-                        )
-
-                        if (currentSong != null && isPlaying && !isInitialSetup) {
-                            // 如果之前在播放且不是初始设置，继续播放当前歌曲
-                            Log.d("PlayerActivity", "Continuing playback from previous position")
-                            service.requestAudioFocusAndPlayCurrentSong()
-                        } else if (isPlaying) {
-                            Log.d("PlayerActivity", "Playback started unexpectedly during setup")
-                        }
+                        // 注意：不再自动重启播放，让歌曲从当前位置继续
+                        // 这样可以避免进入PlayerActivity时歌曲从头开始播放的问题
                     } else {
                         Log.w("PlayerActivity", "No songs found in database")
                     }

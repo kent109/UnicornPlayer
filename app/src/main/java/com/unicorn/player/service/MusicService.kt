@@ -593,35 +593,32 @@ class MusicService : Service() {
 
     fun playNext() {
         if (songList.isEmpty()) {
-            // 如果songList为空，但我们有当前歌曲，尝试从数据库加载完整列表
-            _currentSong.value?.let { currentSong ->
-                // 在协程中加载歌曲列表
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        // 获取数据库中的歌曲列表
-                        val database = MusicDatabase.getDatabase(this@MusicService)
-                        database.songDao().getAllSongs().collect { songs ->
-                            if (songs.isNotEmpty()) {
-                                val currentIndexInList =
-                                    songs.indexOfFirst { it.id == currentSong.id }
-                                if (currentIndexInList >= 0) {
-                                    setSongList(songs, currentIndexInList)
-                                } else {
-                                    setSongList(songs, 0)
-                                }
-                                // 使用 Handler 延迟执行 playNext
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    playNext() // 递归调用，现在有songList了
-                                }
-                            }
+            // 如果songList为空，尝试从数据库加载
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val database = MusicDatabase.getDatabase(this@MusicService)
+                    val songs = database.songDao().getAllSongs().first()
+
+                    if (songs.isNotEmpty()) {
+                        val currentSongId = _currentSong.value?.id
+                        val currentIndexInList = if (currentSongId != null) {
+                            songs.indexOfFirst { it.id == currentSongId }
+                        } else {
+                            -1
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error loading song list from database: ${e.message}")
-                        e.printStackTrace()
+
+                        val startIndex = if (currentIndexInList >= 0) currentIndexInList else 0
+
+                        withContext(Dispatchers.Main) {
+                            setSongList(songs, startIndex)
+                            playNext() // 递归调用，现在有songList了
+                        }
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error loading song list from database: ${e.message}")
+                    e.printStackTrace()
                 }
             }
-            // 没有当前歌曲，无法播放
             return
         }
 
@@ -658,35 +655,32 @@ class MusicService : Service() {
 
     fun playPrevious() {
         if (songList.isEmpty()) {
-            // 如果songList为空，但我们有当前歌曲，尝试从数据库加载完整列表
-            _currentSong.value?.let { currentSong ->
-                // 在协程中加载歌曲列表
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        // 获取数据库中的歌曲列表
-                        val database = MusicDatabase.getDatabase(this@MusicService)
-                        database.songDao().getAllSongs().collect { songs ->
-                            if (songs.isNotEmpty()) {
-                                val currentIndexInList =
-                                    songs.indexOfFirst { it.id == currentSong.id }
-                                if (currentIndexInList >= 0) {
-                                    setSongList(songs, currentIndexInList)
-                                } else {
-                                    setSongList(songs, 0)
-                                }
-                                // 使用 Handler 延迟执行 playPrevious
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    playPrevious() // 递归调用，现在有songList了
-                                }
-                            }
+            // 如果songList为空，尝试从数据库加载
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val database = MusicDatabase.getDatabase(this@MusicService)
+                    val songs = database.songDao().getAllSongs().first()
+
+                    if (songs.isNotEmpty()) {
+                        val currentSongId = _currentSong.value?.id
+                        val currentIndexInList = if (currentSongId != null) {
+                            songs.indexOfFirst { it.id == currentSongId }
+                        } else {
+                            -1
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error loading song list from database: ${e.message}")
-                        e.printStackTrace()
+
+                        val startIndex = if (currentIndexInList >= 0) currentIndexInList else 0
+
+                        withContext(Dispatchers.Main) {
+                            setSongList(songs, startIndex)
+                            playPrevious() // 递归调用，现在有songList了
+                        }
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error loading song list from database: ${e.message}")
+                    e.printStackTrace()
                 }
             }
-            // 没有当前歌曲，无法播放
             return
         }
 
@@ -1038,9 +1032,41 @@ class MusicService : Service() {
                         Log.e(TAG, "Error preparing media player: ${e.message}")
                         e.printStackTrace()
                     }
+
+                    // 加载歌曲列表到service，确保播放完成后能自动播放下一首
+                    loadSongListFromDatabase()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading playback state: ${e.message}")
+                e.printStackTrace()
+            }
+        }
+    }
+
+    // 从数据库加载歌曲列表
+    private fun loadSongListFromDatabase() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val database = MusicDatabase.getDatabase(this@MusicService)
+                val songs = database.songDao().getAllSongs().first()
+
+                if (songs.isNotEmpty()) {
+                    val currentSongId = _currentSong.value?.id
+                    val currentIndexInList = if (currentSongId != null) {
+                        songs.indexOfFirst { it.id == currentSongId }
+                    } else {
+                        -1
+                    }
+
+                    val startIndex = if (currentIndexInList >= 0) currentIndexInList else 0
+
+                    withContext(Dispatchers.Main) {
+                        setSongList(songs, startIndex)
+                        Log.d(TAG, "Loaded ${songs.size} songs from database, current song at index $startIndex")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading song list from database: ${e.message}")
                 e.printStackTrace()
             }
         }
