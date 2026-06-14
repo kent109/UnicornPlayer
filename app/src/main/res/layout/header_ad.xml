@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/ad_container"
+    android:layout_width="match_parent"
+    android:layout_height="120dp"
+    android:background="@color/primaryContainer"
+    android:visibility="visible">
+
+    <!-- 广告图片 -->
+    <ImageView
+        android:id="@+id/ad_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:contentDescription="广告图片"
+        android:scaleType="centerCrop"
+        android:src="@drawable/ic_music_note" />
+
+    <!-- 广告文本 -->
+    <TextView
+        android:id="@+id/ad_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#80000000"
+        android:gravity="center"
+        android:padding="8dp"
+        android:text="🎵 发现更多精彩音乐内容"
+        android:textColor="@android:color/white"
+        android:textSize="14sp" />
+
+    <!-- 关闭按钮 -->
+    <ImageButton
+        android:id="@+id/ad_close_button"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="关闭广告"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        app:tint="@color/onSurface" />
+
+</FrameLayout>

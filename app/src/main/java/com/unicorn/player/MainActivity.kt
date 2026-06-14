@@ -89,6 +89,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         try {
             setupViewModel()
             setupRecyclerView()
+            setupSmartRefreshLayout()
             setupSearchView()
             setupBottomPlayer()
 
@@ -129,6 +130,35 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
         // 初始化滚动状态监听
         setupScrollStateListener()
+    }
+
+    private fun setupSmartRefreshLayout() {
+        val smartRefreshLayout = binding.smartRefreshLayout
+
+        // 创建二级刷新头（TwoLevelHeader）
+        val twoLevelHeader = com.scwang.smart.refresh.header.TwoLevelHeader(this)
+        smartRefreshLayout.setRefreshHeader(twoLevelHeader)
+
+        // 配置参数
+        smartRefreshLayout.setHeaderHeight(120f) // Header 高度 120dp
+        smartRefreshLayout.setEnableOverScrollBounce(true) // 启用回弹效果
+        smartRefreshLayout.setEnableRefresh(true) // 启用下拉刷新
+
+        // 设置下拉刷新监听
+        smartRefreshLayout.setOnRefreshListener {
+            Log.d(TAG, "下拉刷新触发")
+            // 重新加载音乐文件
+            loadMusic()
+            // 模拟刷新延迟
+            smartRefreshLayout.finishRefresh(1000)
+        }
+
+        // 设置二级刷新监听
+        twoLevelHeader.setOnTwoLevelListener {
+            Log.d(TAG, "二级刷新触发")
+            // 这里可以添加更多数据加载逻辑
+            true // 返回true表示处理完成
+        }
     }
 
     private fun setupScrollStateListener() {
@@ -416,7 +446,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             if (songAdapter.currentPlayingSong != null) {
                 // 只更新当前播放的歌曲item
                 viewModel.allSongs.value?.let { songs ->
-                    val currentPosition = songs.indexOfFirst { s -> s.id == songAdapter.currentPlayingSong!!.id }
+                    val currentPosition =
+                        songs.indexOfFirst { s -> s.id == songAdapter.currentPlayingSong!!.id }
                     if (currentPosition != -1) {
                         songAdapter.notifyItemChanged(currentPosition)
                     }

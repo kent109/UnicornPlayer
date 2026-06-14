@@ -16,8 +16,8 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerView"
+    <com.scwang.smart.refresh.layout.SmartRefreshLayout
+        android:id="@+id/smartRefreshLayout"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginTop="8dp"
@@ -26,7 +26,19 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/searchView"
-        tools:listitem="@layout/item_song" />
+        app:srlEnableOverScrollBounce="true"
+        app:srlEnableRefresh="true"
+        app:srlEnableTwoLevel="true"
+        app:srlMaxRate="2.5"
+        app:srlHeaderMaxDragRate="1.5">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            tools:listitem="@layout/item_song" />
+
+    </com.scwang.smart.refresh.layout.SmartRefreshLayout>
 
     <ProgressBar
         android:id="@+id/progressBar"
