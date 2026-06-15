@@ -27,7 +27,6 @@ class SongAdapter(
     fun stopAllAnimations() {
         isPlaying = false
         currentPlayingSong?.let { song ->
-            // 查找当前播放歌曲在列表中的位置
             val currentPosition = currentList.indexOfFirst { it.id == song.id }
             if (currentPosition != -1) {
                 notifyItemChanged(currentPosition)
@@ -48,7 +47,31 @@ class SongAdapter(
 
     override fun onBindViewHolder(holder: SongViewHolder, position: Int) {
         val song = getItem(position)
-        holder.bind(song, position, currentPlayingSong)
+        holder.bind(song, position, currentPlayingSong, isPlaying)
+    }
+
+    /**
+     * 当ViewHolder附加到窗口时调用 - 用于启动动画
+     */
+    override fun onViewAttachedToWindow(holder: SongViewHolder) {
+        super.onViewAttachedToWindow(holder)
+        // 检查是否是当前播放歌曲且正在播放，如果是则启动动画
+        val position = holder.bindingAdapterPosition
+        if (position != RecyclerView.NO_POSITION) {
+            val song = getItem(position)
+            if (currentPlayingSong?.id == song.id && isPlaying) {
+                holder.startRotationAnimation()
+            }
+        }
+    }
+
+    /**
+     * 当ViewHolder从窗口分离时调用 - 用于停止动画
+     */
+    override fun onViewDetachedFromWindow(holder: SongViewHolder) {
+        super.onViewDetachedFromWindow(holder)
+        // 停止动画
+        holder.stopRotationAnimation()
     }
 
     inner class SongViewHolder(
@@ -58,7 +81,7 @@ class SongAdapter(
         // 保存当前动画的引用，以便可以停止
         private var currentAnimator: android.animation.ObjectAnimator? = null
 
-        fun bind(song: Song, position: Int, currentPlayingSong: Song?) {
+        fun bind(song: Song, position: Int, currentPlayingSong: Song?, isPlaying: Boolean) {
             binding.apply {
                 songTitle.text = song.title
                 artistName.text = song.artist
@@ -92,33 +115,14 @@ class SongAdapter(
                     albumArt.isSelected = false
                 }
 
-                // 先停止之前的动画
-                currentAnimator?.end()
-                currentAnimator = null
-                binding.albumArt.rotation = 0f
-
-                if (isCurrentPlaying && isPlaying) {
-                    // 播放时：开始旋转动画
-                    val animator = android.animation.ObjectAnimator.ofFloat(
-                        binding.albumArt,
-                        "rotation",
-                        0f,
-                        360f
-                    )
-                    animator.duration = 8000
-                    animator.interpolator = android.view.animation.LinearInterpolator()
-                    animator.repeatCount = android.animation.ValueAnimator.INFINITE
-                    animator.start()
-                    // 保存动画引用
-                    currentAnimator = animator
-                }
+                // 重置旋转角度
+                albumArt.rotation = 0f
 
                 root.setOnClickListener {
                     listener.onSongClick(song, position)
                 }
 
                 root.setOnLongClickListener {
-                    // 显示文件全路径的弱提示
                     Toast.makeText(
                         context,
                         song.path,
@@ -127,6 +131,34 @@ class SongAdapter(
                     true
                 }
             }
+        }
+
+        /**
+         * 开始旋转动画
+         */
+        fun startRotationAnimation() {
+            if (currentAnimator != null) return
+
+            val animator = android.animation.ObjectAnimator.ofFloat(
+                binding.albumArt,
+                "rotation",
+                0f,
+                360f
+            )
+            animator.duration = 8000
+            animator.interpolator = android.view.animation.LinearInterpolator()
+            animator.repeatCount = android.animation.ValueAnimator.INFINITE
+            animator.start()
+            currentAnimator = animator
+        }
+
+        /**
+         * 停止旋转动画
+         */
+        fun stopRotationAnimation() {
+            currentAnimator?.end()
+            currentAnimator = null
+            binding.albumArt.rotation = 0f
         }
     }
 
