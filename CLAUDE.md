@@ -101,6 +101,13 @@ src/main/java/com/unicorn/player/
 - 精简代码，提取公共方法，删除无引用的代码
 - 遵从Material Design规范
 
+### 代码编译
+- 本项目在windows系统下开发
+- 使用“gradle app:assembleDebug”命令编译
+
+### 交互方式
+- 开发者使用中文，希望发送和接收指令都是简体中文
+
 ## 通用问题&解决方案
 
 ### 权限处理
