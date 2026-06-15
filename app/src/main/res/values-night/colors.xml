@@ -39,4 +39,7 @@
 
     <!-- Icon colors for day/night mode -->
     <color name="icon_color">#E6E1E5</color>
+    <color name="disc_color_ring">#ff000000</color>
+    <color name="disc_color_outer">#ff000000</color>
+    <color name="disc_color_inner">#FFE6E1E5</color>
 </resources>
