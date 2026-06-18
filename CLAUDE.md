@@ -1,128 +1,136 @@
-# Unicorn Player - 开发指南
+# CLAUDE.md
 
-## 项目简介
+本文件为 Claude Code (claude.ai/code) 提供本仓库的开发指南。
 
-Android音乐播放器，使用Material Design风格，提供音乐文件浏览、搜索、播放等功能。
+## 项目概述
 
-## 当前功能状态
+**UnicornPlayer** 是一款基于 Kotlin 和 Material Design 3 开发的 Android 音乐播放器应用。提供音乐文件扫描、播放列表管理、后台播放及通知控制、音频焦点处理等功能。
 
-✅ **已完成的组件:**
+## 构建命令
 
-- Room数据库管理音乐文件
-- 扫描设备音乐文件
-- 主界面展示音乐列表和搜索功能
-- 播放界面控件操作
-- 背景音乐服务及通知栏操作
-- Material Design 3 主题
-- LiveData及MVVM架构
-- 使用RecyclerView展示列表
+```bash
+# 构建调试版 APK
+gradle app:assembleDebug
+
+# 清理构建
+gradle clean
+
+# 输出路径：UnicornPlayer_debug_1.0.apk（位于 app/build/outputs/apk/debug/）
+```
+
+**系统要求**：Windows 操作系统、Android SDK、Java 1.8、Kotlin 2.2.20、AGP 8.13.1
+
+## 交互说明
+开发者是中文环境，在发送和接收指令时请使用简体中文
+
+## 架构设计
+
+### MVVM + Repository 模式
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   UI 层         │────▶│  ViewModel      │────▶│   Repository    │
+│  (Activities/   │     │ (MusicViewModel)│     │(MusicRepository)│
+│   Fragments)    │◀────│                 │◀────│                 │
+└─────────────────┘     └─────────────────┘     └────────┬────────┘
+                                                         │
+                        ┌─────────────────┐              │
+                        │  Room 数据库    │◀─────────────┘
+                        │ (MusicDatabase) │
+                        └─────────────────┘
+```
+
+### 核心组件
+
+| 组件 | 职责 |
+|------|------|
+| `MainActivity` | 歌曲列表界面、搜索功能、底部播放栏、服务绑定 |
+| `PlayerActivity` | 全屏播放界面，支持 ViewPager2 滑动切换歌曲 |
+| `PlayerFragment` | 单个歌曲页面，包含播放控制 |
+| `MusicService` | 后台播放、通知栏控制、音频焦点、媒体会话 |
+| `MusicViewModel` | UI 数据管理、歌曲加载、搜索功能 |
+| `MusicRepository` | MediaStore 扫描、数据库操作 |
+| `SongAdapter` | RecyclerView 适配器，实现专辑封面旋转动画 |
+| `PlayerPagerAdapter` | ViewPager2 适配器，管理歌曲页面 |
+| `PlayingAnimationView` | 自定义动画均衡器条 |
+| `AdHeader` | 自定义 SmartRefreshLayout 广告头部 |
+
+## 数据流
+
+1. **音乐扫描**：`MusicRepository.scanMusicFiles()` 查询 `MediaStore.Audio.Media` → 保存到 Room `songs` 表
+2. **UI 更新**：`MusicViewModel` 收集 Room `Flow<List<Song>>` → 暴露 `LiveData` → `MainActivity` 观察
+3. **播放控制**：点击歌曲 → `MusicService.setSongList()` + `requestAudioFocusAndPlayCurrentSong()`
+4. **状态持久化**：`DataStore<Preferences>` 保存当前歌曲 ID、播放位置、播放状态
+5. **通知栏**：`MusicService.updateNotification()` 使用 `MediaStyle` 通知
 
 ## 关键实现细节
 
 ### 音乐扫描
+- 使用 `MediaStore.Audio.Media.EXTERNAL_CONTENT_URI` 查询
+- 过滤条件：`IS_MUSIC != 0`，排除 Recordings/allsaintsMusic/msc 目录
+- 最小文件大小：1024 KB（1 MB）
+- 专辑封面 URI：`content://media/external/audio/albumart/{albumId}`
 
+### 服务绑定模式
 ```kotlin
-// 使用MediaStore API扫描音乐文件
-context.contentResolver.query(
-    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-    projection,
-    selection,
-    null,
-    MediaStore.Audio.Media.TITLE + " ASC"
-)
-```
-
-### 服务绑定
-
-```kotlin
-// MainActivity绑定MusicService
+// 先启动服务（前台），再绑定
+startService(intent)
 bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
 ```
 
-### 交互式UI
+### 音频焦点处理
+- 使用 `AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)`
+- 在 `AUDIOFOCUS_LOSS_TRANSIENT` / `AUDIOFOCUS_LOSS` 时暂停
+- 在 `AUDIOFOCUS_GAIN` 时恢复（如果之前正在播放）
 
+### 动画生命周期（专辑封面旋转）
+- `SongAdapter.onViewAttachedToWindow()` → 启动旋转
+- `SongAdapter.onViewDetachedFromWindow()` → 停止旋转
+- `MainActivity.onPause()` → `songAdapter.stopAllAnimations()`
+- 使用 `ObjectAnimator` + `LinearInterpolator`，8 秒周期，无限循环
+
+### 通知栏动作
+通过 `PendingIntent.getService()` 发送广播：
+- `ACTION_PLAY`、`ACTION_PAUSE`、`ACTION_NEXT`、`ACTION_PREVIOUS`、`ACTION_STOP`
+- 每个动作使用独立 requestCode（1001-1005）
+
+## 数据库结构
+
+| 表名 | 实体 | 关键字段 |
+|------|------|----------|
+| `songs` | `Song` | id, title, artist, album, duration, path, albumArt, lastModified |
+| `playlists` | `Playlist` | id, name, createdAt |
+| `playlist_songs` | `PlaylistSong` | playlistId, songId（多对多关联） |
+
+## 权限说明
+
+- `READ_MEDIA_AUDIO`（Android 13+）/ `READ_EXTERNAL_STORAGE`
+- `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK`
+- `POST_NOTIFICATIONS`（Android 13+）
+- `WAKE_LOCK`
+- `BLUETOOTH`、`BLUETOOTH_ADMIN`、`BLUETOOTH_CONNECT`
+
+## 代码风格
+
+- 语言：注释和 UI 文本使用**简体中文**
+- 变量命名：有意义的驼峰命名法
+- 注释：复杂逻辑添加中文注释
+- 架构：严格遵循 MVVM，Activity/Fragment 中不编写业务逻辑
+- 协程：ViewModel 使用 `viewModelScope`，UI 使用 `lifecycleScope`
+- Room：响应式查询使用 `Flow`，写入操作使用 `suspend` 函数
+
+## 常用模式
+
+### LiveData 观察
 ```kotlin
-// ViewModel为UI暴露LiveData
-val allSongs: LiveData<List<Song>> = _allSongs
-```
-
-### 数据库关联
-
-``` kotlin
-// 播放列表和歌曲多对多关联
-@Entity(
-    tableName = "playlist_songs",
-    primaryKeys = ["playlistId", "songId"]
-)
-```
-
-## 代码结构
-
-```
-src/main/java/com/unicorn/player/
-├── MainActivity.kt           # 带音乐列表的主界面，包括底部播放条
-├── PlayerActivity.kt         # 单首歌曲的全屏播放界面
-├── PlayerFragment.kt         # PlayerActivity的Fragment
-├── PlayerPagerAdapter        # ViewPager切换歌曲适配器
-├── model/
-│   ├── Song.kt              # 音轨信息
-│   └── Playlist.kt          # 播放列表
-├── database/
-│   ├── SongDao.kt           # 提供歌曲CRUD操作
-│   ├── PlaylistDao.kt       # 歌曲列表数据库操作
-│   └── MusicDatabase.kt     # Room数据库
-├── repository/
-│   └── MusicRepository.kt   # 数据库访问接口层
-├── viewmodel/
-│   ├── MusicViewModel.kt    # UI模型管理
-│   └── MusicViewModelFactory.kt
-├── widget/
-    └── PlayingAnimationView.kt   # 自定义播放动画视图
-├── adapter/
-│   └── SongAdapter.kt       # RecyclerView适配器
-└── service/
-    └── MusicService.kt      # 后台播放服务
-```
-
-## 开发指导
-
-### 添加新特性
-
-1. **修改数据库**: 更新entities → 创建数据迁移 → 更新DAOs
-2. **修改UI**: 更新layouts → 修改ViewModel → 修改Activities
-3. **修改服务**: 测试后台行为 → 更新通知栏
-
-### 代码风格
-
-- 遵从Kotlin编码规范
-- 使用有意义的变量名
-- 创建有意义的子包名
-- 复杂逻辑添加简体中文注释
-- 精简代码，提取公共方法，删除无引用的代码
-- 遵从Material Design规范
-
-### 代码编译
-- 本项目在windows系统下开发
-- 使用“gradle app:assembleDebug”命令编译
-
-### 交互方式
-- 开发者使用中文，希望发送和接收指令都是简体中文
-
-## 通用问题&解决方案
-
-### 权限处理
-
-```kotlin
-// 总是检查和申请权限
-if (ContextCompat.checkSelfPermission(xxx) != PERMISSION_GRANTED) {
-    permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+// 使用前始终检查初始化状态
+if (::songAdapter.isInitialized) {
+    songAdapter.submitList(songs)
 }
 ```
 
-### 服务生命周期
-
+### 服务连接
 ```kotlin
-// 正确bind/unbind服务
 override fun onDestroy() {
     if (isServiceBound) {
         unbindService(serviceConnection)
@@ -131,105 +139,25 @@ override fun onDestroy() {
 }
 ```
 
-### 数据库操作
-
+### 协程数据库操作
 ```kotlin
-// 数据库操作使用协程
 viewModelScope.launch {
-    repository.scanMusicFiles()
+    repository.scanMusicFiles() // suspend 函数
 }
 ```
 
-## 性能考量
+## 依赖说明
 
-- **Lazy Loading**: RecyclerView能有效加载大量文件
-- **Database Caching**: Room自动缓存查询结果
-- **Background Operations**: 使用协程扫描数据库
-- **Memory Management**: 应用退出时释放MediaPlayer资源
-
-## 扩展功能点
-
-### 增强易用性:
-
-1. **Equalizer**: 添加均衡器API
-2. **Themes**: 提供暗色模式的资源
-3. **Widgets**: 创建app widget能够快速操作
-4. **Lyrics**: 在PlayerActivity中增加歌词显示
-5. **Music Scanning**: 指定目录、文件大小类型等手动扫描
-6. **Playback Mode**: 支持设置播放模式(列表循环、单曲循环、随机播放)
-
-### 适当的复杂度:
-
-1. **Playlists**: 实现播放列表管理功能
-2. **Cloud Sync**: 提供云端存储功能
-3. **Audio Effects**: 实现音频处理功能
-4. **Social Features**: 歌曲分享，创建协同的播放列表
-
-### 高级特性:
-
-1. **Smart Playlists**: 根据播放习惯自动生成播放列表
-2. **Audio Analysis**: BPM检测，关键分析
-3. **Quality Detection**: 音频质量检测
-4. **Streaming**: 集成在线流媒体播放
-5. **Cross-device Sync**: 多设备播放同步
-
-## 依赖管理
-
-### 核心依赖:
-
-- **Material Design 3**: UI组件和主题
-- **Room**: 数据库操作
-- **Lifecycle**: MVVM架构
-- **Media**: 音频播放能力
-
-### 可选增强:
-
-- **Glide/Picasso**: 加载专辑图片
-- **ExoPlayer**: 提供媒体播放高级特性
-- **WorkManager**: 后台任务调度
-- **DataStore**: 最新的preferences存储
-- **Restore Playback**: 重启应用后加载上次播放进度
-- **Audio Focus**: 正确管理音频焦点，暂停和恢复播放
+- **Room**：支持 Flow 的数据库
+- **Glide**：图片加载，使用 RoundedCorners 变换
+- **SmartRefreshLayout**：下拉刷新，带 TwoLevelHeader
+- **DataStore**：偏好设置，用于播放状态持久化
+- **MediaSessionCompat**：通知栏播放控制
+- **ViewPager2**：PlayerActivity 中的歌曲滑动
 
 ## 调试建议
 
-1. **数据库问题**: 使用Android Studio的数据库Inspector
-2. **服务问题**: 检查通知和后台服务状态
-3. **内存泄漏**: 使用Android Profiler监测
-4. **性能问题**: 使用Layout Inspector优化UI
-
-## 下个开发周期
-
-### 优先级1 - 用户体验:
-
-- [ ] 实现播放列表的创建和管理
-- [ ] 添加随机和重复播放模式
-- [ ] 提升专辑艺术展示
-- [ ] 添加播放速度控制
-
-### 优先级2 - 特性:
-
-- [ ] 定时睡眠功能
-- [ ] 音频均衡器
-- [ ] 歌词显示
-- [ ] 淡入淡出切换
-
-### 优先级3 - 润色:
-
-- [ ] 支持暗色模式
-- [ ] 创建桌面小部件
-- [ ] 设置界面
-- [ ] 导入/导出播放列表
-
-## 测试Checklist
-
-- [ ] 音乐扫描要考虑不同的Android版本
-- [ ] 应用界面关闭时要保持后台播放
-- [ ] 通知栏控件正常工作
-- [ ] 搜索功能能正确过滤
-- [ ] 数据库操作能处理大数据量的乐库
-- [ ] 不同的手机屏幕UI展示正常
-- [ ] 后台服务要考虑系统资源约束
-- [ ] 优雅地处理权限拒绝
-
-本指南应在保持既定架构和代码质量标准的同时，根据用户需求不断演进。
+- 数据库问题：使用 Android Studio Database Inspector
+- 服务问题：检查通知状态和 `MusicService` 日志
+- 内存泄漏：使用 Android Profiler 检测 MediaPlayer/Service 泄漏
+- UI 问题：使用 Layout Inspector 检查约束/布局问题
