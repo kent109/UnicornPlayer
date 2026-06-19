@@ -91,6 +91,7 @@ class MusicService : Service() {
     private lateinit var audioFocusRequest: AudioFocusRequest
     var currentIndex = 0
     var isChangingSong = false
+    var isSkippingFailedSong = false
 
     // 广播接收器用于处理通知栏按钮点击
     private val notificationButtonReceiver = object : BroadcastReceiver() {
@@ -487,6 +488,18 @@ class MusicService : Service() {
     }
 
     private fun playSongDirectly(song: Song) {
+        // 检查文件是否存在
+        val file = java.io.File(song.path)
+        if (!file.exists()) {
+            Log.e(TAG, "Song file not found: ${song.path}")
+            // 文件不存在，尝试播放下一首
+            if (!isSkippingFailedSong) {
+                isSkippingFailedSong = true
+                playNext()
+            }
+            return
+        }
+
         // 使用setCurrentSong确保立即更新
         setCurrentSong(song)
         _isPlaying.value = true  // 确保立即更新状态
@@ -499,11 +512,18 @@ class MusicService : Service() {
             // 播放后立即更新通知和状态
             updateNotification(song)
             updateMediaSessionPlaybackState()
+            // 重置跳过标志
+            isSkippingFailedSong = false
         } catch (e: IOException) {
             Log.e(TAG, "Error playing song: ${e.message}")
             e.printStackTrace()
             // 播放失败时重置状态
             _isPlaying.value = false
+            // 播放失败，尝试播放下一首
+            if (!isSkippingFailedSong) {
+                isSkippingFailedSong = true
+                playNext()
+            }
         }
     }
 

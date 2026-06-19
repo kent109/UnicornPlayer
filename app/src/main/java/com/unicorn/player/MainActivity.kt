@@ -43,6 +43,9 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     // 将 scrollToContentClick 提升为类级别变量，解决作用域问题
     private var scrollToContentClick = false
 
+    // 标记是否正在扫描音乐库
+    private var isScanning = false
+
     companion object {
         const val TAG = "MainActivity"
     }
@@ -116,6 +119,10 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             if (::songAdapter.isInitialized) {
                 songAdapter.submitList(songs)
             }
+            // 扫描完成后更新列表
+            if (isScanning) {
+                onScanComplete()
+            }
         }
 
         viewModel.isLoading.observe(this) { isLoading ->
@@ -151,11 +158,19 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
         // 设置下拉刷新监听
         smartRefreshLayout.setOnRefreshListener {
-            Log.d(TAG, "下拉刷新触发")
-            // 重新加载音乐文件
+            Log.d(TAG, "下拉刷新触发, isScanning=$isScanning")
+            // 如果正在扫描，忽略本次刷新
+            if (isScanning) {
+                Log.d(TAG, "正在扫描中，忽略本次刷新")
+                smartRefreshLayout.finishRefresh(0)
+                return@setOnRefreshListener
+            }
+            // 保存当前播放状态
+            savedCurrentSongId = musicService?.currentSong?.value?.id
+            savedIsPlaying = musicService?.isPlaying?.value == true
+            // 开始扫描
+            isScanning = true
             loadMusic()
-            // 模拟刷新延迟
-            smartRefreshLayout.finishRefresh(1000)
         }
 
         // 设置二级刷新监听
@@ -391,6 +406,30 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
     private fun loadMusic() {
         viewModel.loadMusic()
+    }
+
+    // 保存扫描前的当前播放歌曲信息
+    private var savedCurrentSongId: Long? = null
+    private var savedIsPlaying: Boolean = false
+
+    // 扫描完成后更新列表
+    private fun onScanComplete() {
+        // 扫描完成，重置标志位
+        isScanning = false
+
+        // 保持当前播放状态
+        val currentSong = musicService?.currentSong?.value
+        if (currentSong != null && currentSong.id != savedCurrentSongId) {
+            // 当前播放的歌曲被删除，停止播放
+            if (savedIsPlaying) {
+                musicService?.pause()
+            }
+        }
+
+        // 结束刷新动画
+        binding.smartRefreshLayout.finishRefresh(500)
+
+        Log.d(TAG, "扫描完成，列表已更新")
     }
 
     private fun bindMusicService() {

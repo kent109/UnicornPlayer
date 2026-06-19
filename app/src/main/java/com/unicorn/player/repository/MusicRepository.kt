@@ -15,7 +15,7 @@ class MusicRepository(private val context: Context) {
     private val songDao = database.songDao()
 
     suspend fun scanMusicFiles(): List<Song> = withContext(Dispatchers.IO) {
-        val songs = mutableListOf<Song>()
+        val newSongs = mutableListOf<Song>()
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -31,6 +31,7 @@ class MusicRepository(private val context: Context) {
             " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/allsaintsMusic/%'" +
             " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/msc/%'"
 
+        // 1. 扫描 MediaStore 获取最新歌曲列表
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
@@ -55,7 +56,7 @@ class MusicRepository(private val context: Context) {
                 val path = cursor.getString(pathColumn)
                 val albumId = cursor.getLong(albumIdColumn)
 
-                // 过滤掉小于500KB的音频文件
+                // 过滤掉小于1MB的音频文件
                 if (!isFileSizeValid(path)) {
                     continue
                 }
@@ -78,13 +79,32 @@ class MusicRepository(private val context: Context) {
                     albumArt = albumArtUri,
                     lastModified = lastModified
                 )
-                songs.add(song)
+                newSongs.add(song)
             }
         }
 
-        // 保存到数据库
-        songDao.insertSongs(songs)
-        songs
+        // 2. 获取数据库中当前的歌曲ID列表
+        val existingSongIds = try {
+            songDao.getSongIdsSync()
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+        // 3. 计算需要删除的歌曲（在数据库中但不在新扫描结果中）
+        val newSongIds = newSongs.map { it.id }
+        val songsToDelete = existingSongIds.filter { it !in newSongIds }
+
+        // 4. 删除不再存在的歌曲
+        if (songsToDelete.isNotEmpty()) {
+            songDao.deleteSongsByIds(songsToDelete)
+        }
+
+        // 5. 插入新歌曲（使用 REPLACE 策略，已存在的会更新）
+        if (newSongs.isNotEmpty()) {
+            songDao.insertSongs(newSongs)
+        }
+
+        newSongs
     }
 
     fun getAllSongs() = songDao.getAllSongs()

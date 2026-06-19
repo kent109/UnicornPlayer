@@ -10,6 +10,9 @@ interface SongDao {
     @Query("SELECT * FROM songs ORDER BY title ASC")
     fun getAllSongs(): Flow<List<Song>>
 
+    @Query("SELECT id FROM songs")
+    fun getSongIdsSync(): List<Long>
+
     @Query("SELECT * FROM songs WHERE id = :songId")
     fun getSongById(songId: Long): Flow<Song?>
 
@@ -27,4 +30,7 @@ interface SongDao {
 
     @Query("DELETE FROM songs")
     fun deleteAllSongs(): Int
+
+    @Query("DELETE FROM songs WHERE id IN (:songIds)")
+    fun deleteSongsByIds(songIds: List<Long>)
 }
