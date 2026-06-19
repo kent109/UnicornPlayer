@@ -469,7 +469,9 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             // 恢复Adapter中的播放状态和动画
             songAdapter.isPlaying = musicService?.isPlaying?.value == true
             songAdapter.currentPlayingSong = musicService?.currentSong?.value
-            // 恢复动画（如果当前播放歌曲可见则恢复，不可见时由onViewAttachedToWindow恢复）
+            // 清除暂停标记
+            songAdapter.isPaused = false
+            // 恢复动画（从0角度开始，简化状态管理）
             songAdapter.resumeCurrentSongAnimation()
         }
     }
@@ -477,7 +479,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     override fun onPause() {
         super.onPause()
         musicService?.savePlaybackState()
-        // 暂停Adapter中的动画（保留角度，不重置）
+        // 设置暂停标记，暂停当前播放歌曲的动画（保留角度）
+        songAdapter.isPaused = true
         songAdapter.pauseCurrentSongAnimation()
     }
 
@@ -485,6 +488,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         super.onDestroy()
         // 清理观察者，避免内存泄漏
         removeBottomPlayerObservers()
+        // 停止所有动画，释放资源
+        songAdapter.stopCurrentSongAnimation()
         if (isServiceBound) {
             unbindService(serviceConnection)
             isServiceBound = false

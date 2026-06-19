@@ -28,6 +28,9 @@ class SongAdapter(
     private val rotationAngleMap = mutableMapOf<Long, Float>()
     private var recyclerView: RecyclerView? = null
 
+    // 标记是否暂停（MainActivity不可见时）
+    var isPaused = false
+
     fun setRecyclerView(recyclerView: RecyclerView) {
         this.recyclerView = recyclerView
     }
@@ -36,31 +39,71 @@ class SongAdapter(
 
     /**
      * 暂停当前播放歌曲的动画（保留角度）
+     * 遍历所有可见子视图，找到当前播放歌曲的 ViewHolder 并暂停动画
      */
     fun pauseCurrentSongAnimation() {
         currentPlayingSong?.let { song ->
-            val currentPosition = currentList.indexOfFirst { it.id == song.id }
-            if (currentPosition != -1) {
-                val recyclerView = getRecyclerView() ?: return
-                val viewHolder = recyclerView.findViewHolderForAdapterPosition(currentPosition)
+            val recyclerView = getRecyclerView() ?: return
+            for (i in 0 until recyclerView.childCount) {
+                val child = recyclerView.getChildAt(i)
+                val viewHolder = recyclerView.getChildViewHolder(child)
                 if (viewHolder is SongViewHolder) {
-                    viewHolder.pauseRotationAnimation()
+                    val position = viewHolder.bindingAdapterPosition
+                    if (position != RecyclerView.NO_POSITION) {
+                        val currentSong = getItem(position)
+                        if (currentSong.id == song.id) {
+                            // 保存当前角度
+                            rotationAngleMap[song.id] = viewHolder.binding.albumArt.rotation
+                            // 暂停动画
+                            viewHolder.pauseRotationAnimation()
+                            return
+                        }
+                    }
                 }
             }
         }
     }
 
     /**
-     * 恢复当前播放歌曲的动画
+     * 暂停所有可见 ViewHolder 的动画（MainActivity 进入后台时调用）
+     * 只对当前播放的歌曲暂停动画（保留角度），其他 item 直接停止
+     */
+    fun pauseAllAnimations() {
+        isPaused = true
+        val recyclerView = getRecyclerView() ?: return
+        for (i in 0 until recyclerView.childCount) {
+            val child = recyclerView.getChildAt(i)
+            val viewHolder = recyclerView.getChildViewHolder(child)
+            if (viewHolder is SongViewHolder) {
+                val position = viewHolder.bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    val song = getItem(position)
+                    if (currentPlayingSong?.id == song.id) {
+                        // 保存当前旋转角度
+                        rotationAngleMap[song.id] = viewHolder.binding.albumArt.rotation
+                        // 暂停动画而不是停止，保留角度
+                        viewHolder.pauseRotationAnimation()
+                    } else {
+                        // 非播放歌曲直接停止动画（重置状态）
+                        viewHolder.stopRotationAnimation()
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 恢复当前播放歌曲的动画（从保存的角度继续）
      */
     fun resumeCurrentSongAnimation() {
-        if (!isPlaying) return
+        if (!isPlaying || isPaused) return
         currentPlayingSong?.let { song ->
             val currentPosition = currentList.indexOfFirst { it.id == song.id }
             if (currentPosition != -1) {
                 val recyclerView = getRecyclerView() ?: return
                 val viewHolder = recyclerView.findViewHolderForAdapterPosition(currentPosition)
                 if (viewHolder is SongViewHolder) {
+                    // 从保存的角度继续旋转
                     val savedAngle = rotationAngleMap[song.id] ?: 0f
                     viewHolder.binding.albumArt.rotation = savedAngle
                     viewHolder.startRotationAnimation()
@@ -103,10 +146,19 @@ class SongAdapter(
 
         // 确保当前播放歌曲的动画正常运行
         if (currentPlayingSong?.id == song.id && isPlaying) {
+            // 如果处于暂停状态（MainActivity不可见），不启动动画
+            if (isPaused) {
+                // 恢复保存的角度，然后暂停动画
+                val savedAngle = rotationAngleMap[song.id] ?: 0f
+                holder.binding.albumArt.rotation = savedAngle
+                holder.pauseRotationAnimation()
+                return
+            }
             // 再次确认位置匹配，避免 ViewHolder 复用时的状态污染
             val currentPlayingPosition =
                 currentList.indexOfFirst { it.id == currentPlayingSong?.id }
             if (currentPlayingPosition == position) {
+                // 从保存的角度继续旋转
                 val savedAngle = rotationAngleMap[song.id] ?: 0f
                 holder.binding.albumArt.rotation = savedAngle
                 holder.startRotationAnimation()
@@ -126,6 +178,9 @@ class SongAdapter(
         val position = holder.bindingAdapterPosition
         if (position == RecyclerView.NO_POSITION) return
 
+        // 如果处于暂停状态（MainActivity不可见），不启动动画
+        if (isPaused) return
+
         val song = getItem(position)
         // 严格检查：必须是当前播放的歌曲 且 正在播放状态 且 ViewHolder 确实是当前播放歌曲的 ViewHolder
         if (currentPlayingSong?.id == song.id && isPlaying) {
@@ -133,6 +188,7 @@ class SongAdapter(
             val currentPlayingPosition =
                 currentList.indexOfFirst { it.id == currentPlayingSong?.id }
             if (currentPlayingPosition == position) {
+                // 从保存的角度继续旋转
                 val savedAngle = rotationAngleMap[song.id] ?: 0f
                 holder.binding.albumArt.rotation = savedAngle
                 holder.startRotationAnimation()
@@ -153,7 +209,7 @@ class SongAdapter(
         if (position != RecyclerView.NO_POSITION) {
             val song = getItem(position)
             if (currentPlayingSong?.id == song.id) {
-                // 保存当前旋转角度
+                // 保存当前旋转角度（用于恢复）
                 rotationAngleMap[song.id] = holder.binding.albumArt.rotation
                 // 暂停动画而不是停止，保留角度
                 holder.pauseRotationAnimation()
