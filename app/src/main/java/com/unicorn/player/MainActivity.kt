@@ -155,6 +155,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         smartRefreshLayout.setHeaderHeight(120f) // Header 高度 120dp
         smartRefreshLayout.setEnableOverScrollBounce(true) // 启用回弹效果
         smartRefreshLayout.setEnableRefresh(true) // 启用下拉刷新
+        smartRefreshLayout.setEnableOverScrollDrag(true) // 启用拖拽效果
 
         // 设置下拉刷新监听
         smartRefreshLayout.setOnRefreshListener {
