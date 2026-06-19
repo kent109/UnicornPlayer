@@ -9,7 +9,7 @@
 ## 构建命令
 
 ```bash
-# 构建调试版 APK
+# 构建调试版 APK，切记不要使用“./gradlew”，直接使用gradle命令
 gradle app:assembleDebug
 
 # 清理构建
