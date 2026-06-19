@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 背景轨道 - 2dp高度，居中 -->
+    <item
+        android:id="@android:id/background"
+        android:top="5dp"
+        android:bottom="5dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="2dp" />
+            <solid android:color="#80FFFFFF" />
+        </shape>
+    </item>
+
+    <!-- 缓冲进度 -->
+    <item
+        android:id="@android:id/secondaryProgress"
+        android:top="5dp"
+        android:bottom="5dp">
+        <clip>
+            <shape android:shape="rectangle">
+                <corners android:radius="2dp" />
+                <solid android:color="#80FFFFFF" />
+            </shape>
+        </clip>
+    </item>
+
+    <!-- 播放进度 -->
+    <item
+        android:id="@android:id/progress"
+        android:top="5dp"
+        android:bottom="5dp">
+        <clip>
+            <shape android:shape="rectangle">
+                <corners android:radius="2dp" />
+                <solid android:color="#FFFFFF" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

@@ -32,6 +32,9 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     private lateinit var viewModel: MusicViewModel
     private lateinit var songAdapter: SongAdapter
 
+    // 歌曲数量 TextView
+    private lateinit var tvSongCount: android.widget.TextView
+
     private var musicService: MusicService? = null
     private var isServiceBound = false
 
@@ -123,6 +126,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             if (::songAdapter.isInitialized) {
                 songAdapter.submitList(songs)
             }
+            // 更新歌曲数量
+            updateSongCount(songs.size)
             // 扫描完成后更新列表
             if (isScanning) {
                 onScanComplete()
@@ -140,12 +145,20 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = songAdapter
-            // 设置RecyclerView 引用，以便 Adapter 能够找到 ViewHolder
+            // 设置 RecyclerView 引用，以便 Adapter 能够找到 ViewHolder
             songAdapter.setRecyclerView(this@apply)
         }
 
+        // 初始化歌曲数量 TextView
+        tvSongCount = binding.tvSongCount
+
         // 初始化滚动状态监听
         setupScrollStateListener()
+    }
+
+    // 更新歌曲数量显示
+    private fun updateSongCount(count: Int) {
+        tvSongCount.text = "共 $count 首歌曲"
     }
 
     private fun setupSmartRefreshLayout() {
@@ -225,7 +238,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             override fun onScrolled(
                 recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int
             ) {
-                Log.d(TAG, "onScrolled, isScrolling=$isScrolling")
+                Log.d(TAG, "onScrolled, isScrolling=$isScrolling, dy=$dy")
                 // 滑动过程中保持按钮隐藏
                 if (isScrolling) {
                     binding.btnScrollToCurrent.visibility = android.view.View.GONE
