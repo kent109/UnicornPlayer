@@ -408,21 +408,20 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
                 // 检查是否已经在播放同一首歌
                 if (musicService?.currentSong?.value?.id == song.id) {
                     if (musicService?.isPlaying?.value == true) {
-                        // 如果正在播放同一首歌，只做UI更新
+                        // 如果正在播放同一首歌，打开 PlayerActivity
                         updateBottomPlayer(song)
-                        return@let
                     } else {
-                        // 如果是同一首歌但暂停状态，恢复播放
+                        // 如果是同一首歌但暂停状态，恢复播放并打开 PlayerActivity
                         musicService?.requestAudioFocusAndPlay()
                         musicService?.updateNotification()
                         updateBottomPlayer(song)
-                        return@let
                     }
+                } else {
+                    // 播放新歌曲并打开 PlayerActivity
+                    musicService?.requestAudioFocusAndPlayCurrentSong()
+                    musicService?.updateNotification()
+                    updateBottomPlayer(song)
                 }
-                // 播放新歌曲
-                musicService?.requestAudioFocusAndPlayCurrentSong()
-                // 立即更新通知栏
-                musicService?.updateNotification()
             } else {
                 // 如果服务未绑定，先确保服务运行，然后通过startService传递播放参数
                 val intent = Intent(this, MusicService::class.java).apply {
@@ -437,9 +436,12 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
                     putStringArrayListExtra("songList", ArrayList(songDataList))
                 }
                 startService(intent)
+                updateBottomPlayer(song)
             }
 
-            updateBottomPlayer(song)
+            // 打开 PlayerActivity
+            val intent = Intent(this, PlayerActivity::class.java)
+            startActivity(intent)
         }
     }
 
