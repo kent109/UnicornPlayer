@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.Glide
+import com.unicorn.player.adapter.SongAdapter
 import com.unicorn.player.databinding.ActivityMainBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
@@ -77,6 +78,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         override fun onServiceDisconnected(name: ComponentName?) {
             musicService = null
             isServiceBound = false
+            // 清理观察者，避免内存泄漏
+            removeBottomPlayerObservers()
         }
     }
 
@@ -126,6 +129,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = songAdapter
+            // 设置RecyclerView 引用，以便 Adapter 能够找到 ViewHolder
+            songAdapter.setRecyclerView(this@apply)
         }
 
         // 初始化滚动状态监听
@@ -280,9 +285,18 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         }
     }
 
+    // 保存观察者的引用，以便在重新连接时移除旧的观察者
+    private var isPlayingObserver: androidx.lifecycle.Observer<Boolean>? = null
+    private var currentSongObserver: androidx.lifecycle.Observer<com.unicorn.player.model.Song?>? =
+        null
+    private var fileChangedObserver: androidx.lifecycle.Observer<Unit>? = null
+
     private fun setupBottomPlayerObservers() {
+        // 先移除旧的观察者，避免重复注册
+        removeBottomPlayerObservers()
+
         // Observe playing state to update play button icon and animation
-        musicService?.isPlaying?.observe(this) { isPlaying ->
+        isPlayingObserver = androidx.lifecycle.Observer { isPlaying ->
             binding.playButton.setImageResource(
                 if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
             )
@@ -299,21 +313,33 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
                 }
             }
         }
+        musicService?.isPlaying?.observe(this, isPlayingObserver!!)
 
         // Observe current song to update bottom player info
-        musicService?.currentSong?.observe(this) { song ->
-            song?.let {
-                updateBottomPlayer(it)
+        currentSongObserver = androidx.lifecycle.Observer { song ->
+            song?.let { nonNullSong ->
+                updateBottomPlayer(nonNullSong)
                 // 更新Adapter中的当前播放歌曲状态
-                songAdapter.currentPlayingSong = it
+                songAdapter.currentPlayingSong = nonNullSong
                 songAdapter.notifyDataSetChanged()
             }
         }
+        musicService?.currentSong?.observe(this, currentSongObserver!!)
 
         // 监听文件变化，自动刷新列表
-        musicService?.fileChanged?.observe(this) {
+        fileChangedObserver = androidx.lifecycle.Observer {
             loadMusic()
         }
+        musicService?.fileChanged?.observe(this, fileChangedObserver!!)
+    }
+
+    private fun removeBottomPlayerObservers() {
+        isPlayingObserver?.let { musicService?.isPlaying?.removeObserver(it) }
+        currentSongObserver?.let { musicService?.currentSong?.removeObserver(it) }
+        fileChangedObserver?.let { musicService?.fileChanged?.removeObserver(it) }
+        isPlayingObserver = null
+        currentSongObserver = null
+        fileChangedObserver = null
     }
 
     private fun updateBottomPlayerUI() {
@@ -443,28 +469,22 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             // 恢复Adapter中的播放状态和动画
             songAdapter.isPlaying = musicService?.isPlaying?.value == true
             songAdapter.currentPlayingSong = musicService?.currentSong?.value
-            if (songAdapter.currentPlayingSong != null) {
-                // 只更新当前播放的歌曲item
-                viewModel.allSongs.value?.let { songs ->
-                    val currentPosition =
-                        songs.indexOfFirst { s -> s.id == songAdapter.currentPlayingSong!!.id }
-                    if (currentPosition != -1) {
-                        songAdapter.notifyItemChanged(currentPosition)
-                    }
-                }
-            }
+            // 恢复动画（如果当前播放歌曲可见则恢复，不可见时由onViewAttachedToWindow恢复）
+            songAdapter.resumeCurrentSongAnimation()
         }
     }
 
     override fun onPause() {
         super.onPause()
         musicService?.savePlaybackState()
-        // 停止Adapter中的动画
-        songAdapter.stopAllAnimations()
+        // 暂停Adapter中的动画（保留角度，不重置）
+        songAdapter.pauseCurrentSongAnimation()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        // 清理观察者，避免内存泄漏
+        removeBottomPlayerObservers()
         if (isServiceBound) {
             unbindService(serviceConnection)
             isServiceBound = false
