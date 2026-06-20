@@ -94,26 +94,14 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // 添加异常处理，避免crash
-        try {
-            setupViewModel()
-            setupRecyclerView()
-            setupSmartRefreshLayout()
-            setupSearchView()
-            setupBottomPlayer()
+        setupViewModel()
+        setupRecyclerView()
+        setupSmartRefreshLayout()
+        setupSearchView()
+        setupBottomPlayer()
 
-            checkPermissions()
-            bindMusicService()
-        } catch (e: Exception) {
-            Log.e(TAG, "onCreate error", e)
-            // 如果出错，尝试重新初始化
-            try {
-                finish()
-                startActivity(Intent(this, MainActivity::class.java))
-            } catch (e2: Exception) {
-                Log.e(TAG, "Restart error", e2)
-            }
-        }
+        checkPermissions()
+        bindMusicService()
     }
 
     private fun setupViewModel() {
@@ -529,20 +517,16 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
     override fun onResume() {
         super.onResume()
-        try {
-            // 只更新UI状态，不重新设置观察者或加载播放状态
-            if (isServiceBound && musicService != null) {
-                updateBottomPlayerUI()
-                // 恢复Adapter中的播放状态和动画
-                songAdapter.isPlaying = musicService?.isPlaying?.value == true
-                songAdapter.currentPlayingSong = musicService?.currentSong?.value
-                // 清除暂停标记
-                songAdapter.isPaused = false
-                // 恢复动画（从0角度开始，简化状态管理）
-                songAdapter.resumeCurrentSongAnimation()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "onResume error", e)
+        // 只更新UI状态，不重新设置观察者或加载播放状态
+        if (isServiceBound && musicService != null) {
+            updateBottomPlayerUI()
+            // 恢复Adapter中的播放状态和动画
+            songAdapter.isPlaying = musicService?.isPlaying?.value == true
+            songAdapter.currentPlayingSong = musicService?.currentSong?.value
+            // 清除暂停标记
+            songAdapter.isPaused = false
+            // 恢复动画（从0角度开始，简化状态管理）
+            songAdapter.resumeCurrentSongAnimation()
         }
     }
 
