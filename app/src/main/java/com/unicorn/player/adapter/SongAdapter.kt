@@ -143,27 +143,28 @@ class SongAdapter(
         val song = getItem(position)
         holder.bind(song, position, currentPlayingSong, isPlaying)
 
-        // 确保当前播放歌曲的动画正常运行
-        if (currentPlayingSong?.id == song.id && isPlaying) {
-            // 如果处于暂停状态（MainActivity不可见），不启动动画
+        if (currentPlayingSong?.id == song.id) {
             if (isPaused) {
-                // 恢复保存的角度，然后暂停动画
+                // MainActivity 不可见，恢复角度并暂停动画
                 val savedAngle = rotationAngleMap[song.id] ?: 0f
                 holder.binding.albumArt.rotation = savedAngle
                 holder.pauseRotationAnimation()
-                return
-            }
-            // 再次确认位置匹配，避免 ViewHolder 复用时的状态污染
-            val currentPlayingPosition =
-                currentList.indexOfFirst { it.id == currentPlayingSong?.id }
-            if (currentPlayingPosition == position) {
-                // 从保存的角度继续旋转
-                val savedAngle = rotationAngleMap[song.id] ?: 0f
-                holder.binding.albumArt.rotation = savedAngle
-                holder.startRotationAnimation()
+            } else if (isPlaying) {
+                // 正在播放，恢复角度并启动动画
+                val currentPlayingPosition =
+                    currentList.indexOfFirst { it.id == currentPlayingSong?.id }
+                if (currentPlayingPosition == position) {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.startRotationAnimation()
+                }
+            } else {
+                // 暂停播放，保存当前角度并暂停动画（不重置角度）
+                rotationAngleMap[song.id] = holder.binding.albumArt.rotation
+                holder.pauseRotationAnimation()
             }
         } else {
-            // 确保非播放歌曲的动画被停止，避免状态污染
+            // 非播放歌曲直接停止动画（重置状态）
             holder.stopRotationAnimation()
         }
     }
@@ -181,19 +182,23 @@ class SongAdapter(
         if (isPaused) return
 
         val song = getItem(position)
-        // 严格检查：必须是当前播放的歌曲 且 正在播放状态 且 ViewHolder 确实是当前播放歌曲的 ViewHolder
-        if (currentPlayingSong?.id == song.id && isPlaying) {
-            // 再次确认：检查当前可见的 ViewHolder 确实是当前播放歌曲的
-            val currentPlayingPosition =
-                currentList.indexOfFirst { it.id == currentPlayingSong?.id }
-            if (currentPlayingPosition == position) {
-                // 从保存的角度继续旋转
-                val savedAngle = rotationAngleMap[song.id] ?: 0f
-                holder.binding.albumArt.rotation = savedAngle
-                holder.startRotationAnimation()
+        if (currentPlayingSong?.id == song.id) {
+            // 恢复保存的角度
+            val savedAngle = rotationAngleMap[song.id] ?: 0f
+            holder.binding.albumArt.rotation = savedAngle
+            if (isPlaying) {
+                // 正在播放，确认位置匹配后启动动画
+                val currentPlayingPosition =
+                    currentList.indexOfFirst { it.id == currentPlayingSong?.id }
+                if (currentPlayingPosition == position) {
+                    holder.startRotationAnimation()
+                }
+            } else {
+                // 暂停播放，暂停动画（不重置角度）
+                holder.pauseRotationAnimation()
             }
         } else {
-            // 确保非播放歌曲的动画被停止，避免状态污染
+            // 非播放歌曲直接停止动画（重置状态）
             holder.stopRotationAnimation()
         }
     }

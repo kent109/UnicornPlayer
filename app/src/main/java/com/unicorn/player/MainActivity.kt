@@ -353,17 +353,13 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             binding.playButton.setImageResource(
                 if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
             )
-            // 更新Adapter的播放状态以控制动画
+            // 更新Adapter的播放状态
             songAdapter.isPlaying = isPlaying
-            if (songAdapter.currentPlayingSong != null) {
-                // 只更新当前播放的歌曲item
-                viewModel.allSongs.value?.let { songs ->
-                    val currentPosition =
-                        songs.indexOfFirst { s -> s.id == songAdapter.currentPlayingSong!!.id }
-                    if (currentPosition != -1) {
-                        songAdapter.notifyItemChanged(currentPosition)
-                    }
-                }
+            // 直接控制动画，避免notifyItemChanged触发onBindViewHolder重置角度
+            if (isPlaying) {
+                songAdapter.resumeCurrentSongAnimation()
+            } else {
+                songAdapter.pauseCurrentSongAnimation()
             }
         }
         musicService?.isPlaying?.observe(this, isPlayingObserver!!)
