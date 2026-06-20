@@ -480,8 +480,10 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
 
     override fun onSongClick(song: Song, position: Int) {
         viewModel.allSongs.value?.let { songs ->
+            // 通过song ID查找在列表中的真实位置，避免搜索时位置不一致
+            val realPosition = songs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
             if (isServiceBound) {
-                musicService?.setSongList(songs, position)
+                musicService?.setSongList(songs, realPosition)
                 // 检查是否已经在播放同一首歌
                 if (musicService?.currentSong?.value?.id == song.id) {
                     if (musicService?.isPlaying?.value == true) {

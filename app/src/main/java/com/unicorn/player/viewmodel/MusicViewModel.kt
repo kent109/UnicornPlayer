@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
@@ -15,6 +16,8 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
 
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
+
+    private var searchJob: Job? = null
 
     init {
         collectSongs()
@@ -42,7 +45,8 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
     }
 
     fun searchSongs(query: String) {
-        viewModelScope.launch {
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
             if (query.isBlank()) {
                 repository.getAllSongs().collect { songs ->
                     _allSongs.postValue(songs)
