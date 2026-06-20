@@ -23,17 +23,7 @@ class SettingsActivity : AppCompatActivity() {
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupToolbar()
         setupSettingsItems()
-    }
-
-    /**
-     * 设置顶部工具栏
-     */
-    private fun setupToolbar() {
-        binding.ivBack.setOnClickListener {
-            finish()
-        }
     }
 
     /**

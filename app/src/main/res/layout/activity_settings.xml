@@ -8,32 +8,11 @@
     android:padding="12dp">
 
     <!-- 顶部标题栏 -->
-    <LinearLayout
+    <com.unicorn.player.widget.TitleBar
+        android:id="@+id/titleBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp">
-
-        <ImageView
-            android:id="@+id/ivBack"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_back"
-            app:tint="@color/onSurface" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:text="设置"
-            android:textColor="@color/onSurface"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-    </LinearLayout>
+        app:title="设置" />
 
     <!-- 内容容器 -->
     <com.scwang.smart.refresh.layout.SmartRefreshLayout

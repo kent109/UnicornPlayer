@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="TitleBar">
+        <!-- 标题文字 -->
+        <attr name="title" format="string" />
+        <!-- 中间区域布局 -->
+        <attr name="midView" format="reference" />
+        <!-- 右侧区域布局 -->
+        <attr name="rightView" format="reference" />
+        <!-- 返回按钮是否显示 -->
+        <attr name="backButtonVisible" format="boolean" />
+    </declare-styleable>
+</resources>
