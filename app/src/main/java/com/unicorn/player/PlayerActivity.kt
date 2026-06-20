@@ -11,6 +11,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.unicorn.player.databinding.ActivityPlayerBinding
@@ -84,6 +85,13 @@ class PlayerActivity : AppCompatActivity() {
         binding.ivCollapse.setOnClickListener {
             finishAndAnimate()
         }
+
+        // 注册返回键回调（替代已废弃的onBackPressed）
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                finishAndAnimate()
+            }
+        })
 
         bindMusicService()
     }
@@ -323,10 +331,7 @@ class PlayerActivity : AppCompatActivity() {
         startService(intent)
     }
 
-    override fun onBackPressed() {
-        finishAndAnimate()
-    }
-
+    @Suppress("DEPRECATION")
     private fun finishAndAnimate() {
         finish()
         // 主界面淡入，播放界面向下滑出
