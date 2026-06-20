@@ -308,6 +308,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         binding.bottomPlayer.setOnClickListener {
             val intent = Intent(this, PlayerActivity::class.java)
             startActivity(intent)
+            // 主界面淡出，播放界面上滑
+            overridePendingTransition(R.anim.slide_up_in, R.anim.fade_out)
         }
 
         // 设置按钮点击事件

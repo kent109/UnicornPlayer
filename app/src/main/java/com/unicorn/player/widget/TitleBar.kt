@@ -22,7 +22,7 @@ class TitleBar @JvmOverloads constructor(
 ) : LinearLayout(context, attrs, defStyleAttr) {
 
     companion object {
-        val styleableArray = intArrayOf(
+        private val ATTRS = intArrayOf(
             R.attr.title,
             R.attr.midView,
             R.attr.rightView,
@@ -58,11 +58,11 @@ class TitleBar @JvmOverloads constructor(
     }
 
     /**
-     * 解析自定义属性（单独抽取以抑制ResourceType警告）
+     * 解析自定义属性
      */
     @Suppress("ResourceType")
     private fun parseAttributes(attrs: AttributeSet?) {
-        context.withStyledAttributes(attrs, styleableArray) {
+        context.withStyledAttributes(attrs, ATTRS) {
 
             // 标题
             val title = getString(0)
@@ -87,6 +87,13 @@ class TitleBar @JvmOverloads constructor(
             setBackButtonVisible(backVisible)
 
         }
+    }
+
+    /**
+     * 获取中间容器中的指定ID视图
+     */
+    fun <T : View> getMidView(viewId: Int): T? {
+        return centerContainer.findViewById(viewId)
     }
 
     /**

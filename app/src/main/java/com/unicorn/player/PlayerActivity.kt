@@ -80,6 +80,13 @@ class PlayerActivity : AppCompatActivity() {
             }
         )
 
+        // 向下箭头点击收起播放页面
+        binding.ivCollapse.setOnClickListener {
+            finish()
+            // 主界面淡入，播放界面向下滑出
+            overridePendingTransition(R.anim.fade_in, R.anim.slide_top_out)
+        }
+
         bindMusicService()
     }
 
