@@ -15,5 +15,6 @@ data class Song(
     val duration: Long,
     val path: String,
     val albumArt: String? = null,
-    val lastModified: Long = 0L
+    val lastModified: Long = 0L,
+    val quality: String = "UNK"
 ) : Parcelable

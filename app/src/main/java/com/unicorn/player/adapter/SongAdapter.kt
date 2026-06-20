@@ -237,7 +237,7 @@ class SongAdapter(
                     if (TextUtils.equals(song.album, "Music")) "<unknown>" else song.album
 
                 // 设置品质标签文字
-                quality.setText("SQ")
+                quality.setText(song.quality)
 
                 // 获取context
                 val context = binding.root.context
@@ -250,15 +250,22 @@ class SongAdapter(
                     songTitle.setTextColor(context.getColor(android.R.color.holo_red_light))
                     artistName.setTextColor(context.getColor(android.R.color.holo_red_light))
                     albumName.setTextColor(context.getColor(android.R.color.holo_red_light))
-                    quality.setColor(context.getColor(android.R.color.holo_red_light))
                     albumArt.isSelected = true
                 } else {
                     songTitle.setTextColor(context.getColor(com.unicorn.player.R.color.onSurface))
                     artistName.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
                     albumName.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
-                    quality.setColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
                     albumArt.isSelected = false
                 }
+
+                // 品质标签颜色根据音频质量固定设置
+                val qualityColor = when (song.quality) {
+                    "SQ" -> context.getColor(com.unicorn.player.R.color.quality_sq)
+                    "HQ" -> context.getColor(com.unicorn.player.R.color.quality_hq)
+                    "STD" -> context.getColor(com.unicorn.player.R.color.quality_std)
+                    else -> context.getColor(com.unicorn.player.R.color.quality_ord)
+                }
+                quality.setColor(qualityColor)
 
                 // 只对非当前播放的歌曲重置旋转角度
                 if (!isCurrentPlaying) {

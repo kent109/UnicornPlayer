@@ -2,12 +2,15 @@ package com.unicorn.player.repository
 
 import android.content.ContentUris
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.provider.MediaStore
-import android.net.Uri
-import com.unicorn.player.model.Song
+import androidx.core.net.toUri
 import com.unicorn.player.database.MusicDatabase
+import com.unicorn.player.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
+
 
 class MusicRepository(private val context: Context) {
 
@@ -23,13 +26,14 @@ class MusicRepository(private val context: Context) {
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.ALBUM_ID
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.MIME_TYPE
         )
 
         val selection = MediaStore.Audio.Media.IS_MUSIC + " != 0" +
-            " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/music/Recordings/%'" +
-            " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/allsaintsMusic/%'" +
-            " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/msc/%'"
+                " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/music/Recordings/%'" +
+                " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/allsaintsMusic/%'" +
+                " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/msc/%'"
 
         // 1. 扫描 MediaStore 获取最新歌曲列表
         context.contentResolver.query(
@@ -46,6 +50,7 @@ class MusicRepository(private val context: Context) {
             val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
             val albumIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+            val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
@@ -55,19 +60,22 @@ class MusicRepository(private val context: Context) {
                 val duration = cursor.getLong(durationColumn)
                 val path = cursor.getString(pathColumn)
                 val albumId = cursor.getLong(albumIdColumn)
+                val mime = cursor.getString(mimeColumn)
 
                 // 过滤掉小于1MB的音频文件
-                if (!isFileSizeValid(path)) {
+                val file = java.io.File(path)
+                if (!file.exists() || file.length() / 1024 < 1024) {
                     continue
                 }
 
                 val albumArtUri = ContentUris.withAppendedId(
-                    Uri.parse("content://media/external/audio/albumart"),
+                    "content://media/external/audio/albumart".toUri(),
                     albumId
                 ).toString()
 
-                val file = java.io.File(path)
-                val lastModified = if (file.exists()) file.lastModified() else 0L
+                val lastModified = file.lastModified()
+
+                val quality = classifyQuality(mime, file)
 
                 val song = Song(
                     id = id,
@@ -77,7 +85,8 @@ class MusicRepository(private val context: Context) {
                     duration = duration,
                     path = path,
                     albumArt = albumArtUri,
-                    lastModified = lastModified
+                    lastModified = lastModified,
+                    quality = quality
                 )
                 newSongs.add(song)
             }
@@ -124,6 +133,40 @@ class MusicRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             false
+        }
+    }
+
+    fun computeBitrate(file: File): Int? {
+        return try {
+            val mmr = MediaMetadataRetriever()
+            mmr.setDataSource(file.absolutePath)
+            val bitrateStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+            mmr.release()
+            bitrateStr?.toInt()?.takeIf { it > 0 }?.div(1024)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun classifyQuality(mime: String?, file: File): String {
+        // 1. 无损格式
+        if (mime != null && mime in setOf(
+                "audio/flac", "audio/x-wav", "audio/alac", "audio/x-ape", "audio/dsd"
+            )
+        ) {
+            return "SQ"
+        }
+        // 计算比特率（kbps）
+        val bitrateKbps: Int? = computeBitrate(file)
+        if (bitrateKbps == null || bitrateKbps <= 0) {
+            return "UNK"
+        }
+        val isAacOrOgg = mime in setOf("audio/aac", "audio/mp4a-latm", "audio/ogg", "audio/vorbis")
+        return when {
+            // 高品：MP3≥320 或 AAC/OGG≥256
+            bitrateKbps >= 320 || (isAacOrOgg && bitrateKbps >= 256) -> "HQ"
+            bitrateKbps >= 128 -> "STD"
+            else -> "ORD"
         }
     }
 }

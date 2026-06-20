@@ -10,7 +10,7 @@ import com.unicorn.player.model.PlaylistSong
 
 @Database(
     entities = [Song::class, Playlist::class, PlaylistSong::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
