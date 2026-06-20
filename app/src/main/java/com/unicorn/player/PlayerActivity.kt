@@ -82,9 +82,7 @@ class PlayerActivity : AppCompatActivity() {
 
         // 向下箭头点击收起播放页面
         binding.ivCollapse.setOnClickListener {
-            finish()
-            // 主界面淡入，播放界面向下滑出
-            overridePendingTransition(R.anim.fade_in, R.anim.slide_top_out)
+            finishAndAnimate()
         }
 
         bindMusicService()
@@ -323,6 +321,16 @@ class PlayerActivity : AppCompatActivity() {
         val intent = Intent(this, MusicService::class.java)
         bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
         startService(intent)
+    }
+
+    override fun onBackPressed() {
+        finishAndAnimate()
+    }
+
+    private fun finishAndAnimate() {
+        finish()
+        // 主界面淡入，播放界面向下滑出
+        overridePendingTransition(R.anim.fade_in, R.anim.slide_top_out)
     }
 
     override fun onPause() {
