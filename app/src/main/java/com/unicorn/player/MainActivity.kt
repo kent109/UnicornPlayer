@@ -243,6 +243,18 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
                 if (isScrolling) {
                     binding.btnScrollToCurrent.visibility = android.view.View.GONE
                 }
+
+                // 检测是否滚动到底部，显示或隐藏歌曲数量
+                val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
+                if (layoutManager != null) {
+                    val totalItemCount = layoutManager.itemCount
+                    val lastVisibleItem = layoutManager.findLastVisibleItemPosition()
+                    val isAtBottom = lastVisibleItem >= totalItemCount - 1
+
+                    // 在底部显示歌曲数量，不在底部隐藏
+                    tvSongCount.visibility =
+                        if (isAtBottom) android.view.View.VISIBLE else android.view.View.GONE
+                }
             }
         })
 
