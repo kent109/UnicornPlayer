@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 背景轨道 - 2dp高度，居中 -->
+    <!-- 背景轨道 - 使用主题颜色 -->
     <item
         android:id="@android:id/background"
         android:top="5dp"
         android:bottom="5dp">
         <shape android:shape="rectangle">
             <corners android:radius="2dp" />
-            <solid android:color="#80FFFFFF" />
+            <solid android:color="?attr/colorSurfaceVariant" />
         </shape>
     </item>
 
@@ -19,7 +19,7 @@
         <clip>
             <shape android:shape="rectangle">
                 <corners android:radius="2dp" />
-                <solid android:color="#80FFFFFF" />
+                <solid android:color="?attr/colorPrimary" />
             </shape>
         </clip>
     </item>
@@ -32,7 +32,7 @@
         <clip>
             <shape android:shape="rectangle">
                 <corners android:radius="2dp" />
-                <solid android:color="#FFFFFF" />
+                <solid android:color="?attr/colorPrimary" />
             </shape>
         </clip>
     </item>
