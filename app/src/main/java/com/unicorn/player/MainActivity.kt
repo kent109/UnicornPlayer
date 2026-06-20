@@ -290,11 +290,29 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
                 return true
             }
         })
+
+        // 监听搜索框展开/收起状态，控制设置按钮的显示
+        binding.searchView.setOnSearchClickListener {
+            // 进入搜索模式，隐藏设置按钮
+            binding.ivSetting.visibility = android.view.View.GONE
+        }
+
+        binding.searchView.setOnCloseListener {
+            // 退出搜索模式，显示设置按钮
+            binding.ivSetting.visibility = android.view.View.VISIBLE
+            false // 返回false表示不执行默认的关闭行为
+        }
     }
 
     private fun setupBottomPlayer() {
         binding.bottomPlayer.setOnClickListener {
             val intent = Intent(this, PlayerActivity::class.java)
+            startActivity(intent)
+        }
+
+        // 设置按钮点击事件
+        binding.ivSetting.setOnClickListener {
+            val intent = Intent(this, SettingsActivity::class.java)
             startActivity(intent)
         }
 

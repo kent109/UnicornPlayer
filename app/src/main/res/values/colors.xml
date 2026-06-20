@@ -42,4 +42,6 @@
     <color name="disc_color_ring">#ff000000</color>
     <color name="disc_color_outer">#ff000000</color>
     <color name="disc_color_inner">#FFE6E1E5</color>
+
+    <color name="divider">#cccccc</color>
 </resources>

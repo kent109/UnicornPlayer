@@ -1,0 +1,239 @@
+package com.unicorn.player
+
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.LinearLayout
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
+import com.unicorn.player.databinding.ActivitySettingsBinding
+
+/**
+ * 设置页面Activity
+ * 使用CardView自定义布局实现
+ */
+class SettingsActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivitySettingsBinding
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivitySettingsBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        setupToolbar()
+        setupSettingsItems()
+    }
+
+    /**
+     * 设置顶部工具栏
+     */
+    private fun setupToolbar() {
+        binding.ivBack.setOnClickListener {
+            finish()
+        }
+    }
+
+    /**
+     * 设置设置项
+     */
+    private fun setupSettingsItems() {
+        val container = binding.settingsContainer
+        val inflater = LayoutInflater.from(this)
+
+        // 分组1：播放设置
+        addSettingGroup(
+            container = container,
+            inflater = inflater,
+            items = listOf(
+                SettingItem(
+                    key = "equalizer",
+                    title = "均衡器",
+                    hasChevron = true,
+                    isFirst = true,
+                    isLast = false,
+                    onClick = {
+                        Toast.makeText(this, "均衡器功能开发中", Toast.LENGTH_SHORT).show()
+                    }
+                ),
+                SettingItem(
+                    key = "lyrics",
+                    title = "歌词显示",
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = false,
+                    onClick = {
+                        Toast.makeText(this, "歌词功能开发中", Toast.LENGTH_SHORT).show()
+                    }
+                ),
+                SettingItem(
+                    key = "account",
+                    title = "我的账号",
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = true,
+                    onClick = {
+                        Toast.makeText(this, "账号功能开发中", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            )
+        )
+
+        // 分组2：关于
+        addSettingGroup(
+            container = container,
+            inflater = inflater,
+            items = listOf(
+                SettingItem(
+                    key = "version",
+                    title = "版本号",
+                    summary = getVersionName(),
+                    hasChevron = false,
+                    isFirst = true,
+                    isLast = false,
+                    onClick = null
+                ),
+                SettingItem(
+                    key = "about",
+                    title = "关于Unicorn",
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = true,
+                    onClick = {
+                        Toast.makeText(
+                            this,
+                            "UnicornPlayer v${getVersionName()}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                )
+            )
+        )
+    }
+
+    /**
+     * 添加设置分组
+     */
+    private fun addSettingGroup(
+        container: LinearLayout,
+        inflater: LayoutInflater,
+        items: List<SettingItem>
+    ) {
+        // 创建CardView
+        val cardView = CardView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dpToPx(8)
+            }
+            setCardBackgroundColor(getColor(R.color.surface))
+            radius = dpToPx(12).toFloat()
+            cardElevation = dpToPx(2).toFloat()
+            useCompatPadding = true
+        }
+
+        // 创建内容容器
+        val contentContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        // 添加设置项
+        items.forEachIndexed { index, item ->
+            val itemView = createSettingItem(inflater, contentContainer, item)
+            contentContainer.addView(itemView)
+
+            // 添加分割线（最后一个item之后不添加）
+            if (!item.isLast) {
+                val divider =
+                    inflater.inflate(R.layout.item_setting_divider, contentContainer, false)
+                contentContainer.addView(divider)
+            }
+        }
+
+        // 将CardView添加到容器
+        cardView.addView(contentContainer)
+        container.addView(cardView)
+    }
+
+    /**
+     * 创建设置项视图
+     */
+    private fun createSettingItem(
+        inflater: LayoutInflater,
+        parent: LinearLayout,
+        item: SettingItem
+    ): View {
+        val view = inflater.inflate(R.layout.item_setting, parent, false)
+
+        // 设置标题
+        view.findViewById<android.widget.TextView>(R.id.tvTitle).text = item.title
+
+        // 设置摘要
+        val tvSummary = view.findViewById<android.widget.TextView>(R.id.tvSummary)
+        if (item.summary != null) {
+            tvSummary.text = item.summary
+            tvSummary.visibility = View.VISIBLE
+        }
+
+        // 设置箭头
+        val ivChevron = view.findViewById<android.widget.ImageView>(R.id.ivChevron)
+        ivChevron.visibility = if (item.hasChevron) View.VISIBLE else View.GONE
+
+        // 设置背景
+        val bgRes = when {
+            item.isFirst && item.isLast -> R.drawable.bg_preference_single
+            item.isFirst -> R.drawable.bg_preference_first
+            item.isLast -> R.drawable.bg_preference_last
+            else -> R.drawable.bg_preference_middle
+        }
+        view.setBackgroundResource(bgRes)
+
+        // 设置点击事件
+        view.isClickable = item.onClick != null
+        view.isFocusable = item.onClick != null
+        item.onClick?.let { clickListener ->
+            view.setOnClickListener { clickListener() }
+        }
+
+        return view
+    }
+
+    /**
+     * 获取版本名称
+     */
+    private fun getVersionName(): String {
+        return try {
+            val packageInfo = packageManager.getPackageInfo(packageName, 0)
+            packageInfo.versionName ?: "未知"
+        } catch (e: PackageManager.NameNotFoundException) {
+            "未知"
+        }
+    }
+
+    /**
+     * dp转px
+     */
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources.displayMetrics.density).toInt()
+    }
+
+    /**
+     * 设置项数据类
+     */
+    data class SettingItem(
+        val key: String,
+        val title: String,
+        val summary: String? = null,
+        val hasChevron: Boolean = false,
+        val isFirst: Boolean = false,
+        val isLast: Boolean = false,
+        val onClick: (() -> Unit)? = null
+    )
+}
