@@ -12,7 +12,6 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.databinding.ItemSongBinding
 import com.unicorn.player.model.Song
-import java.util.Locale
 
 class SongAdapter(
     private val listener: OnSongClickListener,
@@ -237,11 +236,8 @@ class SongAdapter(
                 albumName.text =
                     if (TextUtils.equals(song.album, "Music")) "<unknown>" else song.album
 
-                // Format duration
-                val durationMinutes = song.duration / 60000
-                val durationSeconds = (song.duration % 60000) / 1000
-                duration.text =
-                    String.format(Locale.getDefault(), "%d:%02d", durationMinutes, durationSeconds)
+                // 设置品质标签文字
+                quality.setText("SQ")
 
                 // 获取context
                 val context = binding.root.context
@@ -254,13 +250,13 @@ class SongAdapter(
                     songTitle.setTextColor(context.getColor(android.R.color.holo_red_light))
                     artistName.setTextColor(context.getColor(android.R.color.holo_red_light))
                     albumName.setTextColor(context.getColor(android.R.color.holo_red_light))
-                    duration.setTextColor(context.getColor(android.R.color.holo_red_light))
+                    quality.setColor(context.getColor(android.R.color.holo_red_light))
                     albumArt.isSelected = true
                 } else {
                     songTitle.setTextColor(context.getColor(com.unicorn.player.R.color.onSurface))
                     artistName.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
                     albumName.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
-                    duration.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
+                    quality.setColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
                     albumArt.isSelected = false
                 }
 

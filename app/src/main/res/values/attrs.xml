@@ -10,4 +10,11 @@
         <!-- 返回按钮是否显示 -->
         <attr name="backButtonVisible" format="boolean" />
     </declare-styleable>
+
+    <declare-styleable name="AudioQualityLabel">
+        <!-- 显示的文字 -->
+        <attr name="aq_text" format="string" />
+        <!-- 边框和文字颜色 -->
+        <attr name="aq_color" format="color" />
+    </declare-styleable>
 </resources>
