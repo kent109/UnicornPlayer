@@ -237,7 +237,14 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
                 if (layoutManager != null) {
                     val totalItemCount = layoutManager.itemCount
                     val lastVisibleItem = layoutManager.findLastVisibleItemPosition()
-                    val isAtBottom = lastVisibleItem >= totalItemCount - 1
+
+                    // 精确判断：最后一个 item 可见且其底部已经到达或超过 RecyclerView 底部
+                    val isAtBottom = if (lastVisibleItem == totalItemCount - 1) {
+                        val lastItemView = layoutManager.findViewByPosition(lastVisibleItem)
+                        lastItemView != null && lastItemView.bottom <= recyclerView.bottom
+                    } else {
+                        false
+                    }
 
                     // 在底部显示歌曲数量，不在底部隐藏
                     tvSongCount.visibility =
