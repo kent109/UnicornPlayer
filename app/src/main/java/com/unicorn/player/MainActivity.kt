@@ -542,8 +542,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
                 // 检查是否已经在播放同一首歌
                 if (musicService?.currentSong?.value?.id == song.id) {
                     if (musicService?.isPlaying?.value == true) {
-                        // 如果正在播放同一首歌，暂停播放
-                        musicService?.pause()
+                        // 如果正在播放同一首歌，不做处理
                     } else {
                         // 如果是同一首歌但暂停状态，恢复播放
                         musicService?.requestAudioFocusAndPlay()
