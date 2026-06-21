@@ -119,6 +119,46 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         bindMusicService()
     }
 
+    private var lastSearchTapTime = 0L
+    private val searchViewRect = android.graphics.Rect()
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        if (ev?.action == android.view.MotionEvent.ACTION_UP) {
+            // 获取SearchView在屏幕上的区域
+            binding.searchView.getHitRect(searchViewRect)
+            // 将触摸事件坐标转换到SearchView的父坐标系
+            val location = IntArray(2)
+            binding.searchView.getLocationOnScreen(location)
+            val x = ev.rawX.toInt()
+            val y = ev.rawY.toInt()
+            if (searchViewRect.contains(
+                    x - location[0] + searchViewRect.left,
+                    y - location[1] + searchViewRect.top
+                )
+            ) {
+                // 点击在SearchView范围内
+                if (binding.searchView.isIconified) {
+                    val currentTime = System.currentTimeMillis()
+                    val doubleTapTimeout = android.view.ViewConfiguration.getDoubleTapTimeout()
+                    if (currentTime - lastSearchTapTime < doubleTapTimeout) {
+                        // 双击检测
+                        val layoutManager =
+                            binding.recyclerView.layoutManager as? LinearLayoutManager
+                        if (layoutManager != null && layoutManager.itemCount > 0) {
+                            binding.recyclerView.smoothScrollToPosition(0)
+                        }
+                        lastSearchTapTime = 0L
+                    } else {
+                        lastSearchTapTime = currentTime
+                    }
+                } else {
+                    lastSearchTapTime = 0L
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     private fun setupViewModel() {
         val repository = MusicRepository(this)
         val factory = MusicViewModelFactory(repository)

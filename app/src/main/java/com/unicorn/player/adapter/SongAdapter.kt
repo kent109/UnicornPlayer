@@ -8,7 +8,6 @@ import android.view.LayoutInflater
 import android.view.TouchDelegate
 import android.view.ViewGroup
 import android.view.animation.LinearInterpolator
-import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -300,15 +299,6 @@ class SongAdapter(
 
                 root.setOnClickListener {
                     listener.onSongClick(song, position)
-                }
-
-                root.setOnLongClickListener {
-                    Toast.makeText(
-                        context,
-                        song.path,
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    true
                 }
 
                 // 更多选项按钮点击事件
