@@ -5,7 +5,8 @@
     android:layout_height="match_parent"
     android:background="@color/background"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp">
 
     <!-- 顶部标题栏 -->
     <com.unicorn.player.widget.TitleBar
@@ -19,6 +20,7 @@
         android:id="@+id/smartRefreshLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_marginTop="8dp"
         app:srlEnableAutoLoadMore="false"
         app:srlEnableFooterFollowWhenNoMoreData="false"
         app:srlEnableLoadMore="false"

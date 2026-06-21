@@ -519,7 +519,17 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
                 startService(intent)
                 updateBottomPlayer(song)
             }
+
+            // 点击歌曲后退出搜索模式
+            exitSearchMode()
         }
+    }
+
+    // 退出搜索模式
+    private fun exitSearchMode() {
+        // 清空搜索框文本并关闭搜索视图
+        binding.searchView.setQuery("", false)
+        binding.searchView.isIconified = true
     }
 
     private fun updateBottomPlayer(song: Song) {
