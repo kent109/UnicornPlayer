@@ -353,14 +353,16 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             }
         })
 
-        // 监听搜索框展开/收起状态，控制设置按钮的显示
+        // 监听搜索框展开/收起状态，控制排序和设置按钮的显示
         binding.searchView.setOnSearchClickListener {
-            // 进入搜索模式，隐藏设置按钮
+            // 进入搜索模式，隐藏排序和设置按钮
+            binding.ivSort.visibility = android.view.View.GONE
             binding.ivSetting.visibility = android.view.View.GONE
         }
 
         binding.searchView.setOnCloseListener {
-            // 退出搜索模式，显示设置按钮
+            // 退出搜索模式，显示排序和设置按钮
+            binding.ivSort.visibility = android.view.View.VISIBLE
             binding.ivSetting.visibility = android.view.View.VISIBLE
             false // 返回false表示不执行默认的关闭行为
         }
