@@ -338,8 +338,10 @@ class MusicService : Service() {
         // 取消注册广播接收器
         unregisterReceiver(notificationButtonReceiver)
 
-        // 保存播放状态
+        // 先保存播放状态（协程异步执行，但此时mediaPlayer还未release）
         savePlaybackState()
+        // 标记MediaPlayer即将释放，若协程延迟执行到release之后则会跳过
+        isMediaPlayerReleased = true
         mediaPlayer.release()
         mediaSession.release()
 
@@ -916,26 +918,43 @@ class MusicService : Service() {
         )
     }
 
+    @Volatile
+    private var isMediaPlayerReleased = false
+
     fun savePlaybackState() {
         CoroutineScope(Dispatchers.IO).launch {
-            applicationDataStore.edit { preferences ->
-                val currentSong = _currentSong.value
-                if (currentSong != null) {
-                    preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
-                    preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
-                    preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
-                    preferences[DataStoreKeys.SONG_PATH] = currentSong.path
-                    preferences[DataStoreKeys.CURRENT_POSITION] = mediaPlayer.currentPosition
-                    preferences[DataStoreKeys.IS_PLAYING] = if (mediaPlayer.isPlaying) 1 else 0
-                } else {
-                    // 清除保存的状态
-                    preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
-                    preferences.remove(DataStoreKeys.SONG_TITLE)
-                    preferences.remove(DataStoreKeys.SONG_ARTIST)
-                    preferences.remove(DataStoreKeys.SONG_PATH)
-                    preferences.remove(DataStoreKeys.CURRENT_POSITION)
-                    preferences.remove(DataStoreKeys.IS_PLAYING)
+            try {
+                applicationDataStore.edit { preferences ->
+                    if (isMediaPlayerReleased) {
+                        Log.w(TAG, "savePlaybackState: MediaPlayer already released, skip")
+                        return@edit
+                    }
+                    val currentSong = _currentSong.value
+                    if (currentSong != null) {
+                        preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
+                        preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
+                        preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
+                        preferences[DataStoreKeys.SONG_PATH] = currentSong.path
+                        try {
+                            preferences[DataStoreKeys.CURRENT_POSITION] =
+                                mediaPlayer.currentPosition
+                            preferences[DataStoreKeys.IS_PLAYING] =
+                                if (mediaPlayer.isPlaying) 1 else 0
+                        } catch (e: IllegalStateException) {
+                            Log.e(TAG, "savePlaybackState: MediaPlayer state error", e)
+                        }
+                    } else {
+                        // 清除保存的状态
+                        preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
+                        preferences.remove(DataStoreKeys.SONG_TITLE)
+                        preferences.remove(DataStoreKeys.SONG_ARTIST)
+                        preferences.remove(DataStoreKeys.SONG_PATH)
+                        preferences.remove(DataStoreKeys.CURRENT_POSITION)
+                        preferences.remove(DataStoreKeys.IS_PLAYING)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "savePlaybackState failed", e)
             }
         }
     }
@@ -1042,7 +1061,10 @@ class MusicService : Service() {
 
                     withContext(Dispatchers.Main) {
                         setSongList(songs, startIndex)
-                        Log.d(TAG, "Loaded ${songs.size} songs from database, current song at index $startIndex")
+                        Log.d(
+                            TAG,
+                            "Loaded ${songs.size} songs from database, current song at index $startIndex"
+                        )
                     }
                 }
             } catch (e: Exception) {
