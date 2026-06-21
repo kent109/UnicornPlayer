@@ -350,6 +350,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     private var currentSongObserver: androidx.lifecycle.Observer<com.unicorn.player.model.Song?>? =
         null
     private var fileChangedObserver: androidx.lifecycle.Observer<Unit>? = null
+    private var requestSongListObserver: androidx.lifecycle.Observer<com.unicorn.player.service.Event<Boolean>>? = null
 
     private fun setupBottomPlayerObservers() {
         // 先移除旧的观察者，避免重复注册
@@ -387,15 +388,47 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             loadMusic()
         }
         musicService?.fileChanged?.observe(this, fileChangedObserver!!)
+
+        // 监听请求重新设置歌曲列表的通知（当songList为空时）
+        requestSongListObserver = androidx.lifecycle.Observer { event ->
+            event.getContentIfNotHandled()?.let { request ->
+                if (request) {
+                    resetSongListAndPlayNext()
+                }
+            }
+        }
+        musicService?.requestSongList?.observe(this, requestSongListObserver!!)
+    }
+
+    /**
+     * 重新设置歌曲列表并播放下一首
+     * 当MusicService的songList为空时，由MainActivity重新设置
+     */
+    private fun resetSongListAndPlayNext() {
+        // 使用 fullSongs（完整列表）确保播放顺序一致
+        viewModel.fullSongs.value?.let { songs ->
+            val currentSong = musicService?.currentSong?.value
+            val currentIndex = if (currentSong != null) {
+                songs.indexOfFirst { it.id == currentSong.id }.takeIf { it != -1 } ?: 0
+            } else {
+                0
+            }
+            // 重新设置歌曲列表
+            musicService?.setSongList(songs, currentIndex)
+            // 播放下一首
+            musicService?.playNext()
+        }
     }
 
     private fun removeBottomPlayerObservers() {
         isPlayingObserver?.let { musicService?.isPlaying?.removeObserver(it) }
         currentSongObserver?.let { musicService?.currentSong?.removeObserver(it) }
         fileChangedObserver?.let { musicService?.fileChanged?.removeObserver(it) }
+        requestSongListObserver?.let { musicService?.requestSongList?.removeObserver(it) }
         isPlayingObserver = null
         currentSongObserver = null
         fileChangedObserver = null
+        requestSongListObserver = null
     }
 
     private fun updateBottomPlayerUI() {
@@ -482,8 +515,10 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     }
 
     override fun onSongClick(song: Song, position: Int) {
-        viewModel.allSongs.value?.let { songs ->
-            // 通过song ID查找在列表中的真实位置，避免搜索时位置不一致
+        // 使用 fullSongs（完整列表）而不是 allSongs（可能是搜索结果）
+        // 这样播放完成自动播放下一首时，会按照完整列表的顺序播放
+        viewModel.fullSongs.value?.let { songs ->
+            // 通过song ID查找在列表中的真实位置
             val realPosition = songs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
             if (isServiceBound) {
                 musicService?.setSongList(songs, realPosition)

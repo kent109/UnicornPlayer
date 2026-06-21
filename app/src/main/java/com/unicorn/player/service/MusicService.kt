@@ -80,6 +80,10 @@ class MusicService : Service() {
     private val _fileChanged = MutableLiveData<Unit>()
     val fileChanged: LiveData<Unit> = _fileChanged
 
+    // 请求重新设置歌曲列表通知（用于songList为空时通知MainActivity）
+    private val _requestSongList = MutableLiveData<Event<Boolean>>()
+    val requestSongList: LiveData<Event<Boolean>> = _requestSongList
+
     private var songList = mutableListOf<Song>()
     private val _songList = MutableLiveData<List<Song>>(emptyList())
 
@@ -613,32 +617,10 @@ class MusicService : Service() {
 
     fun playNext() {
         if (songList.isEmpty()) {
-            // 如果songList为空，尝试从数据库加载
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    val database = MusicDatabase.getDatabase(this@MusicService)
-                    val songs = database.songDao().getAllSongs().first()
-
-                    if (songs.isNotEmpty()) {
-                        val currentSongId = _currentSong.value?.id
-                        val currentIndexInList = if (currentSongId != null) {
-                            songs.indexOfFirst { it.id == currentSongId }
-                        } else {
-                            -1
-                        }
-
-                        val startIndex = if (currentIndexInList >= 0) currentIndexInList else 0
-
-                        withContext(Dispatchers.Main) {
-                            setSongList(songs, startIndex)
-                            playNext() // 递归调用，现在有songList了
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error loading song list from database: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
+            // 如果songList为空，通知MainActivity重新设置歌曲列表
+            // 这样可以确保播放顺序与用户界面一致
+            Log.d(TAG, "songList is empty, requesting MainActivity to reset song list")
+            _requestSongList.postValue(Event(true))
             return
         }
 
@@ -675,32 +657,10 @@ class MusicService : Service() {
 
     fun playPrevious() {
         if (songList.isEmpty()) {
-            // 如果songList为空，尝试从数据库加载
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    val database = MusicDatabase.getDatabase(this@MusicService)
-                    val songs = database.songDao().getAllSongs().first()
-
-                    if (songs.isNotEmpty()) {
-                        val currentSongId = _currentSong.value?.id
-                        val currentIndexInList = if (currentSongId != null) {
-                            songs.indexOfFirst { it.id == currentSongId }
-                        } else {
-                            -1
-                        }
-
-                        val startIndex = if (currentIndexInList >= 0) currentIndexInList else 0
-
-                        withContext(Dispatchers.Main) {
-                            setSongList(songs, startIndex)
-                            playPrevious() // 递归调用，现在有songList了
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error loading song list from database: ${e.message}")
-                    e.printStackTrace()
-                }
-            }
+            // 如果songList为空，通知MainActivity重新设置歌曲列表
+            // 这样可以确保播放顺序与用户界面一致
+            Log.d(TAG, "songList is empty, requesting MainActivity to reset song list")
+            _requestSongList.postValue(Event(true))
             return
         }
 
@@ -1109,4 +1069,22 @@ class MusicService : Service() {
             stopSelf()
         }
     }
+}
+
+/**
+ * 一次性事件包装类，避免LiveData重复触发
+ */
+open class Event<out T>(private val content: T) {
+    private var hasBeenHandled = false
+
+    fun getContentIfNotHandled(): T? {
+        return if (hasBeenHandled) {
+            null
+        } else {
+            hasBeenHandled = true
+            content
+        }
+    }
+
+    fun peekContent(): T = content
 }

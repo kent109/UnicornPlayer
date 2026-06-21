@@ -14,6 +14,10 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
     private val _allSongs = MutableLiveData<List<Song>>(emptyList())
     val allSongs: LiveData<List<Song>> = _allSongs
 
+    // 完整的歌曲列表（不随搜索变化）
+    private val _fullSongs = MutableLiveData<List<Song>>(emptyList())
+    val fullSongs: LiveData<List<Song>> = _fullSongs
+
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
@@ -27,6 +31,7 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
         viewModelScope.launch {
             repository.getAllSongs().collect { songs ->
                 _allSongs.postValue(songs)
+                _fullSongs.postValue(songs)
             }
         }
     }
@@ -50,6 +55,8 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
             if (query.isBlank()) {
                 repository.getAllSongs().collect { songs ->
                     _allSongs.postValue(songs)
+                    // 搜索清空时，fullSongs 也更新为完整列表
+                    _fullSongs.postValue(songs)
                 }
             } else {
                 repository.searchSongs(query).collect { songs ->
