@@ -39,6 +39,11 @@
 
     <!-- Icon colors for day/night mode -->
     <color name="icon_color">#ff2c2c2c</color>
+    <color name="text_primary">#ff2c2c2c</color>
+    <color name="divider_color">#1f000000</color>
+
+    <!-- 排序弹窗颜色 - 白天模式 -->
+    <color name="popup_background">#ffffff</color>
     <color name="disc_color_ring">#ff000000</color>
     <color name="disc_color_outer">#ff000000</color>
     <color name="disc_color_inner">#FFE6E1E5</color>

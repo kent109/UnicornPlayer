@@ -21,6 +21,12 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
+    // 排序模式
+    enum class SortMode { BY_TIME, BY_TITLE, BY_ARTIST }
+
+    private val _sortMode = MutableLiveData(SortMode.BY_TITLE)
+    val sortMode: LiveData<SortMode> = _sortMode
+
     private var searchJob: Job? = null
 
     init {
@@ -30,9 +36,18 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
     private fun collectSongs() {
         viewModelScope.launch {
             repository.getAllSongs().collect { songs ->
-                _allSongs.postValue(songs)
-                _fullSongs.postValue(songs)
+                val sorted = sortSongsInternal(songs, _sortMode.value ?: SortMode.BY_TIME)
+                _allSongs.postValue(sorted)
+                _fullSongs.postValue(sorted)
             }
+        }
+    }
+
+    private fun sortSongsInternal(songs: List<Song>, mode: SortMode): List<Song> {
+        return when (mode) {
+            SortMode.BY_TIME -> songs.sortedByDescending { it.lastModified }
+            SortMode.BY_TITLE -> songs.sortedBy { it.title.lowercase() }
+            SortMode.BY_ARTIST -> songs.sortedBy { it.artist.lowercase() }
         }
     }
 
@@ -72,5 +87,15 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
     fun updateSongs(songs: List<Song>) {
         _allSongs.postValue(songs)
         _fullSongs.postValue(songs)
+    }
+
+    /**
+     * 按指定模式排序当前歌曲列表
+     */
+    fun sortSongs(mode: SortMode) {
+        _sortMode.value = mode
+        val currentSongs = _allSongs.value ?: return
+        val sorted = sortSongsInternal(currentSongs, mode)
+        _allSongs.postValue(sorted)
     }
 }

@@ -368,12 +368,97 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         }
     }
 
+    // 排序弹窗相关
+    private var sortPopup: android.widget.PopupWindow? = null
+
+    private fun showSortMenu() {
+        // 如果弹窗已显示，则关闭
+        if (sortPopup?.isShowing == true) {
+            sortPopup?.dismiss()
+            return
+        }
+
+        val popupView = layoutInflater.inflate(R.layout.popup_sort_menu, null)
+        val tvSortByTime = popupView.findViewById<android.widget.TextView>(R.id.tvSortByTime)
+        val tvSortByTitle = popupView.findViewById<android.widget.TextView>(R.id.tvSortByTitle)
+        val tvSortByArtist = popupView.findViewById<android.widget.TextView>(R.id.tvSortByArtist)
+
+        // 根据当前排序模式显示钩号
+        val currentSortMode = viewModel.sortMode.value
+        tvSortByTime.setCompoundDrawablesWithIntrinsicBounds(
+            0, 0,
+            if (currentSortMode == MusicViewModel.SortMode.BY_TIME) R.drawable.ic_check else 0,
+            0
+        )
+        tvSortByTitle.setCompoundDrawablesWithIntrinsicBounds(
+            0, 0,
+            if (currentSortMode == MusicViewModel.SortMode.BY_TITLE) R.drawable.ic_check else 0,
+            0
+        )
+        tvSortByArtist.setCompoundDrawablesWithIntrinsicBounds(
+            0, 0,
+            if (currentSortMode == MusicViewModel.SortMode.BY_ARTIST) R.drawable.ic_check else 0,
+            0
+        )
+
+        // 点击排序选项
+        tvSortByTime.setOnClickListener {
+            viewModel.sortSongs(MusicViewModel.SortMode.BY_TIME)
+            sortPopup?.dismiss()
+            sortPopup = null
+        }
+        tvSortByTitle.setOnClickListener {
+            viewModel.sortSongs(MusicViewModel.SortMode.BY_TITLE)
+            sortPopup?.dismiss()
+            sortPopup = null
+        }
+        tvSortByArtist.setOnClickListener {
+            viewModel.sortSongs(MusicViewModel.SortMode.BY_ARTIST)
+            sortPopup?.dismiss()
+            sortPopup = null
+        }
+
+        // 将 dp 转换为 px
+        val popupWidthPx = (180 * resources.displayMetrics.density).toInt()
+        val marginRightPx = (8 * resources.displayMetrics.density).toInt() // 右边留 8dp
+
+        sortPopup = android.widget.PopupWindow(
+            popupView,
+            popupWidthPx,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        ).apply {
+            elevation = 8f
+            setOnDismissListener { sortPopup = null }
+        }
+
+        // 计算 x 偏移，确保弹窗不超出屏幕右边缘
+        val screenWidthPx = resources.displayMetrics.widthPixels
+        val ivSortLocation = IntArray(2)
+        binding.ivSort.getLocationOnScreen(ivSortLocation)
+        val ivSortRight = ivSortLocation[0] + binding.ivSort.width
+        val xOffset = if (ivSortRight + popupWidthPx + marginRightPx > screenWidthPx) {
+            // 弹窗会超出屏幕，向左偏移
+            screenWidthPx - ivSortRight - popupWidthPx - marginRightPx
+        } else {
+            0
+        }
+
+        // 显示在 ivSort 下方
+        sortPopup?.showAsDropDown(binding.ivSort, xOffset, 32)
+    }
+
     private fun setupBottomPlayer() {
         binding.bottomPlayer.setOnClickListener {
             val intent = Intent(this, PlayerActivity::class.java)
             startActivity(intent)
             // 主界面淡出，播放界面上滑
             overridePendingTransition(R.anim.slide_up_in, R.anim.fade_out)
+        }
+
+        // 排序按钮点击事件
+        binding.ivSort.setOnClickListener {
+            showSortMenu()
         }
 
         // 设置按钮点击事件
