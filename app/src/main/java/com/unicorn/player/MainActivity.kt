@@ -26,11 +26,13 @@ import com.unicorn.player.service.MusicService
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 
-class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
+class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
+    SongAdapter.OnSongMoreClickListener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MusicViewModel
     private lateinit var songAdapter: SongAdapter
+    private lateinit var songInfoHelper: SongInfoHelper
 
     // 歌曲数量 TextView
     private lateinit var tvSongCount: android.widget.TextView
@@ -94,6 +96,19 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // 初始化歌曲信息帮助类
+        songInfoHelper = SongInfoHelper(this)
+        songInfoHelper.onDeleteListener = object : SongInfoHelper.OnDeleteListener {
+            override fun onDelete(song: Song) {
+                // 从完整列表中删除歌曲
+                viewModel.fullSongs.value?.let { songs ->
+                    val updatedSongs = songs.filter { it.id != song.id }
+                    // 通知 ViewModel 更新列表
+                    viewModel.updateSongs(updatedSongs)
+                }
+            }
+        }
+
         setupViewModel()
         setupRecyclerView()
         setupSmartRefreshLayout()
@@ -129,7 +144,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     }
 
     private fun setupRecyclerView() {
-        songAdapter = SongAdapter(this)
+        songAdapter = SongAdapter(this, this)
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = songAdapter
@@ -350,7 +365,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
     private var currentSongObserver: androidx.lifecycle.Observer<com.unicorn.player.model.Song?>? =
         null
     private var fileChangedObserver: androidx.lifecycle.Observer<Unit>? = null
-    private var requestSongListObserver: androidx.lifecycle.Observer<com.unicorn.player.service.Event<Boolean>>? = null
+    private var requestSongListObserver: androidx.lifecycle.Observer<com.unicorn.player.service.Event<Boolean>>? =
+        null
 
     private fun setupBottomPlayerObservers() {
         // 先移除旧的观察者，避免重复注册
@@ -519,7 +535,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
         // 这样播放完成自动播放下一首时，会按照完整列表的顺序播放
         viewModel.fullSongs.value?.let { songs ->
             // 通过song ID查找在列表中的真实位置
-            val realPosition = songs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
+            val realPosition =
+                songs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
             if (isServiceBound) {
                 musicService?.setSongList(songs, realPosition)
                 // 检查是否已经在播放同一首歌
@@ -618,5 +635,10 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener {
             unbindService(serviceConnection)
             isServiceBound = false
         }
+    }
+
+    // 实现 OnSongMoreClickListener 接口
+    override fun onMoreClick(song: Song, position: Int) {
+        songInfoHelper.showSongInfoDialog(song)
     }
 }

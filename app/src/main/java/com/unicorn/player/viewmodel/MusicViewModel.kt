@@ -65,4 +65,12 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
             }
         }
     }
+
+    /**
+     * 更新歌曲列表（用于删除歌曲后更新）
+     */
+    fun updateSongs(songs: List<Song>) {
+        _allSongs.postValue(songs)
+        _fullSongs.postValue(songs)
+    }
 }

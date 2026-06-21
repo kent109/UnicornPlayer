@@ -2,8 +2,10 @@ package com.unicorn.player.adapter
 
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.graphics.Rect
 import android.text.TextUtils
 import android.view.LayoutInflater
+import android.view.TouchDelegate
 import android.view.ViewGroup
 import android.view.animation.LinearInterpolator
 import android.widget.Toast
@@ -15,6 +17,7 @@ import com.unicorn.player.model.Song
 
 class SongAdapter(
     private val listener: OnSongClickListener,
+    private val moreClickListener: OnSongMoreClickListener? = null,
     var currentPlayingSong: Song? = null,
     var isPlaying: Boolean = false
 ) : ListAdapter<Song, SongAdapter.SongViewHolder>(SongDiffCallback()) {
@@ -132,6 +135,10 @@ class SongAdapter(
         fun onSongClick(song: Song, position: Int)
     }
 
+    interface OnSongMoreClickListener {
+        fun onMoreClick(song: Song, position: Int)
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SongViewHolder {
         val binding = ItemSongBinding.inflate(
             LayoutInflater.from(parent.context), parent, false
@@ -234,6 +241,20 @@ class SongAdapter(
         // 保存当前动画的引用，以便可以停止
         private var currentAnimator: ObjectAnimator? = null
 
+        init {
+            // 增大 btnMore 的点击区域
+            binding.btnMore.post {
+                val rect = Rect()
+                binding.btnMore.getHitRect(rect)
+                val extra = (10 * binding.root.context.resources.displayMetrics.density).toInt()
+                rect.top -= extra
+                rect.bottom += extra
+                rect.left -= extra
+                rect.right += extra
+                binding.root.touchDelegate = TouchDelegate(rect, binding.btnMore)
+            }
+        }
+
         fun bind(song: Song, position: Int, currentPlayingSong: Song?, isPlaying: Boolean) {
             binding.apply {
                 songTitle.text = song.title
@@ -288,6 +309,11 @@ class SongAdapter(
                         Toast.LENGTH_SHORT
                     ).show()
                     true
+                }
+
+                // 更多选项按钮点击事件
+                btnMore.setOnClickListener {
+                    moreClickListener?.onMoreClick(song, position)
                 }
             }
         }
