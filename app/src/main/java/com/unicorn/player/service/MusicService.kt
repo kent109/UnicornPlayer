@@ -808,6 +808,9 @@ class MusicService : Service() {
                 } catch (e: InterruptedException) {
                     e.printStackTrace()
                     break
+                } catch (e: IllegalStateException) {
+                    // MediaPlayer处于Error或Idle状态（如夜间模式切换导致Activity重建时）
+                    Log.e(TAG, "startPositionUpdates: MediaPlayer state error", e)
                 }
             }
         }.start()
@@ -815,13 +818,24 @@ class MusicService : Service() {
 
     private fun updateMediaSessionPlaybackState() {
         val playbackState = mediaPlayer.let { player ->
-            val state = if (player.isPlaying) {
-                android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
-            } else {
+            val state = try {
+                if (player.isPlaying) {
+                    android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
+                } else {
+                    android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
+                }
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "updateMediaSessionPlaybackState: MediaPlayer state error", e)
                 android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
             }
+            val position = try {
+                player.currentPosition.toLong()
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "updateMediaSessionPlaybackState: MediaPlayer currentPosition error", e)
+                0L
+            }
             android.support.v4.media.session.PlaybackStateCompat.Builder()
-                .setState(state, player.currentPosition.toLong(), 1.0f).setActions(
+                .setState(state, position, 1.0f).setActions(
                     android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or android.support.v4.media.session.PlaybackStateCompat.ACTION_PAUSE or android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT or android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or android.support.v4.media.session.PlaybackStateCompat.ACTION_SEEK_TO
                 ).build()
         }
