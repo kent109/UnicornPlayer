@@ -467,6 +467,33 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             startActivity(intent)
         }
 
+        // 增大ivSort和ivSetting的点击范围
+        setupTouchDelegate()
+
+        // 设置播放控制按钮点击事件
+        setupBottomPlayerButtons()
+    }
+
+    private fun setupTouchDelegate() {
+        val expandPx = (48 * resources.displayMetrics.density).toInt()
+        expandTouchTarget(binding.ivSort, expandPx)
+        expandTouchTarget(binding.ivSetting, expandPx)
+    }
+
+    private fun expandTouchTarget(view: android.view.View, expandPx: Int) {
+        view.post {
+            val parent = view.parent as android.view.ViewGroup
+            val rect = android.graphics.Rect()
+            view.getHitRect(rect)
+            rect.top -= expandPx / 2
+            rect.bottom += expandPx / 2
+            rect.left -= expandPx / 2
+            rect.right += expandPx / 2
+            parent.touchDelegate = android.view.TouchDelegate(rect, view)
+        }
+    }
+
+    private fun setupBottomPlayerButtons() {
         binding.playButton.setOnClickListener {
             musicService?.let { service ->
                 if (service.isPlaying.value == true) {
