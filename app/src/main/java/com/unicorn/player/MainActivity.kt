@@ -132,8 +132,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             val x = ev.rawX.toInt()
             val y = ev.rawY.toInt()
             if (searchViewRect.contains(
-                    x - location[0] + searchViewRect.left,
-                    y - location[1] + searchViewRect.top
+                    x - location[0] + searchViewRect.left, y - location[1] + searchViewRect.top
                 )
             ) {
                 // 点击在SearchView范围内
@@ -385,35 +384,44 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
 
         // 根据当前排序模式显示钩号
         val currentSortMode = viewModel.sortMode.value
-        tvSortByTime.setCompoundDrawablesWithIntrinsicBounds(
-            0, 0,
-            if (currentSortMode == MusicViewModel.SortMode.BY_TIME) R.drawable.ic_check else 0,
-            0
+        val checkColor = ContextCompat.getColor(this, android.R.color.holo_red_light)
+        val normalTextColor = ContextCompat.getColor(this, R.color.text_primary)
+
+        setupSortItem(
+            tvSortByTime,
+            currentSortMode == MusicViewModel.SortMode.BY_TIME,
+            checkColor,
+            normalTextColor
         )
-        tvSortByTitle.setCompoundDrawablesWithIntrinsicBounds(
-            0, 0,
-            if (currentSortMode == MusicViewModel.SortMode.BY_TITLE) R.drawable.ic_check else 0,
-            0
+        setupSortItem(
+            tvSortByTitle,
+            currentSortMode == MusicViewModel.SortMode.BY_TITLE,
+            checkColor,
+            normalTextColor
         )
-        tvSortByArtist.setCompoundDrawablesWithIntrinsicBounds(
-            0, 0,
-            if (currentSortMode == MusicViewModel.SortMode.BY_ARTIST) R.drawable.ic_check else 0,
-            0
+        setupSortItem(
+            tvSortByArtist,
+            currentSortMode == MusicViewModel.SortMode.BY_ARTIST,
+            checkColor,
+            normalTextColor
         )
 
         // 点击排序选项
         tvSortByTime.setOnClickListener {
             viewModel.sortSongs(MusicViewModel.SortMode.BY_TIME)
+            updateServiceSongList()
             sortPopup?.dismiss()
             sortPopup = null
         }
         tvSortByTitle.setOnClickListener {
             viewModel.sortSongs(MusicViewModel.SortMode.BY_TITLE)
+            updateServiceSongList()
             sortPopup?.dismiss()
             sortPopup = null
         }
         tvSortByArtist.setOnClickListener {
             viewModel.sortSongs(MusicViewModel.SortMode.BY_ARTIST)
+            updateServiceSongList()
             sortPopup?.dismiss()
             sortPopup = null
         }
@@ -423,12 +431,10 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         val marginRightPx = (8 * resources.displayMetrics.density).toInt() // 右边留 8dp
 
         sortPopup = android.widget.PopupWindow(
-            popupView,
-            popupWidthPx,
-            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
+            popupView, popupWidthPx, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true
         ).apply {
             elevation = 8f
+            animationStyle = R.style.PopupAnimation
             setOnDismissListener { sortPopup = null }
         }
 
@@ -446,6 +452,37 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
 
         // 显示在 ivSort 下方
         sortPopup?.showAsDropDown(binding.ivSort, xOffset, 32)
+    }
+
+    /**
+     * 设置排序 item 的样式：选中状态红色文字+红色对钩
+     */
+    private fun setupSortItem(
+        textView: android.widget.TextView, isSelected: Boolean, checkColor: Int, normalColor: Int
+    ) {
+        textView.setTextColor(if (isSelected) checkColor else normalColor)
+        textView.setCompoundDrawablesWithIntrinsicBounds(
+            0, 0, if (isSelected) R.drawable.ic_check else 0, 0
+        )
+        if (isSelected) {
+            textView.compoundDrawables[2]?.setTint(checkColor)
+        }
+    }
+
+    /**
+     * 将排序后的完整列表同步到 MusicService，确保播放顺序与 UI 一致
+     */
+    private fun updateServiceSongList() {
+        val sortedSongs = viewModel.getSortedFullSongs()
+        if (sortedSongs.isEmpty()) return
+
+        val currentSong = musicService?.currentSong?.value
+        val currentIndex = if (currentSong != null) {
+            sortedSongs.indexOfFirst { it.id == currentSong.id }.takeIf { it != -1 } ?: 0
+        } else {
+            0
+        }
+        musicService?.setSongList(sortedSongs, currentIndex)
     }
 
     private fun setupBottomPlayer() {

@@ -96,6 +96,15 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
         _sortMode.value = mode
         val currentSongs = _allSongs.value ?: return
         val sorted = sortSongsInternal(currentSongs, mode)
-        _allSongs.postValue(sorted)
+        _allSongs.value = sorted
+    }
+
+    /**
+     * 获取排序后的完整歌曲列表（用于同步到 MusicService）
+     */
+    fun getSortedFullSongs(): List<Song> {
+        val fullSongs = _fullSongs.value ?: return emptyList()
+        val mode = _sortMode.value ?: SortMode.BY_TIME
+        return sortSongsInternal(fullSongs, mode)
     }
 }
