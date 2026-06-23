@@ -38,6 +38,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -54,6 +55,7 @@ object DataStoreKeys {
     val SONG_TITLE = stringPreferencesKey("song_title")
     val SONG_ARTIST = stringPreferencesKey("song_artist")
     val SONG_PATH = stringPreferencesKey("song_path")
+    val PLAY_MODE = intPreferencesKey("play_mode")
 }
 
 class MusicService : Service() {
@@ -83,6 +85,10 @@ class MusicService : Service() {
     // 请求重新设置歌曲列表通知（用于songList为空时通知MainActivity）
     private val _requestSongList = MutableLiveData<Event<Boolean>>()
     val requestSongList: LiveData<Event<Boolean>> = _requestSongList
+
+    // 播放模式 LiveData，用于通知 UI 更新图标
+    private val _playModeLiveData = MutableLiveData<PlayMode>(PlayMode.ALL_LOOP)
+    val playModeLiveData: LiveData<PlayMode> = _playModeLiveData
 
     private var songList = mutableListOf<Song>()
     private val _songList = MutableLiveData<List<Song>>(emptyList())
@@ -216,6 +222,7 @@ class MusicService : Service() {
     enum class PlayMode {
         ALL_LOOP,       // 全部循环
         SINGLE_LOOP,    // 单曲循环
+        RANDOM,         // 随机播放
         SEQUENCE        // 顺序播放
     }
 
@@ -253,7 +260,21 @@ class MusicService : Service() {
 
         mediaSession = MediaSessionCompat(this, "MusicService")
 
-        // 加载上次播放状态
+        // 先同步加载播放模式，避免图标闪烁
+        runBlocking {
+            try {
+                val preferences = applicationDataStore.data.first()
+                val savedPlayModeOrdinal = preferences[DataStoreKeys.PLAY_MODE] ?: 0
+                val savedPlayMode = PlayMode.entries.getOrElse(savedPlayModeOrdinal) { PlayMode.ALL_LOOP }
+                playMode = savedPlayMode
+                _playModeLiveData.value = savedPlayMode
+                Log.d(TAG, "onCreate: loaded playMode=$savedPlayMode")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load play mode", e)
+            }
+        }
+
+        // 加载上次播放状态（包含歌曲信息）
         loadPlaybackState()
         mediaSession.isActive = true
 
@@ -416,7 +437,7 @@ class MusicService : Service() {
 
                 // 如果已经有当前歌曲且处于暂停状态，直接调用play()从暂停位置继续播放
                 // 只有在新传入songList时才调用playCurrentSong()重新播放
-                if (songListData != null && _currentSong.value != null && !mediaPlayer.isPlaying) {
+                if (songListData != null && _currentSong.value != null && !isMediaPlayerPlaying()) {
                     // 新传入的歌曲列表，重新播放
                     _isPlaying.value = true
                     playCurrentSong()
@@ -562,19 +583,34 @@ class MusicService : Service() {
             return
         }
 
-        if (!mediaPlayer.isPlaying) {
+        if (!isMediaPlayerPlaying()) {
             // 检查媒体播放器是否已准备，只有在未准备时才重新准备
             // 如果已经准备但处于暂停状态，直接start()会从暂停位置继续播放
-            if (mediaPlayer.currentPosition == 0 && mediaPlayer.duration == 0) {
-                // 重新准备播放
+            try {
+                if (mediaPlayer.currentPosition == 0 && mediaPlayer.duration == 0) {
+                    // 重新准备播放
+                    _currentSong.value?.let { song ->
+                        try {
+                            mediaPlayer.reset()
+                            mediaPlayer.setDataSource(song.path)
+                            mediaPlayer.prepare()
+                        } catch (e: IOException) {
+                            Log.e(TAG, "Error preparing media player: ${e.message}")
+                            e.printStackTrace()
+                            return
+                        }
+                    }
+                }
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "play: MediaPlayer state error", e)
+                // 如果MediaPlayer处于无效状态，尝试重新准备
                 _currentSong.value?.let { song ->
                     try {
                         mediaPlayer.reset()
                         mediaPlayer.setDataSource(song.path)
                         mediaPlayer.prepare()
-                    } catch (e: IOException) {
-                        Log.e(TAG, "Error preparing media player: ${e.message}")
-                        e.printStackTrace()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error re-preparing media player: ${e.message}")
                         return
                     }
                 }
@@ -603,7 +639,7 @@ class MusicService : Service() {
     }
 
     fun pause() {
-        if (mediaPlayer.isPlaying) {
+        if (isMediaPlayerPlaying()) {
             mediaPlayer.pause()
             // 立即更新播放状态为false，确保通知栏能正确显示
             _isPlaying.value = false
@@ -616,6 +652,15 @@ class MusicService : Service() {
             savePlaybackState()
         }
     }
+
+    fun setPlayMode(mode: PlayMode) {
+        playMode = mode
+        _playModeLiveData.postValue(mode)
+        savePlaybackState()
+    }
+
+    // 获取当前播放模式
+    fun getPlayMode(): PlayMode = playMode
 
     fun playNext() {
         if (songList.isEmpty()) {
@@ -640,13 +685,32 @@ class MusicService : Service() {
                 // 单曲循环：保持当前索引不变
             }
 
+            PlayMode.RANDOM -> {
+                // 随机播放：随机选择一首（尽量不选当前）
+                if (songList.size > 1) {
+                    val newIndex = (0 until songList.size).random()
+                    currentIndex = if (newIndex == currentIndex && songList.size > 1) {
+                        (currentIndex + 1) % songList.size
+                    } else {
+                        newIndex
+                    }
+                }
+            }
+
             PlayMode.SEQUENCE -> {
                 // 顺序播放：到最后一首停止
                 if (currentIndex < songList.size - 1) {
                     currentIndex++
                 } else {
-                    // 已到最后一首，停止播放
-                    pause()
+                    // 已到最后一首，停止播放并更新状态
+                    // 注意：此时 MediaPlayer 已经播放完毕，isPlaying() 返回 false
+                    // 所以不能依赖 pause() 来更新状态，需要直接更新
+                    _isPlaying.value = false
+                    // 更新通知和 MediaSession 状态
+                    updateNotification()
+                    updateMediaSessionPlaybackState()
+                    // 保存播放状态
+                    savePlaybackState()
                     return
                 }
             }
@@ -717,6 +781,20 @@ class MusicService : Service() {
         Executors.newSingleThreadScheduledExecutor()
     private var lastCheckTime = 0L
 
+    // 安全地检查MediaPlayer是否在播放状态
+    private fun isMediaPlayerPlaying(): Boolean {
+        return try {
+            if (isMediaPlayerReleased) {
+                false
+            } else {
+                mediaPlayer.isPlaying
+            }
+        } catch (e: IllegalStateException) {
+            Log.e(TAG, "isMediaPlayerPlaying: MediaPlayer state error", e)
+            false
+        }
+    }
+
     // 音频焦点变化监听
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -730,13 +808,13 @@ class MusicService : Service() {
 
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                 // 短暂失去音频焦点（如来电），需要暂停播放
-                _wasPlayingBeforeFocusLoss = mediaPlayer.isPlaying
+                _wasPlayingBeforeFocusLoss = isMediaPlayerPlaying()
                 pause()
             }
 
             AudioManager.AUDIOFOCUS_LOSS -> {
                 // 长时间失去音频焦点，需要暂停播放
-                _wasPlayingBeforeFocusLoss = mediaPlayer.isPlaying
+                _wasPlayingBeforeFocusLoss = isMediaPlayerPlaying()
                 pause()
             }
         }
@@ -957,6 +1035,8 @@ class MusicService : Service() {
                         } catch (e: IllegalStateException) {
                             Log.e(TAG, "savePlaybackState: MediaPlayer state error", e)
                         }
+                        // 保存播放模式
+                        preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
                     } else {
                         // 清除保存的状态
                         preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
@@ -998,6 +1078,11 @@ class MusicService : Service() {
                 }
                 val currentPosition = preferences[DataStoreKeys.CURRENT_POSITION] ?: 0
                 val isPlaying = preferences[DataStoreKeys.IS_PLAYING] ?: 0
+                // 恢复播放模式
+                val savedPlayModeOrdinal = preferences[DataStoreKeys.PLAY_MODE] ?: 0
+                playMode = PlayMode.entries.getOrElse(savedPlayModeOrdinal) { PlayMode.ALL_LOOP }
+                _playModeLiveData.postValue(playMode)
+                Log.d(TAG, "loadPlaybackState: restored playMode=$playMode")
 
                 Log.d(
                     TAG,

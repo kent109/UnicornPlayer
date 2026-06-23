@@ -493,6 +493,19 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             overridePendingTransition(R.anim.slide_up_in, R.anim.fade_out)
         }
 
+        // 播放模式切换按钮点击事件
+        binding.ivLoop.setOnClickListener {
+            val currentMode = musicService?.getPlayMode() ?: MusicService.PlayMode.ALL_LOOP
+            val nextMode = when (currentMode) {
+                MusicService.PlayMode.ALL_LOOP -> MusicService.PlayMode.SINGLE_LOOP
+                MusicService.PlayMode.SINGLE_LOOP -> MusicService.PlayMode.RANDOM
+                MusicService.PlayMode.RANDOM -> MusicService.PlayMode.SEQUENCE
+                MusicService.PlayMode.SEQUENCE -> MusicService.PlayMode.ALL_LOOP
+            }
+            musicService?.setPlayMode(nextMode)
+            updateLoopIcon(nextMode)
+        }
+
         // 排序按钮点击事件
         binding.ivSort.setOnClickListener {
             showSortMenu()
@@ -513,8 +526,22 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
 
     private fun setupTouchDelegate() {
         val expandPx = (48 * resources.displayMetrics.density).toInt()
+        expandTouchTarget(binding.ivLoop, expandPx)
         expandTouchTarget(binding.ivSort, expandPx)
         expandTouchTarget(binding.ivSetting, expandPx)
+    }
+
+    /**
+     * 根据播放模式更新循环图标
+     */
+    private fun updateLoopIcon(mode: MusicService.PlayMode) {
+        val iconRes = when (mode) {
+            MusicService.PlayMode.ALL_LOOP -> R.drawable.ic_loop_all
+            MusicService.PlayMode.SINGLE_LOOP -> R.drawable.ic_loop_one
+            MusicService.PlayMode.RANDOM -> R.drawable.ic_random
+            MusicService.PlayMode.SEQUENCE -> R.drawable.ic_sequence
+        }
+        binding.ivLoop.setImageResource(iconRes)
     }
 
     private fun expandTouchTarget(view: android.view.View, expandPx: Int) {
@@ -558,6 +585,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
     private var fileChangedObserver: androidx.lifecycle.Observer<Unit>? = null
     private var requestSongListObserver: androidx.lifecycle.Observer<com.unicorn.player.service.Event<Boolean>>? =
         null
+    private var playModeObserver: androidx.lifecycle.Observer<MusicService.PlayMode>? = null
 
     private fun setupBottomPlayerObservers() {
         // 先移除旧的观察者，避免重复注册
@@ -605,6 +633,12 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             }
         }
         musicService?.requestSongList?.observe(this, requestSongListObserver!!)
+
+        // 监听播放模式变化，更新 ivLoop 图标
+        playModeObserver = androidx.lifecycle.Observer { mode ->
+            updateLoopIcon(mode)
+        }
+        musicService?.playModeLiveData?.observe(this, playModeObserver!!)
     }
 
     /**
@@ -632,10 +666,12 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         currentSongObserver?.let { musicService?.currentSong?.removeObserver(it) }
         fileChangedObserver?.let { musicService?.fileChanged?.removeObserver(it) }
         requestSongListObserver?.let { musicService?.requestSongList?.removeObserver(it) }
+        playModeObserver?.let { musicService?.playModeLiveData?.removeObserver(it) }
         isPlayingObserver = null
         currentSongObserver = null
         fileChangedObserver = null
         requestSongListObserver = null
+        playModeObserver = null
     }
 
     private fun updateBottomPlayerUI() {
@@ -647,6 +683,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         binding.playButton.setImageResource(
             if (service.isPlaying.value == true) R.drawable.ic_pause else R.drawable.ic_play
         )
+        // 注意：updateLoopIcon 现在通过 playModeObserver 异步更新，不再在这里同步调用
+        // 这样可以确保 loadPlaybackState() 完成后正确恢复图标
     }
 
     private fun checkPermissions() {
