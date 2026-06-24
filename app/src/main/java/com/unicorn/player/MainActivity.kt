@@ -160,7 +160,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
 
     private fun setupViewModel() {
         val repository = MusicRepository(this)
-        val factory = MusicViewModelFactory(repository)
+        val factory = MusicViewModelFactory(repository, this)
         viewModel = ViewModelProvider(this, factory)[MusicViewModel::class.java]
 
         // Observe LiveData after ViewModel is ready

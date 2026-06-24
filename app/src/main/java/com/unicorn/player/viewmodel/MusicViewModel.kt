@@ -1,5 +1,7 @@
 package com.unicorn.player.viewmodel
 
+import android.content.Context
+import androidx.core.content.edit
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -9,7 +11,10 @@ import com.unicorn.player.repository.MusicRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
+class MusicViewModel(
+    private val repository: MusicRepository,
+    private val context: Context
+) : ViewModel() {
 
     private val _allSongs = MutableLiveData<List<Song>>(emptyList())
     val allSongs: LiveData<List<Song>> = _allSongs
@@ -30,7 +35,38 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
     private var searchJob: Job? = null
 
     init {
-        collectSongs()
+        restoreSortMode()
+    }
+
+    /**
+     * 从 SharedPreferences 同步恢复排序模式，恢复完成后才启动 collectSongs
+     */
+    private fun restoreSortMode() {
+        viewModelScope.launch {
+            try {
+                val prefs = context.getSharedPreferences("sort_mode_prefs", Context.MODE_PRIVATE)
+                val savedOrdinal = prefs.getInt("sort_mode", 0)
+                _sortMode.value = SortMode.entries.getOrElse(savedOrdinal) { SortMode.BY_TITLE }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                collectSongs()
+            }
+        }
+    }
+
+    /**
+     * 同步保存排序模式到 SharedPreferences，确保杀进程时也不丢失
+     */
+    private fun saveSortMode(mode: SortMode) {
+        try {
+            context.getSharedPreferences("sort_mode_prefs", Context.MODE_PRIVATE)
+                .edit(commit = true) {
+                    putInt("sort_mode", mode.ordinal)
+                }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun collectSongs() {
@@ -94,6 +130,7 @@ class MusicViewModel(private val repository: MusicRepository) : ViewModel() {
      */
     fun sortSongs(mode: SortMode) {
         _sortMode.value = mode
+        saveSortMode(mode)
         val currentSongs = _allSongs.value ?: return
         val sorted = sortSongsInternal(currentSongs, mode)
         _allSongs.value = sorted
