@@ -30,11 +30,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import com.unicorn.player.util.LogWriter
 import com.unicorn.player.MainActivity
 import com.unicorn.player.R
 import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.model.Song
+import com.unicorn.player.util.LogWriter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -255,7 +255,15 @@ class MusicService : Service() {
                     .setUsage(AudioAttributes.USAGE_MEDIA).build()
             )
             setOnCompletionListener {
-                playNext()
+                // 顺序播放模式下最后一首自然播放完毕，只更新 UI 状态，不操作 MediaPlayer
+                if (playMode == PlayMode.SEQUENCE && currentIndex >= songList.size - 1) {
+                    _isPlaying.value = false
+                    updateNotification()
+                    updateMediaSessionPlaybackState()
+                    savePlaybackState()
+                } else {
+                    playNext()
+                }
             }
         }
 
@@ -266,7 +274,8 @@ class MusicService : Service() {
             try {
                 val preferences = applicationDataStore.data.first()
                 val savedPlayModeOrdinal = preferences[DataStoreKeys.PLAY_MODE] ?: 0
-                val savedPlayMode = PlayMode.entries.getOrElse(savedPlayModeOrdinal) { PlayMode.ALL_LOOP }
+                val savedPlayMode =
+                    PlayMode.entries.getOrElse(savedPlayModeOrdinal) { PlayMode.ALL_LOOP }
                 playMode = savedPlayMode
                 _playModeLiveData.value = savedPlayMode
                 Log.d(TAG, "onCreate: loaded playMode=$savedPlayMode")
@@ -585,44 +594,80 @@ class MusicService : Service() {
         }
 
         if (!isMediaPlayerPlaying()) {
-            // 检查媒体播放器是否已准备，只有在未准备时才重新准备
-            // 如果已经准备但处于暂停状态，直接start()会从暂停位置继续播放
             try {
-                if (mediaPlayer.currentPosition == 0 && mediaPlayer.duration == 0) {
-                    // 重新准备播放
+                val currentPos = mediaPlayer.currentPosition
+                val duration = mediaPlayer.duration
+
+                if (duration > 0 && currentPos >= duration) {
+                    // 播放完成（PlaybackCompleted 状态），seek 到开头重新播放
+                    mediaPlayer.seekTo(0)
+                } else if (currentPos == 0 && duration == 0) {
+                    // 未准备或已释放，重新准备
                     _currentSong.value?.let { song ->
                         try {
                             mediaPlayer.reset()
                             mediaPlayer.setDataSource(song.path)
                             mediaPlayer.prepare()
                         } catch (e: IOException) {
-                            LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
+                            LogWriter.writeError(
+                                TAG,
+                                "Error preparing media player: ${e.message}",
+                                e
+                            )
                             e.printStackTrace()
                             return
                         }
                     }
                 }
+                // 其他情况（暂停状态、Prepared 状态等）直接 start
             } catch (e: IllegalStateException) {
                 LogWriter.writeError(TAG, "play: MediaPlayer state error", e)
-                // 如果MediaPlayer处于无效状态，尝试重新准备
+                // MediaPlayer 处于无效状态，尝试重新准备
                 _currentSong.value?.let { song ->
                     try {
                         mediaPlayer.reset()
                         mediaPlayer.setDataSource(song.path)
                         mediaPlayer.prepare()
                     } catch (e: Exception) {
-                        LogWriter.writeError(TAG, "Error re-preparing media player: ${e.message}", e)
+                        LogWriter.writeError(
+                            TAG,
+                            "Error re-preparing media player: ${e.message}",
+                            e
+                        )
                         return
                     }
                 }
             }
+        }
 
+        try {
             mediaPlayer.start()
             // 立即更新播放状态为true，确保通知栏能正确显示
             _isPlaying.value = true
             // 立即更新通知栏和MediaSession状态
             updateNotification()
             updateMediaSessionPlaybackState()
+        } catch (e: IllegalStateException) {
+            LogWriter.writeError(TAG, "play: MediaPlayer start failed, trying to re-prepare", e)
+            // start 失败，尝试重新准备并播放
+            _currentSong.value?.let { song ->
+                try {
+                    mediaPlayer.reset()
+                    mediaPlayer.setDataSource(song.path)
+                    mediaPlayer.prepare()
+                    mediaPlayer.start()
+                    _isPlaying.value = true
+                    updateNotification()
+                    updateMediaSessionPlaybackState()
+                } catch (e2: Exception) {
+                    LogWriter.writeError(
+                        TAG,
+                        "play: Failed to recover MediaPlayer: ${e2.message}",
+                        e2
+                    )
+                    _isPlaying.value = false
+                }
+            }
         }
     }
 
@@ -699,21 +744,11 @@ class MusicService : Service() {
             }
 
             PlayMode.SEQUENCE -> {
-                // 顺序播放：到最后一首停止
-                if (currentIndex < songList.size - 1) {
-                    currentIndex++
-                } else {
-                    // 已到最后一首，停止播放并更新状态
-                    // 注意：此时 MediaPlayer 已经播放完毕，isPlaying() 返回 false
-                    // 所以不能依赖 pause() 来更新状态，需要直接更新
-                    _isPlaying.value = false
-                    // 更新通知和 MediaSession 状态
-                    updateNotification()
-                    updateMediaSessionPlaybackState()
-                    // 保存播放状态
-                    savePlaybackState()
+                // 顺序播放：到达最后一首后点击下一首不做处理
+                if (currentIndex >= songList.size - 1) {
                     return
                 }
+                currentIndex++
             }
         }
         // 直接调用playCurrentSong，它会自动更新通知
@@ -731,10 +766,11 @@ class MusicService : Service() {
             return
         }
 
-        currentIndex = if (currentIndex > 0) {
-            currentIndex - 1
-        } else {
-            songList.size - 1
+        currentIndex = when {
+            // 顺序播放模式：到达第一首后点击上一首不做处理
+            playMode == PlayMode.SEQUENCE && currentIndex == 0 -> return
+            currentIndex > 0 -> currentIndex - 1
+            else -> songList.size - 1
         }
         // 先获取上一首的歌曲信息，更新歌曲信息，再播放
         val previousSong = songList[currentIndex]
@@ -904,13 +940,21 @@ class MusicService : Service() {
                     android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
                 }
             } catch (e: IllegalStateException) {
-                LogWriter.writeError(TAG, "updateMediaSessionPlaybackState: MediaPlayer state error", e)
+                LogWriter.writeError(
+                    TAG,
+                    "updateMediaSessionPlaybackState: MediaPlayer state error",
+                    e
+                )
                 android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
             }
             val position = try {
                 player.currentPosition.toLong()
             } catch (e: IllegalStateException) {
-                LogWriter.writeError(TAG, "updateMediaSessionPlaybackState: MediaPlayer currentPosition error", e)
+                LogWriter.writeError(
+                    TAG,
+                    "updateMediaSessionPlaybackState: MediaPlayer currentPosition error",
+                    e
+                )
                 0L
             }
             android.support.v4.media.session.PlaybackStateCompat.Builder()
@@ -1034,7 +1078,11 @@ class MusicService : Service() {
                             preferences[DataStoreKeys.IS_PLAYING] =
                                 if (mediaPlayer.isPlaying) 1 else 0
                         } catch (e: IllegalStateException) {
-                            LogWriter.writeError(TAG, "savePlaybackState: MediaPlayer state error", e)
+                            LogWriter.writeError(
+                                TAG,
+                                "savePlaybackState: MediaPlayer state error",
+                                e
+                            )
                         }
                         // 保存播放模式
                         preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
