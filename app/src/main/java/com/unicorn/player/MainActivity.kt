@@ -352,17 +352,15 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             }
         })
 
-        // 监听搜索框展开/收起状态，控制排序和设置按钮的显示
+        // 监听搜索框展开/收起状态，控制操作按钮布局的显示
         binding.searchView.setOnSearchClickListener {
-            // 进入搜索模式，隐藏排序和设置按钮
-            binding.ivSort.visibility = android.view.View.GONE
-            binding.ivSetting.visibility = android.view.View.GONE
+            // 进入搜索模式，隐藏操作按钮布局（包含循环模式、排序、设置）
+            binding.actionButtonsLayout.visibility = android.view.View.GONE
         }
 
         binding.searchView.setOnCloseListener {
-            // 退出搜索模式，显示排序和设置按钮
-            binding.ivSort.visibility = android.view.View.VISIBLE
-            binding.ivSetting.visibility = android.view.View.VISIBLE
+            // 退出搜索模式，显示操作按钮布局
+            binding.actionButtonsLayout.visibility = android.view.View.VISIBLE
             false // 返回false表示不执行默认的关闭行为
         }
     }
@@ -504,6 +502,14 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             }
             musicService?.setPlayMode(nextMode)
             updateLoopIcon(nextMode)
+            // 弹出 Toast 提示当前播放模式
+            val modeText = when (nextMode) {
+                MusicService.PlayMode.ALL_LOOP -> "全部循环"
+                MusicService.PlayMode.SINGLE_LOOP -> "单曲循环"
+                MusicService.PlayMode.RANDOM -> "随机播放"
+                MusicService.PlayMode.SEQUENCE -> "顺序播放"
+            }
+            Toast.makeText(this, modeText, Toast.LENGTH_SHORT).show()
         }
 
         // 排序按钮点击事件

@@ -60,6 +60,7 @@ class SongInfoHelper(private val context: Context) {
             val itemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context))
             itemBinding.tvLabel.text = label
             itemBinding.tvValue.text = value
+            itemBinding.root.background = null
             dialogBinding.infoContainer.addView(itemBinding.root)
         }
 
@@ -67,7 +68,7 @@ class SongInfoHelper(private val context: Context) {
         addClickableItem(
             dialogBinding.infoContainer,
             "分享本地文件",
-            false
+            R.color.quality_sq
         ) {
             shareLocalFile(song)
         }
@@ -76,7 +77,7 @@ class SongInfoHelper(private val context: Context) {
         addClickableItem(
             dialogBinding.infoContainer,
             "删除",
-            true
+            android.R.color.holo_red_light
         ) {
             bottomSheetDialog.dismiss()
             showDeleteConfirmDialog(song)
@@ -155,12 +156,12 @@ class SongInfoHelper(private val context: Context) {
 
     /**
      * 添加可点击的信息项
-     * @param isRed 是否使用红色文字（用于删除等危险操作）
+     * @param textColor 文字颜色
      */
     private fun addClickableItem(
         container: android.view.ViewGroup,
         text: String,
-        isRed: Boolean = false,
+        textColor: Int?,
         onClick: () -> Unit
     ) {
         val itemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context))
@@ -183,10 +184,10 @@ class SongInfoHelper(private val context: Context) {
             itemBinding.root.paddingRight,
             paddingV
         )
-        if (isRed) {
-            itemBinding.tvValue.setTextColor(context.getColor(android.R.color.holo_red_light))
+        if (textColor != null) {
+            itemBinding.tvValue.setTextColor(context.getColor(textColor))
         } else {
-            itemBinding.tvValue.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
+            itemBinding.tvValue.setTextColor(context.getColor(R.color.onSurfaceVariant))
         }
         itemBinding.root.setOnClickListener { onClick() }
         container.addView(itemBinding.root)

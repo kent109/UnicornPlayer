@@ -20,38 +20,40 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <ImageView
-        android:id="@+id/ivLoop"
+    <LinearLayout
+        android:id="@+id/actionButtonsLayout"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginEnd="16dp"
-        android:src="@drawable/ic_sequence"
-        app:layout_constraintBottom_toBottomOf="@+id/searchView"
-        app:layout_constraintEnd_toStartOf="@+id/ivSort"
-        app:layout_constraintTop_toTopOf="@+id/searchView"
-        tools:ignore="ContentDescription" />
-
-    <ImageView
-        android:id="@+id/ivSort"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="16dp"
-        android:src="@drawable/ic_sort"
-        app:layout_constraintBottom_toBottomOf="@+id/searchView"
-        app:layout_constraintEnd_toStartOf="@+id/ivSetting"
-        app:layout_constraintTop_toTopOf="@+id/searchView"
-        tools:ignore="ContentDescription" />
-
-    <ImageView
-        android:id="@+id/ivSetting"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="16dp"
-        android:src="@drawable/ic_setting"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
         app:layout_constraintBottom_toBottomOf="@+id/searchView"
         app:layout_constraintEnd_toEndOf="@+id/searchView"
-        app:layout_constraintTop_toTopOf="@+id/searchView"
-        tools:ignore="ContentDescription" />
+        app:layout_constraintTop_toTopOf="@+id/searchView">
+
+        <ImageView
+            android:id="@+id/ivLoop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="20dp"
+            android:src="@drawable/ic_sequence"
+            tools:ignore="ContentDescription" />
+
+        <ImageView
+            android:id="@+id/ivSort"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="20dp"
+            android:src="@drawable/ic_sort"
+            tools:ignore="ContentDescription" />
+
+        <ImageView
+            android:id="@+id/ivSetting"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_setting"
+            tools:ignore="ContentDescription" />
+    </LinearLayout>
 
     <!-- 歌曲数量显示，位于底部，当 RecyclerView 滚到底部继续上拉时可见 -->
     <TextView

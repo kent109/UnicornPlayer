@@ -19,7 +19,7 @@
         <clip>
             <shape android:shape="rectangle">
                 <corners android:radius="2dp" />
-                <solid android:color="?attr/colorPrimary" />
+                <solid android:color="@color/onSurfaceVariant" />
             </shape>
         </clip>
     </item>
@@ -32,7 +32,7 @@
         <clip>
             <shape android:shape="rectangle">
                 <corners android:radius="2dp" />
-                <solid android:color="?attr/colorPrimary" />
+                <solid android:color="@color/onSurfaceVariant" />
             </shape>
         </clip>
     </item>
