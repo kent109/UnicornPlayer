@@ -3,7 +3,6 @@ package com.unicorn.player
 import android.content.Context
 import android.content.Intent
 import android.text.TextUtils
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.Window
 import android.widget.Toast
@@ -13,6 +12,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.databinding.DialogSongInfoBinding
 import com.unicorn.player.databinding.ItemSongInfoBinding
 import com.unicorn.player.model.Song
+import com.unicorn.player.util.LogWriter
 import java.util.Locale
 
 /**
@@ -218,7 +218,7 @@ class SongInfoHelper(private val context: Context) {
 
             context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
         } catch (e: Exception) {
-            Log.e(TAG, "分享文件失败: ${e.message}")
+            LogWriter.writeError(TAG, "分享文件失败: ${e.message}", e)
             Toast.makeText(context, "分享失败", Toast.LENGTH_SHORT).show()
         }
     }

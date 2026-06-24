@@ -16,6 +16,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.service.MusicService
+import com.unicorn.player.util.LogWriter
 import kotlinx.coroutines.launch
 
 class PlayerActivity : AppCompatActivity() {
@@ -320,7 +321,7 @@ class PlayerActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
-                Log.e("PlayerActivity", "Error loading songs from database: ${e.message}")
+                LogWriter.writeError("PlayerActivity", "Error loading songs from database: ${e.message}", e)
             }
         }
     }

@@ -30,6 +30,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.unicorn.player.util.LogWriter
 import com.unicorn.player.MainActivity
 import com.unicorn.player.R
 import com.unicorn.player.database.MusicDatabase
@@ -270,7 +271,7 @@ class MusicService : Service() {
                 _playModeLiveData.value = savedPlayMode
                 Log.d(TAG, "onCreate: loaded playMode=$savedPlayMode")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to load play mode", e)
+                LogWriter.writeError(TAG, "Failed to load play mode", e)
             }
         }
 
@@ -518,7 +519,7 @@ class MusicService : Service() {
         // 检查文件是否存在
         val file = java.io.File(song.path)
         if (!file.exists()) {
-            Log.e(TAG, "Song file not found: ${song.path}")
+            LogWriter.writeError(TAG, "Song file not found: ${song.path}")
             // 文件不存在，尝试播放下一首
             if (!isSkippingFailedSong) {
                 isSkippingFailedSong = true
@@ -542,7 +543,7 @@ class MusicService : Service() {
             // 重置跳过标志
             isSkippingFailedSong = false
         } catch (e: IOException) {
-            Log.e(TAG, "Error playing song: ${e.message}")
+            LogWriter.writeError(TAG, "Error playing song: ${e.message}", e)
             e.printStackTrace()
             // 播放失败时重置状态
             _isPlaying.value = false
@@ -595,14 +596,14 @@ class MusicService : Service() {
                             mediaPlayer.setDataSource(song.path)
                             mediaPlayer.prepare()
                         } catch (e: IOException) {
-                            Log.e(TAG, "Error preparing media player: ${e.message}")
+                            LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
                             e.printStackTrace()
                             return
                         }
                     }
                 }
             } catch (e: IllegalStateException) {
-                Log.e(TAG, "play: MediaPlayer state error", e)
+                LogWriter.writeError(TAG, "play: MediaPlayer state error", e)
                 // 如果MediaPlayer处于无效状态，尝试重新准备
                 _currentSong.value?.let { song ->
                     try {
@@ -610,7 +611,7 @@ class MusicService : Service() {
                         mediaPlayer.setDataSource(song.path)
                         mediaPlayer.prepare()
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error re-preparing media player: ${e.message}")
+                        LogWriter.writeError(TAG, "Error re-preparing media player: ${e.message}", e)
                         return
                     }
                 }
@@ -790,7 +791,7 @@ class MusicService : Service() {
                 mediaPlayer.isPlaying
             }
         } catch (e: IllegalStateException) {
-            Log.e(TAG, "isMediaPlayerPlaying: MediaPlayer state error", e)
+            LogWriter.writeError(TAG, "isMediaPlayerPlaying: MediaPlayer state error", e)
             false
         }
     }
@@ -888,7 +889,7 @@ class MusicService : Service() {
                     break
                 } catch (e: IllegalStateException) {
                     // MediaPlayer处于Error或Idle状态（如夜间模式切换导致Activity重建时）
-                    Log.e(TAG, "startPositionUpdates: MediaPlayer state error", e)
+                    LogWriter.writeError(TAG, "startPositionUpdates: MediaPlayer state error", e)
                 }
             }
         }.start()
@@ -903,13 +904,13 @@ class MusicService : Service() {
                     android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
                 }
             } catch (e: IllegalStateException) {
-                Log.e(TAG, "updateMediaSessionPlaybackState: MediaPlayer state error", e)
+                LogWriter.writeError(TAG, "updateMediaSessionPlaybackState: MediaPlayer state error", e)
                 android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
             }
             val position = try {
                 player.currentPosition.toLong()
             } catch (e: IllegalStateException) {
-                Log.e(TAG, "updateMediaSessionPlaybackState: MediaPlayer currentPosition error", e)
+                LogWriter.writeError(TAG, "updateMediaSessionPlaybackState: MediaPlayer currentPosition error", e)
                 0L
             }
             android.support.v4.media.session.PlaybackStateCompat.Builder()
@@ -1033,7 +1034,7 @@ class MusicService : Service() {
                             preferences[DataStoreKeys.IS_PLAYING] =
                                 if (mediaPlayer.isPlaying) 1 else 0
                         } catch (e: IllegalStateException) {
-                            Log.e(TAG, "savePlaybackState: MediaPlayer state error", e)
+                            LogWriter.writeError(TAG, "savePlaybackState: MediaPlayer state error", e)
                         }
                         // 保存播放模式
                         preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
@@ -1048,7 +1049,7 @@ class MusicService : Service() {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "savePlaybackState failed", e)
+                LogWriter.writeError(TAG, "savePlaybackState failed", e)
             }
         }
     }
@@ -1092,7 +1093,7 @@ class MusicService : Service() {
                 // 检查文件是否存在
                 val file = java.io.File(songPath)
                 if (!file.exists()) {
-                    Log.e(TAG, "Song file not found: $songPath")
+                    LogWriter.writeError(TAG, "Song file not found: $songPath")
                     return@launch
                 }
 
@@ -1127,7 +1128,7 @@ class MusicService : Service() {
                             updateMediaSessionPlaybackState()
                         }
                     } catch (e: IOException) {
-                        Log.e(TAG, "Error preparing media player: ${e.message}")
+                        LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
                         e.printStackTrace()
                     }
 
@@ -1135,7 +1136,7 @@ class MusicService : Service() {
                     loadSongListFromDatabase()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading playback state: ${e.message}")
+                LogWriter.writeError(TAG, "Error loading playback state: ${e.message}", e)
                 e.printStackTrace()
             }
         }
@@ -1167,7 +1168,7 @@ class MusicService : Service() {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading song list from database: ${e.message}")
+                LogWriter.writeError(TAG, "Error loading song list from database: ${e.message}", e)
                 e.printStackTrace()
             }
         }

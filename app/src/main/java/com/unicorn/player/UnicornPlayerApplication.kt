@@ -17,8 +17,16 @@ class UnicornPlayerApplication : Application() {
 
     private lateinit var defaultHandler: Thread.UncaughtExceptionHandler
 
+    companion object {
+        @Volatile
+        private var instance: UnicornPlayerApplication? = null
+
+        fun getInstance(): UnicornPlayerApplication? = instance
+    }
+
     override fun onCreate() {
         super.onCreate()
+        instance = this
 
         // 保存默认的异常处理器
         defaultHandler = Thread.getDefaultUncaughtExceptionHandler()!!
