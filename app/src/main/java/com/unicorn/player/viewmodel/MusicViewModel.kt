@@ -105,13 +105,15 @@ class MusicViewModel(
         searchJob = viewModelScope.launch {
             if (query.isBlank()) {
                 repository.getAllSongs().collect { songs ->
-                    _allSongs.postValue(songs)
+                    val sorted = sortSongsInternal(songs, _sortMode.value ?: SortMode.BY_TIME)
+                    _allSongs.postValue(sorted)
                     // 搜索清空时，fullSongs 也更新为完整列表
-                    _fullSongs.postValue(songs)
+                    _fullSongs.postValue(sorted)
                 }
             } else {
                 repository.searchSongs(query).collect { songs ->
-                    _allSongs.postValue(songs)
+                    val sorted = sortSongsInternal(songs, _sortMode.value ?: SortMode.BY_TIME)
+                    _allSongs.postValue(sorted)
                 }
             }
         }

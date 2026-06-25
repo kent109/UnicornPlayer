@@ -1208,11 +1208,19 @@ class MusicService : Service() {
                     val startIndex = if (currentIndexInList >= 0) currentIndexInList else 0
 
                     withContext(Dispatchers.Main) {
-                        setSongList(songs, startIndex)
-                        Log.d(
-                            TAG,
-                            "Loaded ${songs.size} songs from database, current song at index $startIndex"
-                        )
+                        // 只在 songList 为空时设置，避免覆盖 MainActivity 已同步的排序列表
+                        if (songList.isEmpty()) {
+                            setSongList(songs, startIndex)
+                            Log.d(
+                                TAG,
+                                "Loaded ${songs.size} songs from database, current song at index $startIndex"
+                            )
+                        } else {
+                            Log.d(
+                                TAG,
+                                "Skipping database load: songList already set (${songList.size} songs)"
+                            )
+                        }
                     }
                 }
             } catch (e: Exception) {

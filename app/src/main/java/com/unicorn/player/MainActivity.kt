@@ -81,6 +81,10 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             isServiceBound = true
             setupBottomPlayerObservers()  // 服务连接成功后设置观察者
             updateBottomPlayerUI()  // 立即更新UI状态
+            // 服务连接后同步排序后的歌曲列表，确保播放顺序与UI一致
+            if (viewModel.fullSongs.value?.isNotEmpty() == true) {
+                updateServiceSongList()
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -179,6 +183,14 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         viewModel.isLoading.observe(this) { isLoading ->
             binding.progressBar.visibility =
                 if (isLoading) android.view.View.VISIBLE else android.view.View.GONE
+        }
+
+        // 监听完整歌曲列表变化，当服务已绑定时自动同步排序后的列表到 MusicService
+        // 这确保应用重启后，MusicService 的播放顺序与 UI 显示的排序一致
+        viewModel.fullSongs.observe(this) { songs ->
+            if (songs.isNotEmpty() && isServiceBound) {
+                updateServiceSongList()
+            }
         }
     }
 
