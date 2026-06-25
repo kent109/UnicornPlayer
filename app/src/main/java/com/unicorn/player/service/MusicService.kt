@@ -912,7 +912,7 @@ class MusicService : Service() {
 
     private fun startPositionUpdates() {
         Thread {
-            while (true) {
+            while (!isMediaPlayerReleased) {
                 try {
                     if (mediaPlayer.isPlaying) {
                         _currentPosition.postValue(mediaPlayer.currentPosition)
@@ -921,11 +921,17 @@ class MusicService : Service() {
                     }
                     Thread.sleep(1000)
                 } catch (e: InterruptedException) {
-                    e.printStackTrace()
+                    // 线程被中断，退出循环
                     break
                 } catch (e: IllegalStateException) {
                     // MediaPlayer处于Error或Idle状态（如夜间模式切换导致Activity重建时）
-                    LogWriter.writeError(TAG, "startPositionUpdates: MediaPlayer state error", e)
+                    // 停止循环，避免持续报错
+                    LogWriter.writeError(
+                        TAG,
+                        "startPositionUpdates: MediaPlayer state error, stopping",
+                        e
+                    )
+                    break
                 }
             }
         }.start()
@@ -1159,7 +1165,25 @@ class MusicService : Service() {
 
                     // 准备媒体播放器但不立即播放
                     try {
-                        mediaPlayer.reset()
+                        // 尝试reset，如果MediaPlayer处于Error状态会抛出IllegalStateException
+                        try {
+                            mediaPlayer.reset()
+                        } catch (e: IllegalStateException) {
+                            // MediaPlayer处于Error状态，需要重新创建实例
+                            // LogWriter.writeError(TAG, "MediaPlayer in error state, recreating", e)
+                            Log.e(TAG, "MediaPlayer in error state, recreating", e)
+                            mediaPlayer.release()
+                            mediaPlayer = MediaPlayer().apply {
+                                setAudioAttributes(
+                                    AudioAttributes.Builder()
+                                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                        .setUsage(AudioAttributes.USAGE_MEDIA).build()
+                                )
+                                setOnCompletionListener {
+                                    playNext()
+                                }
+                            }
+                        }
                         mediaPlayer.setDataSource(songPath)
                         mediaPlayer.prepare()
                         seekTo(currentPosition)
@@ -1177,7 +1201,8 @@ class MusicService : Service() {
                         }
                     } catch (e: IOException) {
                         LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
-                        e.printStackTrace()
+                    } catch (e: IllegalStateException) {
+                        LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
                     }
 
                     // 加载歌曲列表到service，确保播放完成后能自动播放下一首

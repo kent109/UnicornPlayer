@@ -76,6 +76,9 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            // 检查 Activity 是否已销毁，避免在销毁后操作 UI 导致 crash
+            if (isDestroyed || isFinishing) return
+
             val binder = service as MusicService.MusicBinder
             musicService = binder.getService()
             isServiceBound = true
@@ -831,6 +834,9 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
     }
 
     private fun updateBottomPlayer(song: Song) {
+        // 检查 Activity 是否已销毁，避免 Glide 在 destroyed activity 上加载导致 crash
+        if (isDestroyed || isFinishing) return
+
         binding.bottomPlayer.visibility = android.view.View.VISIBLE
         binding.songTitle.text = song.title
         binding.artistName.text = song.artist
