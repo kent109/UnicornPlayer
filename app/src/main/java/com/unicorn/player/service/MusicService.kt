@@ -255,6 +255,13 @@ class MusicService : Service() {
                     .setUsage(AudioAttributes.USAGE_MEDIA).build()
             )
             setOnCompletionListener {
+                // 强制更新进度为100%，避免最后一次进度更新不到位
+                try {
+                    _currentPosition.postValue(mediaPlayer.duration)
+                } catch (_: Exception) {
+                    // MediaPlayer可能已释放，忽略
+                }
+
                 // 顺序播放模式下最后一首自然播放完毕，只更新 UI 状态，不操作 MediaPlayer
                 if (playMode == PlayMode.SEQUENCE && currentIndex >= songList.size - 1) {
                     _isPlaying.value = false
