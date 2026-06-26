@@ -57,6 +57,9 @@ object DataStoreKeys {
     val SONG_ARTIST = stringPreferencesKey("song_artist")
     val SONG_PATH = stringPreferencesKey("song_path")
     val PLAY_MODE = intPreferencesKey("play_mode")
+
+    // 标记用户从最近任务移除应用，防止服务重启后恢复通知
+    val TASK_REMOVED_FLAG = intPreferencesKey("task_removed_flag")
 }
 
 class MusicService : Service() {
@@ -216,6 +219,9 @@ class MusicService : Service() {
 
     // 标记loadPlaybackState是否已经被调用过
     private var isPlaybackStateLoaded = false
+
+    // 标记用户重新打开应用后需要显示通知（用于从最近任务移除后，异步加载完成前用户重新打开应用的场景）
+    private var pendingNotificationToShow = false
 
     // 播放模式 - 默认为全部循环
     private var playMode = PlayMode.ALL_LOOP
@@ -498,9 +504,18 @@ class MusicService : Service() {
                 if (_currentSong.value == null) {
                     loadPlaybackState()
                 }
-                // 如果action为null但有当前歌曲，确保通知显示
-                if (_currentSong.value != null) {
+                if (intent != null && _currentSong.value != null) {
+                    // 用户主动启动服务，显示通知
                     updateNotification()
+                    // 清除 pending 标志（如果设置了）
+                    pendingNotificationToShow = false
+                } else if (intent == null && _currentSong.value != null) {
+                    // 服务被 START_STICKY 重启，取消通知（用户已从最近任务移除）
+                    NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
+                } else if (intent != null && _currentSong.value == null && pendingNotificationToShow) {
+                    // 用户重新打开应用，但异步加载尚未完成，设置标志让加载完成后显示通知
+                    // 实际上这里无法直接显示通知，因为 _currentSong 还是 null
+                    // 所以让 loadPlaybackState 完成后检查这个标志
                 }
             }
         }
@@ -1126,6 +1141,20 @@ class MusicService : Service() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val preferences = applicationDataStore.data.first()
+                // 检查用户是否从最近任务移除了应用
+                val isTaskRemoved = preferences[DataStoreKeys.TASK_REMOVED_FLAG] == 1
+                if (isTaskRemoved) {
+                    Log.d(
+                        TAG,
+                        "loadPlaybackState: task was removed, will restore state but skip notification"
+                    )
+                    // 清除标志，下次正常启动时可以正常显示通知
+                    applicationDataStore.edit { p ->
+                        p.remove(DataStoreKeys.TASK_REMOVED_FLAG)
+                    }
+                    // 标记用户重新打开应用后需要显示通知
+                    pendingNotificationToShow = true
+                }
                 val songId = preferences[DataStoreKeys.CURRENT_SONG_ID] ?: run {
                     return@launch
                 }
@@ -1196,15 +1225,13 @@ class MusicService : Service() {
                         seekTo(currentPosition)
 
                         // 不再自动恢复播放，只准备媒体播放器
-                        // 如果之前是播放状态，只更新UI状态，不自动播放
-                        if (isPlaying == 1) {
-                            // 更新通知和UI，显示暂停状态
+                        // 更新MediaSession状态（系统媒体控件需要）
+                        updateMediaSessionPlaybackState()
+                        // 只有在用户没有从最近任务移除时才显示通知
+                        // 如果用户已从最近任务移除但随后重新打开应用，则显示通知
+                        if (!isTaskRemoved || pendingNotificationToShow) {
                             updateNotification(restoredSong)
-                            updateMediaSessionPlaybackState()
-                        } else {
-                            // 更新通知和UI
-                            updateNotification(restoredSong)
-                            updateMediaSessionPlaybackState()
+                            pendingNotificationToShow = false
                         }
                     } catch (e: IOException) {
                         LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
@@ -1272,12 +1299,31 @@ class MusicService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Log.d(TAG, "onTaskRemoved")
-        // 尝试保存状态
-        savePlaybackState();
-        CoroutineScope(Dispatchers.IO).launch {
-            kotlinx.coroutines.delay(300)
-            stopSelf()
+        // 同步保存播放状态和标志，防止异步保存未完成时服务被停止
+        runBlocking {
+            applicationDataStore.edit { preferences ->
+                // 设置任务移除标志
+                preferences[DataStoreKeys.TASK_REMOVED_FLAG] = 1
+                // 同步保存播放状态
+                val currentSong = _currentSong.value
+                if (currentSong != null && !isMediaPlayerReleased) {
+                    preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
+                    preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
+                    preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
+                    preferences[DataStoreKeys.SONG_PATH] = currentSong.path
+                    try {
+                        preferences[DataStoreKeys.CURRENT_POSITION] = mediaPlayer.currentPosition
+                        preferences[DataStoreKeys.IS_PLAYING] = if (mediaPlayer.isPlaying) 1 else 0
+                    } catch (e: IllegalStateException) {
+                        LogWriter.writeError(TAG, "onTaskRemoved: MediaPlayer state error", e)
+                    }
+                    preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
+                }
+            }
         }
+        // 立即取消通知，防止进程被杀死后通知残留
+        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
+        stopSelf()
     }
 }
 
