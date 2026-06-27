@@ -791,6 +791,8 @@ class MusicService : Service() {
         currentIndex = when {
             // 顺序播放模式：到达第一首后点击上一首不做处理
             playMode == PlayMode.SEQUENCE && currentIndex == 0 -> return
+            // 单曲循环模式：重新播放当前歌曲
+            playMode == PlayMode.SINGLE_LOOP -> currentIndex
             // 随机播放模式：随机选择一首（尽量不选当前）
             playMode == PlayMode.RANDOM -> {
                 if (songList.size > 1) {
