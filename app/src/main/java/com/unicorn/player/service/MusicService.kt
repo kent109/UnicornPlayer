@@ -1249,6 +1249,11 @@ class MusicService : Service() {
                             updateNotification(restoredSong)
                             pendingNotificationToShow = false
                         }
+                        // 如果之前正在播放且用户没有从最近任务移除，恢复播放
+                        // 这用于服务被系统杀死后重启恢复播放的场景（如夜间模式切换）
+                        if (isPlaying == 1 && !isTaskRemoved) {
+                            play()
+                        }
                     } catch (e: IOException) {
                         LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
                     } catch (e: IllegalStateException) {
