@@ -791,6 +791,20 @@ class MusicService : Service() {
         currentIndex = when {
             // 顺序播放模式：到达第一首后点击上一首不做处理
             playMode == PlayMode.SEQUENCE && currentIndex == 0 -> return
+            // 随机播放模式：随机选择一首（尽量不选当前）
+            playMode == PlayMode.RANDOM -> {
+                if (songList.size > 1) {
+                    val newIndex = (0 until songList.size).random()
+                    if (newIndex == currentIndex && songList.size > 1) {
+                        (currentIndex + 1) % songList.size
+                    } else {
+                        newIndex
+                    }
+                } else {
+                    currentIndex
+                }
+            }
+
             currentIndex > 0 -> currentIndex - 1
             else -> songList.size - 1
         }
