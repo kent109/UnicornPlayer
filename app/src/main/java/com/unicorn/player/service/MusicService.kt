@@ -45,6 +45,7 @@ import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.milliseconds
 
 // 使用全局Application Context的DataStore
 val Context.applicationDataStore: DataStore<Preferences> by preferencesDataStore(name = "music_player_state")
@@ -221,6 +222,7 @@ class MusicService : Service() {
     private var isPlaybackStateLoaded = false
 
     // 标记用户重新打开应用后需要显示通知（用于从最近任务移除后，异步加载完成前用户重新打开应用的场景）
+    // 注意：此标志仅在 isTaskRemoved=false 时使用，isTaskRemoved=true 时不应该触发通知显示
     private var pendingNotificationToShow = false
 
     // 播放模式 - 默认为全部循环
@@ -394,9 +396,6 @@ class MusicService : Service() {
 
         // Use modern API for stopping foreground service
         stopForeground(STOP_FOREGROUND_REMOVE)
-
-        // Cancel the notification
-        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
     }
 
     private fun createNotificationChannel() {
@@ -494,7 +493,7 @@ class MusicService : Service() {
                 // 停止前保存状态
                 savePlaybackState()
                 CoroutineScope(Dispatchers.IO).launch {
-                    kotlinx.coroutines.delay(100) // 短暂延迟确保保存完成
+                    kotlinx.coroutines.delay(100.milliseconds) // 短暂延迟确保保存完成
                     stopSelf()
                 }
             }
@@ -507,19 +506,17 @@ class MusicService : Service() {
                 if (intent != null && _currentSong.value != null) {
                     // 用户主动启动服务，显示通知
                     updateNotification()
-                    // 清除 pending 标志（如果设置了）
-                    pendingNotificationToShow = false
                 } else if (intent == null && _currentSong.value != null) {
                     // 服务被 START_STICKY 重启，取消通知（用户已从最近任务移除）
-                    NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
-                } else if (intent != null && _currentSong.value == null && pendingNotificationToShow) {
-                    // 用户重新打开应用，但异步加载尚未完成，设置标志让加载完成后显示通知
-                    // 实际上这里无法直接显示通知，因为 _currentSong 还是 null
-                    // 所以让 loadPlaybackState 完成后检查这个标志
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } else if (intent != null && _currentSong.value == null) {
+                    // 用户重新打开应用，但异步加载尚未完成
+                    // 设置标志让 loadPlaybackState 完成后显示通知
+                    pendingNotificationToShow = true
                 }
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     fun setSongList(songs: List<Song>, startIndex: Int = 0) {
@@ -1034,8 +1031,7 @@ class MusicService : Service() {
             if (NotificationManagerCompat.from(this@MusicService).areNotificationsEnabled()) {
                 // 创建通知并更新
                 val notification = createNotification(currentSong)
-                val notificationManager = NotificationManagerCompat.from(this@MusicService)
-                notificationManager.notify(NOTIFICATION_ID, notification)
+                startForeground(NOTIFICATION_ID, notification)
             }
         }
     }
@@ -1168,8 +1164,8 @@ class MusicService : Service() {
                     applicationDataStore.edit { p ->
                         p.remove(DataStoreKeys.TASK_REMOVED_FLAG)
                     }
-                    // 标记用户重新打开应用后需要显示通知
-                    pendingNotificationToShow = true
+                    // 注意：不设置 pendingNotificationToShow，因为 isTaskRemoved=true 时不应显示通知
+                    // 当用户重新打开应用时，onStartCommand 中 intent != null 会触发通知显示
                 }
                 val songId = preferences[DataStoreKeys.CURRENT_SONG_ID] ?: run {
                     return@launch
@@ -1243,8 +1239,9 @@ class MusicService : Service() {
                         // 不再自动恢复播放，只准备媒体播放器
                         // 更新MediaSession状态（系统媒体控件需要）
                         updateMediaSessionPlaybackState()
-                        // 只有在用户没有从最近任务移除时才显示通知
-                        // 如果用户已从最近任务移除但随后重新打开应用，则显示通知
+                        // 显示通知的条件：
+                        // 1. 用户没有从最近任务移除（isTaskRemoved=false）
+                        // 2. 或者用户已从最近任务移除但重新打开了应用（pendingNotificationToShow=true）
                         if (!isTaskRemoved || pendingNotificationToShow) {
                             updateNotification(restoredSong)
                             pendingNotificationToShow = false
@@ -1343,7 +1340,7 @@ class MusicService : Service() {
             }
         }
         // 立即取消通知，防止进程被杀死后通知残留
-        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 }
