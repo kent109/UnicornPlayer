@@ -50,8 +50,9 @@ gradle app:installDebug
 ## 交互说明
 开发者是中文环境，在发送和接收指令时请使用简体中文
 
-## 文件换行符
-生成的文件使用windows系统的CRLF换行符
+## 注意事项
+创建新生文件时(不管是什么类型)，换行符要使用CRLF，不能使用LF换行符！
+创建新类时，要根据类的用途和分类，考虑是否新建子包(比如component、util等)，不能总是放在com.unicorn.player包下
 
 
 ## 架构
