@@ -163,11 +163,7 @@ class MusicService : Service() {
 
                 // 蓝牙设备连接状态变化
                 android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                    // 蓝牙设备断开连接
-                    Log.d(TAG, "Bluetooth device disconnected")
-                    if (_isPlaying.value == true) {
-                        pause()
-                    }
+                    handleBluetoothDeviceDisconnect(intent, "disconnected")
                 }
 
                 // 蓝牙音频连接状态变化
@@ -206,12 +202,8 @@ class MusicService : Service() {
                         android.bluetooth.BluetoothDevice.EXTRA_BOND_STATE,
                         android.bluetooth.BluetoothDevice.BOND_NONE
                     )
-                    Log.d(TAG, "Bluetooth device bond state changed: $state")
                     if (state == android.bluetooth.BluetoothDevice.BOND_NONE) {
-                        // 蓝牙设备未配对，暂停播放
-                        if (_isPlaying.value == true) {
-                            pause()
-                        }
+                        handleBluetoothDeviceDisconnect(intent, "bond state changed")
                     }
                 }
             }
@@ -853,6 +845,41 @@ class MusicService : Service() {
         Executors.newSingleThreadScheduledExecutor()
     private var lastCheckTime = 0L
 
+    // 兼容不同API级别的getParcelableExtra（API 33+使用Class版本）
+    @Suppress("DEPRECATION")
+    private fun <T : android.os.Parcelable> getParcelableExtraCompat(
+        intent: Intent,
+        key: String,
+        clazz: Class<T>
+    ): T? {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(key, clazz)
+        } else {
+            intent.getParcelableExtra(key) as? T
+        }
+    }
+
+    // 检查当前是否通过A2DP蓝牙音频输出（替代废弃的isBluetoothA2dpOn）
+    private fun isBluetoothA2dpConnected(): Boolean {
+        return try {
+            val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            if (bluetoothAdapter != null && bluetoothAdapter.isEnabled) {
+                val a2dpState = bluetoothAdapter.getProfileConnectionState(
+                    android.bluetooth.BluetoothProfile.A2DP
+                )
+                a2dpState == android.bluetooth.BluetoothProfile.STATE_CONNECTED
+            } else {
+                false
+            }
+        } catch (e: SecurityException) {
+            LogWriter.writeError(TAG, "BLUETOOTH_CONNECT permission denied for A2DP check", e)
+            false
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "Error checking A2DP connection state", e)
+            false
+        }
+    }
+
     // 安全地检查MediaPlayer是否在播放状态
     private fun isMediaPlayerPlaying(): Boolean {
         return try {
@@ -889,6 +916,42 @@ class MusicService : Service() {
                 _wasPlayingBeforeFocusLoss = isMediaPlayerPlaying()
                 pause()
             }
+        }
+    }
+
+    // 统一处理蓝牙设备断开/未配对事件（ACL_DISCONNECTED 和 BOND_STATE_CHANGED）
+    private fun handleBluetoothDeviceDisconnect(intent: Intent, eventType: String) {
+        val device = getParcelableExtraCompat(
+            intent,
+            android.bluetooth.BluetoothDevice.EXTRA_DEVICE,
+            android.bluetooth.BluetoothDevice::class.java
+        )
+        // 检查 BLUETOOTH_CONNECT 权限后再获取设备名称
+        val deviceName = if (ContextCompat.checkSelfPermission(
+                this@MusicService,
+                android.Manifest.permission.BLUETOOTH_CONNECT
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            device?.name
+        } else {
+            "unknown"
+        }
+        Log.d(TAG, "Bluetooth device $eventType: $deviceName, type: ${device?.type}")
+
+        // 只有当前通过蓝牙音频输出时才可能暂停
+        if (device == null || !isBluetoothA2dpConnected()) {
+            return
+        }
+
+        // 如果断开的是 LE 设备（如共享单车），不是音频设备，不需要暂停
+        if (device.type == android.bluetooth.BluetoothDevice.DEVICE_TYPE_LE) {
+            Log.d(TAG, "LE device $eventType, not pausing")
+            return
+        }
+
+        // 经典蓝牙设备断开，可能是音频设备，暂停
+        if (_isPlaying.value == true) {
+            pause()
         }
     }
 

@@ -53,6 +53,7 @@ gradle app:installDebug
 ## 注意事项
 创建新生文件时(不管是什么类型)，换行符要使用CRLF，不能使用LF换行符！
 创建新类时，要根据类的用途和分类，考虑是否新建子包(比如component、util等)，不能总是放在com.unicorn.player包下
+对于高度重复的代码，要提取为公共方法
 
 
 ## 架构
