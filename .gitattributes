@@ -1,0 +1,20 @@
+* text=auto
+
+*.kt text eol=crlf
+*.java text eol=crlf
+*.xml text eol=crlf
+*.gradle text eol=crlf
+*.properties text eol=crlf
+*.md text eol=crlf
+*.txt text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.aar binary
+*.jar binary
+*.so binary
+*.dex binary

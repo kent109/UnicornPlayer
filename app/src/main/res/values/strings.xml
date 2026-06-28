@@ -12,4 +12,19 @@
     <string name="permission_required">需要存储权限才能访问音乐文件</string>
     <string name="notification_channel_name">音乐播放</string>
     <string name="notification_channel_description">音乐播放通知</string>
+
+    <!-- 歌词设置 -->
+    <string name="lyrics_settings">歌词显示</string>
+    <string name="lyrics_enabled">显示歌词</string>
+    <string name="lyrics_enabled_summary">在播放界面显示歌词</string>
+    <string name="time_label_visible">显示时间标签</string>
+    <string name="time_label_visible_summary">在歌词左侧显示时间</string>
+    <string name="font_size">字体大小</string>
+    <string name="font_size_small">小</string>
+    <string name="font_size_medium">中</string>
+    <string name="font_size_large">大</string>
+    <string name="color_theme">颜色主题</string>
+    <string name="color_theme_system">跟随系统</string>
+    <string name="color_theme_light">浅色</string>
+    <string name="color_theme_dark">深色</string>
 </resources>

@@ -1,27 +1,49 @@
 package com.unicorn.player
 
-import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
-import com.unicorn.player.databinding.ActivitySettingsBinding
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.unicorn.player.databinding.ActivityLyricsOptionsBinding
 
 /**
- * 设置页面Activity
- * 使用CardView自定义布局实现
+ * 歌词显示设置页面
+ * 配置歌词显示样式和行为
  */
-class SettingsActivity : AppCompatActivity() {
+class LyricsOptionsActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivitySettingsBinding
+    private lateinit var binding: ActivityLyricsOptionsBinding
+
+    // 歌词设置 DataStore
+    val Context.lyricsDataStore by preferencesDataStore(name = "lyrics_settings")
+
+    companion object {
+        // 歌词设置键
+        val LYRICS_ENABLED = booleanPreferencesKey("lyrics_enabled")
+        val TIME_LABEL_VISIBLE = booleanPreferencesKey("time_label_visible")
+        val FONT_SIZE = intPreferencesKey("font_size")
+        val COLOR_THEME = intPreferencesKey("color_theme")
+
+        // 字体大小常量
+        const val FONT_SIZE_SMALL = 0
+        const val FONT_SIZE_MEDIUM = 1
+        const val FONT_SIZE_LARGE = 2
+
+        // 颜色主题常量
+        const val COLOR_THEME_SYSTEM = 0
+        const val COLOR_THEME_LIGHT = 1
+        const val COLOR_THEME_DARK = 2
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivitySettingsBinding.inflate(layoutInflater)
+        binding = ActivityLyricsOptionsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         setupSettingsItems()
@@ -34,71 +56,46 @@ class SettingsActivity : AppCompatActivity() {
         val container = binding.settingsContainer
         val inflater = LayoutInflater.from(this)
 
-        // 分组1：播放设置
+        // 分组1：歌词显示设置
         addSettingGroup(
             container = container,
             inflater = inflater,
             items = listOf(
                 SettingItem(
-                    key = "equalizer",
-                    title = "均衡器",
-                    hasChevron = true,
-                    isFirst = true,
-                    isLast = false,
-                    onClick = {
-                        Toast.makeText(this, "均衡器功能开发中", Toast.LENGTH_SHORT).show()
-                    }
-                ),
-                SettingItem(
-                    key = "lyrics",
-                    title = "歌词显示",
-                    hasChevron = true,
-                    isFirst = false,
-                    isLast = false,
-                    onClick = {
-                        startActivity(Intent(this, LyricsOptionsActivity::class.java))
-                    }
-                ),
-                SettingItem(
-                    key = "account",
-                    title = "我的账号",
-                    hasChevron = true,
-                    isFirst = false,
-                    isLast = true,
-                    onClick = {
-                        Toast.makeText(this, "账号功能开发中", Toast.LENGTH_SHORT).show()
-                    }
-                )
-            )
-        )
-
-        // 分组2：关于
-        addSettingGroup(
-            container = container,
-            inflater = inflater,
-            items = listOf(
-                SettingItem(
-                    key = "version",
-                    title = "版本号",
-                    summary = getVersionName(),
+                    key = "lyrics_enable",
+                    title = "显示歌词",
+                    summary = "在播放界面显示歌词",
                     hasChevron = false,
                     isFirst = true,
                     isLast = false,
-                    onClick = null
+                    type = SettingItemType.SWITCH
                 ),
                 SettingItem(
-                    key = "about",
-                    title = "关于Unicorn",
+                    key = "time_label",
+                    title = "显示时间标签",
+                    summary = "在歌词左侧显示时间",
+                    hasChevron = false,
+                    isFirst = false,
+                    isLast = false,
+                    type = SettingItemType.SWITCH
+                ),
+                SettingItem(
+                    key = "font_size",
+                    title = "字体大小",
+                    summary = "中",
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = false,
+                    type = SettingItemType.SELECT
+                ),
+                SettingItem(
+                    key = "color_theme",
+                    title = "颜色主题",
+                    summary = "跟随系统",
                     hasChevron = true,
                     isFirst = false,
                     isLast = true,
-                    onClick = {
-                        Toast.makeText(
-                            this,
-                            "UnicornPlayer v${getVersionName()}",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
+                    type = SettingItemType.SELECT
                 )
             )
         )
@@ -197,13 +194,13 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     /**
-     * 获取版本名称
+     * 获取版本名称（复用SettingsActivity的逻辑）
      */
     private fun getVersionName(): String {
         return try {
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
             packageInfo.versionName ?: "未知"
-        } catch (e: PackageManager.NameNotFoundException) {
+        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
             "未知"
         }
     }
@@ -225,6 +222,16 @@ class SettingsActivity : AppCompatActivity() {
         val hasChevron: Boolean = false,
         val isFirst: Boolean = false,
         val isLast: Boolean = false,
-        val onClick: (() -> Unit)? = null
+        val onClick: (() -> Unit)? = null,
+        val type: SettingItemType = SettingItemType.NORMAL
     )
+
+    /**
+     * 设置项类型
+     */
+    enum class SettingItemType {
+        NORMAL,
+        SWITCH,
+        SELECT
+    }
 }

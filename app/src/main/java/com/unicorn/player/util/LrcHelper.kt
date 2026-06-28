@@ -16,7 +16,7 @@ object LrcHelper {
     private const val TAG = "LrcHelper"
 
     // LRC时间戳格式: [mm:ss.xx] 或 [mm:ss.xxx]
-    private val LRC_TIME_PATTERN = Pattern.compile("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})\\]")
+    private val LRC_TIME_PATTERN = Pattern.compile("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})]")
 
     /**
      * 根据音频文件路径加载对应的歌词数据
