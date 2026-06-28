@@ -177,6 +177,9 @@ class PlayerFragment : Fragment() {
         val playingSong = service.currentSong.value
         val isCurrentSongPlaying = currentSong?.id == playingSong?.id
 
+        // 当ViewPager不可见时（歌词全屏模式），停止刷新进度条
+        if (!isViewPagerVisible()) return
+
         if (isCurrentSongPlaying) {
             binding.seekBar.progress = position
             updateTimeDisplay()
@@ -187,6 +190,9 @@ class PlayerFragment : Fragment() {
         val service = getService() ?: return
         val playingSong = service.currentSong.value
         val isCurrentSongPlaying = currentSong?.id == playingSong?.id
+
+        // 当ViewPager不可见时（歌词全屏模式），停止刷新时间显示
+        if (!isViewPagerVisible()) return
 
         if (isCurrentSongPlaying) {
             val currentPosition = service.getCurrentPosition()
@@ -201,6 +207,14 @@ class PlayerFragment : Fragment() {
                 binding.totalTime.text = formatTime(it.duration.toInt())
             }
         }
+    }
+
+    /**
+     * 检查ViewPager是否可见（用于判断是否处于歌词全屏模式）
+     */
+    private fun isViewPagerVisible(): Boolean {
+        val activity = activity as? PlayerActivity ?: return true
+        return activity.isLrcFullscreen.not()
     }
 
     private fun formatTime(milliseconds: Int): String {

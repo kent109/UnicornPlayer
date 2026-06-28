@@ -55,4 +55,11 @@
     <color name="quality_hq">#9C27B0</color>   <!-- 紫色 -->
     <color name="quality_std">#4CAF50</color>  <!-- 绿色 -->
     <color name="quality_ord">#9E9E9E</color>  <!-- 灰色 -->
+
+    <!-- 歌词控件颜色 - 白天模式 -->
+    <color name="lrc_normal_row">@color/onSurface</color>    <!-- 默认行颜色 -->
+    <color name="lrc_select_line">#6750A4</color>            <!-- 选中行颜色 -->
+    <color name="lrc_highlight_row">#6750A4</color>          <!-- 高亮行颜色 -->
+    <color name="lrc_time_text">#79747E</color>              <!-- 时间文字颜色 -->
+    <color name="lrc_try_select_row">#556750A4</color>       <!-- 尝试选中行颜色 -->
 </resources>

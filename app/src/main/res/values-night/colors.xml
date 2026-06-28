@@ -50,4 +50,11 @@
     <color name="disc_color_inner">#FFE6E1E5</color>
 
     <color name="divider">#080808</color>
+
+    <!-- 歌词控件颜色 - 夜间模式 -->
+    <color name="lrc_normal_row">@color/onSurface</color>    <!-- 默认行颜色 -->
+    <color name="lrc_select_line">#D0BCFF</color>            <!-- 选中行颜色 -->
+    <color name="lrc_highlight_row">#D0BCFF</color>          <!-- 高亮行颜色 -->
+    <color name="lrc_time_text">#CAC4D0</color>              <!-- 时间文字颜色 -->
+    <color name="lrc_try_select_row">#55D0BCFF</color>       <!-- 尝试选中行颜色 -->
 </resources>
