@@ -79,7 +79,7 @@ object LrcHelper {
 
     /**
      * 手动解析 LRC 文件格式
-     * 标准 LRC 格式: [mm:ss.xx]歌词文本
+     * 标准 LRC 格式: [mm:ss.xxx]歌词文本（3位毫秒）
      */
     private fun parseLrcManually(lrcFile: File): List<LrcRow>? {
         val lrcRows = mutableListOf<LrcRow>()
@@ -110,8 +110,12 @@ object LrcHelper {
     }
 
     /**
-     * 解析单行 LRC 文本
+     * 解析单行 LRC 文本（单行单时间戳）
      * LrcRow 构造函数: LrcRow(rowData, timeText, currentRowTime)
+     *
+     * 支持2位(.xx)和3位(.xxx)毫秒格式：
+     * - .xx (2位) → 乘以10转为毫秒，如 .15 → 150ms
+     * - .xxx (3位) → 直接为毫秒值，如 .156 → 156ms
      */
     private fun parseLrcLine(line: String): LrcRow? {
         val trimmed = line.trim()
@@ -122,10 +126,16 @@ object LrcHelper {
 
         val minutes = matcher.group(1)?.toLongOrNull() ?: return null
         val seconds = matcher.group(2)?.toLongOrNull() ?: return null
-        val milliseconds = matcher.group(3)?.toLongOrNull() ?: return null
+        val millisStr = matcher.group(3) ?: return null
+        val milliseconds = millisStr.toLongOrNull() ?: return null
 
-        val timeMs = (minutes * 60 + seconds) * 1000 + milliseconds * 10 // 转换为毫秒
-        val timeText = matcher.group(0) ?: return null // 完整的时间戳文本 [mm:ss.xx]
+        // 根据毫秒位数正确转换：2位需×10，3位直接使用
+        val timeMs = when (millisStr.length) {
+            2 -> (minutes * 60 + seconds) * 1000 + milliseconds * 10
+            3 -> (minutes * 60 + seconds) * 1000 + milliseconds
+            else -> return null
+        }
+        val timeText = matcher.group(0) ?: return null // 完整的时间戳文本 [mm:ss.xxx]
         val text = trimmed.replace(LRC_TIME_PATTERN.toRegex(), "").trim()
 
         return LrcRow(text, timeText, timeMs)

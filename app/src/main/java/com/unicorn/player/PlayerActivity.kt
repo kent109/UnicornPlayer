@@ -264,12 +264,14 @@ class PlayerActivity : AppCompatActivity() {
 
     /**
      * 观察播放位置变化，同步更新歌词显示
+     * 使用 seekLrcToTime 方法，传入当前播放位置（毫秒）
+     * 方法内部会找到 CurrentRowTime <= position 的歌词行并滚动到该位置
      */
     private fun observeCurrentPosition() {
         musicService?.let { service ->
             service.currentPosition.observe(this) { position ->
-                // 将毫秒时间传递给 LrcView，平滑滚动到对应歌词行
-                binding.lrcView.smoothScrollToTime(position.toLong())
+                // 将播放进度（毫秒）传递给 LrcView，滚动到对应歌词行
+                binding.lrcView.seekLrcToTime(position.toLong())
             }
         }
     }
@@ -537,7 +539,7 @@ class PlayerActivity : AppCompatActivity() {
         musicService?.let { service ->
             if (isServiceBound) {
                 val currentPos = service.getCurrentPosition()
-                binding.lrcView.smoothScrollToTime(currentPos.toLong())
+                binding.lrcView.seekLrcToTime(currentPos.toLong())
             }
         }
     }
