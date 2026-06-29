@@ -124,9 +124,31 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         setupSmartRefreshLayout()
         setupSearchView()
         setupBottomPlayer()
+        setupBackPressHandler()
 
         checkPermissions()
         bindMusicService()
+    }
+
+    /**
+     * 设置返回键处理：搜索模式下先退出搜索模式，不退出 Activity
+     */
+    private fun setupBackPressHandler() {
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : androidx.activity.OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (!binding.searchView.isIconified) {
+                        // 处于搜索模式，先退出搜索模式
+                        exitSearchMode()
+                    } else {
+                        // 非搜索模式，执行默认返回行为
+                        isEnabled = false
+                        onBackPressedDispatcher.onBackPressed()
+                        isEnabled = true
+                    }
+                }
+            })
     }
 
     private var lastSearchTapTime = 0L

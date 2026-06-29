@@ -1,5 +1,6 @@
 package com.unicorn.player.util
 
+import android.util.Log
 import com.hw.lrcviewlib.LrcDataBuilder
 import com.hw.lrcviewlib.LrcRow
 import java.io.BufferedReader
@@ -32,7 +33,7 @@ object LrcHelper {
         val lrcFile = File(audioFile.parent, audioFile.nameWithoutExtension + ".lrc")
 
         if (!lrcFile.exists()) {
-            LogWriter.writeError(TAG, "歌词文件不存在: ${lrcFile.absolutePath}")
+            Log.i(TAG, "歌词文件不存在: ${lrcFile.absolutePath}")
             return null
         }
 
@@ -66,7 +67,7 @@ object LrcHelper {
         try {
             val result = LrcDataBuilder().Build(lrcFile)
             if (result != null && result.isNotEmpty()) {
-                LogWriter.writeError(TAG, "LrcDataBuilder 解析成功: ${result.size} 行")
+                Log.i(TAG, "LrcDataBuilder 解析成功: ${result.size} 行")
                 return result
             }
         } catch (e: Exception) {
