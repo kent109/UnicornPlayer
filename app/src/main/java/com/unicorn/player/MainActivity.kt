@@ -84,6 +84,9 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             isServiceBound = true
             setupBottomPlayerObservers()  // 服务连接成功后设置观察者
             updateBottomPlayerUI()  // 立即更新UI状态
+            // 服务连接后，将 MusicService 当前进度同步到 DataStore
+            // 确保保存的进度与实际进度一致，避免恢复时跳转到过时的位置
+            musicService?.syncCurrentPositionToDataStore()
             // 服务连接后同步排序后的歌曲列表，确保播放顺序与UI一致
             if (viewModel.fullSongs.value?.isNotEmpty() == true) {
                 updateServiceSongList()

@@ -291,8 +291,9 @@ class MusicService : Service() {
             }
         }
 
-        // 加载上次播放状态（包含歌曲信息）
-        loadPlaybackState()
+        // 服务被系统重启时（START_STICKY），不恢复到旧进度
+        // 以 MusicService 当前进度为准，避免跳转到过时的位置
+        loadPlaybackState(restorePosition = false)
         mediaSession.isActive = true
 
         // 初始化音频管理器（但不请求焦点）
@@ -609,7 +610,7 @@ class MusicService : Service() {
                 val currentPos = mediaPlayer.currentPosition
                 val duration = mediaPlayer.duration
 
-                if (duration > 0 && currentPos >= duration) {
+                if (duration in 1..currentPos) {
                     // 播放完成（PlaybackCompleted 状态），seek 到开头重新播放
                     mediaPlayer.seekTo(0)
                 } else if (currentPos == 0 && duration == 0) {
@@ -1008,6 +1009,42 @@ class MusicService : Service() {
 
     fun getDuration(): Int = mediaPlayer.duration
 
+    /**
+     * 将 MusicService 当前播放进度同步到 DataStore
+     * 用于 Activity 重新绑定服务后，确保保存的进度与实际进度一致
+     */
+    fun syncCurrentPositionToDataStore() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                if (isMediaPlayerReleased) return@launch
+                val currentSong = _currentSong.value ?: return@launch
+                applicationDataStore.edit { preferences ->
+                    preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
+                    preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
+                    preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
+                    preferences[DataStoreKeys.SONG_PATH] = currentSong.path
+                    try {
+                        preferences[DataStoreKeys.CURRENT_POSITION] = mediaPlayer.currentPosition
+                        preferences[DataStoreKeys.IS_PLAYING] = if (mediaPlayer.isPlaying) 1 else 0
+                    } catch (e: IllegalStateException) {
+                        LogWriter.writeError(
+                            TAG,
+                            "syncCurrentPositionToDataStore: MediaPlayer state error",
+                            e
+                        )
+                    }
+                    preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
+                }
+                Log.d(
+                    TAG,
+                    "syncCurrentPositionToDataStore: position=${mediaPlayer.currentPosition}"
+                )
+            } catch (e: Exception) {
+                LogWriter.writeError(TAG, "syncCurrentPositionToDataStore failed", e)
+            }
+        }
+    }
+
     private fun startPositionUpdates() {
         Thread {
             while (!isMediaPlayerReleased) {
@@ -1205,7 +1242,7 @@ class MusicService : Service() {
         }
     }
 
-    fun loadPlaybackState() {
+    fun loadPlaybackState(restorePosition: Boolean = true) {
         // 如果已经加载过播放状态，不需要重复加载
         if (isPlaybackStateLoaded) {
             Log.i(TAG, "loadPlaybackState: already loaded, skip")
@@ -1297,7 +1334,12 @@ class MusicService : Service() {
                         }
                         mediaPlayer.setDataSource(songPath)
                         mediaPlayer.prepare()
-                        seekTo(currentPosition)
+                        // 根据 restorePosition 参数决定是否恢复到保存的进度
+                        // restorePosition=false 时（服务被系统重启），不恢复到旧进度
+                        // 而是以 MusicService 当前进度为准，避免跳转到过时的位置
+                        if (restorePosition) {
+                            seekTo(currentPosition)
+                        }
 
                         // 不再自动恢复播放，只准备媒体播放器
                         // 更新MediaSession状态（系统媒体控件需要）
@@ -1322,6 +1364,12 @@ class MusicService : Service() {
 
                     // 加载歌曲列表到service，确保播放完成后能自动播放下一首
                     loadSongListFromDatabase()
+                }
+
+                // restorePosition=false 时（服务被系统重启），将当前进度同步到 DataStore
+                // 确保保存的进度与 MusicService 实际进度一致
+                if (!restorePosition) {
+                    savePlaybackState()
                 }
             } catch (e: Exception) {
                 LogWriter.writeError(TAG, "Error loading playback state: ${e.message}", e)
