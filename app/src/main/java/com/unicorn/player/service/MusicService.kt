@@ -1267,6 +1267,10 @@ class MusicService : Service() {
                     // 注意：不设置 pendingNotificationToShow，因为 isTaskRemoved=true 时不应显示通知
                     // 当用户重新打开应用时，onStartCommand 中 intent != null 会触发通知显示
                 }
+
+                // 如果用户从最近任务移除了应用，强制恢复保存的进度
+                // 因为 onTaskRemoved() 中已同步保存了正确的进度到 DataStore
+                val shouldRestorePosition = restorePosition || isTaskRemoved
                 val songId = preferences[DataStoreKeys.CURRENT_SONG_ID] ?: run {
                     return@launch
                 }
@@ -1334,10 +1338,11 @@ class MusicService : Service() {
                         }
                         mediaPlayer.setDataSource(songPath)
                         mediaPlayer.prepare()
-                        // 根据 restorePosition 参数决定是否恢复到保存的进度
-                        // restorePosition=false 时（服务被系统重启），不恢复到旧进度
+                        // 根据 shouldRestorePosition 决定是否恢复到保存的进度
+                        // shouldRestorePosition=false 时（服务被系统重启且任务未被移除），不恢复到旧进度
                         // 而是以 MusicService 当前进度为准，避免跳转到过时的位置
-                        if (restorePosition) {
+                        // shouldRestorePosition=true 时（正常启动或任务被移除后重启），恢复到保存的进度
+                        if (shouldRestorePosition) {
                             seekTo(currentPosition)
                         }
 
@@ -1366,9 +1371,9 @@ class MusicService : Service() {
                     loadSongListFromDatabase()
                 }
 
-                // restorePosition=false 时（服务被系统重启），将当前进度同步到 DataStore
+                // shouldRestorePosition=false 时（服务被系统重启且任务未被移除），将当前进度同步到 DataStore
                 // 确保保存的进度与 MusicService 实际进度一致
-                if (!restorePosition) {
+                if (!shouldRestorePosition) {
                     savePlaybackState()
                 }
             } catch (e: Exception) {

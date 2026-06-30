@@ -37,6 +37,9 @@ class PlayerActivity : AppCompatActivity() {
             val binder = service as MusicService.MusicBinder
             musicService = binder.getService()
             isServiceBound = true
+            // 服务连接后，将 MusicService 当前进度同步到 DataStore
+            // 确保 Activity 重建时（如后台灭屏后重新打开）以 Service 实际进度为准
+            musicService?.syncCurrentPositionToDataStore()
             setupViewPager()
             observeCurrentSong()
             observeCurrentPosition()
