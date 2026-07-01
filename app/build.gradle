@@ -101,4 +101,10 @@ dependencies {
     implementation  'io.github.scwang90:refresh-footer-classics:3.0.0-alpha'    //经典加载
 
     implementation 'com.github.bifan-wei:LrcView:V1.4'
+
+    // OkHttp - 网络请求
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // Gson - JSON 解析
+    implementation 'com.google.code.gson:gson:2.10.1'
 }

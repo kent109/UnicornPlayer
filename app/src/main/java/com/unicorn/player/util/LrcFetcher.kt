@@ -1,0 +1,273 @@
+package com.unicorn.player.util
+
+import android.util.Log
+import com.google.gson.Gson
+import com.google.gson.JsonArray
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import java.io.File
+import java.io.IOException
+import java.util.Collections
+
+/**
+ * 歌词网络获取工具类
+ * 从 lrclib.net 搜索并下载同步歌词（LRC），保存到音频文件同目录
+ *
+ * 入参为音频文件路径（如 "/music/Artist - Title.flac"）：
+ *  1. 检查同目录是否存在同名 .lrc 文件，存在则跳过
+ *  2. 调用 https://lrclib.net/api/search?q= 搜索
+ *  3. 取第一条结果的 syncedLyrics，首行插入 [00:00.00]Artist - Title
+ *  4. 保存为 "Artist - Title.lrc"
+ */
+object LrcFetcher {
+
+    private const val TAG = "LrcFetcher"
+
+    private const val SEARCH_URL = "https://lrclib.net/api/search?q="
+
+    // 复用的 OkHttp 客户端
+    private val client = OkHttpClient()
+
+    private val gson = Gson()
+
+    // 正在请求中的音频路径集合，防止同一首歌重复发起网络请求
+    private val inFlightRequests = Collections.synchronizedSet<String>(LinkedHashSet())
+
+    // 进行中的 OkHttp Call 集合，用于批量取消（如 Activity 销毁时）
+    private val pendingCalls = Collections.synchronizedSet<Call>(LinkedHashSet())
+
+    /**
+     * 回调接口
+     */
+    interface LrcFetchCallback {
+        /** 成功下载并保存 */
+        fun onSuccess(lrcFile: File)
+
+        /** 歌词文件已存在，无需下载 */
+        fun onFileExists(lrcFile: File)
+
+        /** 未搜索到歌词 */
+        fun onNoLyricsFound()
+
+        /** 网络或解析失败 */
+        fun onFailure(message: String)
+    }
+
+    /**
+     * 根据音频文件路径获取歌词
+     *
+     * @param audioPath 音频文件完整路径，如 "/storage/music/Artist - Title.flac"
+     * @param callback 结果回调（在子线程执行，勿直接操作 UI）
+     */
+    fun fetchLrc(audioPath: String, callback: LrcFetchCallback) {
+        if (audioPath.isBlank()) {
+            callback.onFailure("音频路径为空")
+            return
+        }
+
+        // 去重：如果同一首歌正在请求中，直接忽略
+        if (!inFlightRequests.add(audioPath)) {
+            Log.d(TAG, "歌词请求已在进行中，跳过重复请求: $audioPath")
+            return
+        }
+
+        // 包装回调，确保请求结束后从 inFlightRequests 中移除
+        val wrappedCallback = object : LrcFetchCallback {
+            private fun notifyOriginal(callbackFn: () -> Unit) {
+                try {
+                    callbackFn()
+                } finally {
+                    inFlightRequests.remove(audioPath)
+                }
+            }
+
+            override fun onSuccess(lrcFile: File) = notifyOriginal { callback.onSuccess(lrcFile) }
+            override fun onFileExists(lrcFile: File) =
+                notifyOriginal { callback.onFileExists(lrcFile) }
+
+            override fun onNoLyricsFound() = notifyOriginal { callback.onNoLyricsFound() }
+            override fun onFailure(message: String) = notifyOriginal { callback.onFailure(message) }
+        }
+
+        val audioFile = File(audioPath)
+        val parentDir = audioFile.parent ?: run {
+            inFlightRequests.remove(audioPath)
+            wrappedCallback.onFailure("无法获取文件目录: $audioPath")
+            return
+        }
+
+        val baseName = audioFile.nameWithoutExtension // "Artist - Title"
+        val lrcFile = File(parentDir, "$baseName.lrc")
+
+        // 1. 检查歌词文件是否已存在
+        if (lrcFile.exists()) {
+            inFlightRequests.remove(audioPath)
+            wrappedCallback.onFileExists(lrcFile)
+            return
+        }
+
+        // 2. 从文件名解析 artist 和 title（格式: "Artist - Title"）
+        val (artist, title) = parseArtistTitle(baseName)
+        if (title.isBlank()) {
+            inFlightRequests.remove(audioPath)
+            wrappedCallback.onFailure("无法解析歌曲名: $baseName")
+            return
+        }
+
+        // 3. 发起网络请求
+        val query = "${encodeUrlParam(artist)} ${encodeUrlParam(title)}".trim()
+        val url = SEARCH_URL + query
+        Log.i(TAG, "搜索歌词: $url")
+
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "UnicornPlayer/1.0 (https://github.com/unicorn-player)")
+            .build()
+
+        val call = client.newCall(request)
+        pendingCalls.add(call)
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                pendingCalls.remove(call)
+                if (call.isCanceled()) return
+                Log.e(TAG, "歌词搜索请求失败: ${e.message}")
+                wrappedCallback.onFailure("网络请求失败: ${e.message}")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                pendingCalls.remove(call)
+                if (call.isCanceled()) return
+                if (!response.isSuccessful) {
+                    wrappedCallback.onFailure("HTTP 错误: ${response.code}")
+                    return
+                }
+
+                val json = response.body?.string()
+                if (json.isNullOrBlank()) {
+                    wrappedCallback.onNoLyricsFound()
+                    return
+                }
+
+                try {
+                    parseAndSaveLyrics(json, artist, title, lrcFile, wrappedCallback)
+                } catch (e: Exception) {
+                    Log.e(TAG, "解析歌词失败: ${e.message}", e)
+                    wrappedCallback.onFailure("解析失败: ${e.message}")
+                }
+            }
+        })
+    }
+
+    /**
+     * 取消所有进行中的歌词网络请求
+     * 应在 Activity/Fragment 销毁时调用，避免回调访问已销毁的 UI
+     */
+    fun cancelAll() {
+        synchronized(pendingCalls) {
+            pendingCalls.forEach { it.cancel() }
+            pendingCalls.clear()
+        }
+        inFlightRequests.clear()
+        Log.i(TAG, "cancelAll")
+    }
+
+    /**
+     * 解析 JSON 响应并保存歌词文件
+     *
+     * 匹配策略：
+     * 1. 遍历所有结果，找到 trackName 与搜索 title 精确匹配（忽略大小写）的项
+     * 2. 如果有多条匹配，随机选取一条
+     * 3. 如果没有精确匹配，退化为取第一条有 syncedLyrics 的结果
+     */
+    private fun parseAndSaveLyrics(
+        json: String,
+        artist: String,
+        title: String,
+        lrcFile: File,
+        callback: LrcFetchCallback
+    ) {
+        // lrclib 返回的是 JSON 数组
+        val jsonArray = gson.fromJson(json, JsonArray::class.java)
+        if (jsonArray == null || jsonArray.size() == 0) {
+            callback.onNoLyricsFound()
+            return
+        }
+
+        // 提取有 syncedLyrics 的有效结果
+        val validResults = jsonArray.mapNotNull { element ->
+            val obj = element.asJsonObject ?: return@mapNotNull null
+            val syncedLyrics = obj.get("syncedLyrics")?.takeIf { !it.isJsonNull }?.asString
+            if (syncedLyrics.isNullOrBlank()) null else obj
+        }
+
+        if (validResults.isEmpty()) {
+            callback.onNoLyricsFound()
+            return
+        }
+
+        // 优先找 trackName 与 title 精确匹配的结果（忽略大小写）
+        val titleLower = title.trim().lowercase()
+        val matchedResults = validResults.filter { obj ->
+            val trackName = obj.get("trackName")?.takeIf { !it.isJsonNull }?.asString
+            !trackName.isNullOrBlank() && trackName.trim().lowercase() == titleLower
+        }
+
+        val selectedResult = when {
+            matchedResults.size == 1 -> matchedResults[0]
+            matchedResults.size > 1 -> {
+                // 多条匹配，随机取一个
+                matchedResults[kotlin.random.Random.nextInt(matchedResults.size)]
+            }
+
+            else -> {
+                // 无精确匹配，退化取第一条
+                validResults[0]
+            }
+        }
+
+        val syncedLyrics = selectedResult.get("syncedLyrics").asString
+        val matchedTrackName = selectedResult.get("trackName")?.takeIf { !it.isJsonNull }?.asString
+        if (matchedTrackName != null && matchedTrackName.trim().lowercase() != titleLower) {
+            Log.i(TAG, "无精确匹配，使用第一条结果: trackName=$matchedTrackName, 搜索title=$title")
+        } else {
+            Log.i(TAG, "精确匹配成功: trackName=$matchedTrackName")
+        }
+
+        // 首行插入 "[00:00.00]Artist - Title"
+        val header = "[00:00.00]$artist - $title"
+        val lrcContent = header + "\r\n" + syncedLyrics
+
+        // 写入文件（CRLF 换行）
+        lrcFile.writeText(lrcContent, Charsets.UTF_8)
+        Log.i(TAG, "歌词保存成功: ${lrcFile.absolutePath}")
+        callback.onSuccess(lrcFile)
+    }
+
+    /**
+     * 从 "Artist - Title" 格式中解析艺术家和标题
+     *
+     * @return Pair(artist, title)，如果没有分隔符则 artist 为空，title 为全名
+     */
+    private fun parseArtistTitle(baseName: String): Pair<String, String> {
+        val separator = " - "
+        val index = baseName.indexOf(separator)
+        return if (index > 0) {
+            val artist = baseName.substring(0, index).trim()
+            val title = baseName.substring(index + separator.length).trim()
+            artist to title
+        } else {
+            "" to baseName.trim()
+        }
+    }
+
+    /**
+     * 简单的 URL 编码（OkHttp 不会自动编码 query 中的空格和中文）
+     */
+    private fun encodeUrlParam(param: String): String {
+        if (param.isBlank()) return ""
+        return java.net.URLEncoder.encode(param, "UTF-8")
+    }
+}

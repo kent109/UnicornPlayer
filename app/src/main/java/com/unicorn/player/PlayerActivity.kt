@@ -20,6 +20,7 @@ import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.util.DisplayUtil
 import com.unicorn.player.util.LogWriter
+import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
 import kotlinx.coroutines.launch
 
@@ -31,6 +32,10 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var pagerAdapter: PlayerPagerAdapter
     private var isUserScrolling = false
     private val scrollDebounceHandler = Handler(Looper.getMainLooper())
+
+    companion object {
+        const val TAG = "PlayerActivity"
+    }
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -94,8 +99,7 @@ class PlayerActivity : AppCompatActivity() {
                     page.scaleX = scale
                     page.scaleY = scale
                 }
-            }
-        )
+            })
 
         // 向下箭头点击收起播放页面
         binding.ivCollapse.setOnClickListener {
@@ -134,16 +138,12 @@ class PlayerActivity : AppCompatActivity() {
         val trySelectRowColor = getColor(R.color.lrc_try_select_row)
 
         // 配置歌词显示样式
-        lrcView.lrcSetting
-            .setNormalRowColor(normalRowColor)
-            .setTimeTextSize(DisplayUtil.sp2px(this, 14))
-            .setSelectLineColor(selectLineColor)
-            .setSelectLineTextSize(DisplayUtil.sp2px(this, 18))
-            .setHeightRowColor(highlightRowColor)
+        lrcView.lrcSetting.setNormalRowColor(normalRowColor)
+            .setTimeTextSize(DisplayUtil.sp2px(this, 14)).setSelectLineColor(selectLineColor)
+            .setSelectLineTextSize(DisplayUtil.sp2px(this, 18)).setHeightRowColor(highlightRowColor)
             .setNormalRowTextSize(DisplayUtil.sp2px(this, 15))
             .setHeightLightRowTextSize(DisplayUtil.sp2px(this, 18))
-            .setTrySelectRowTextSize(DisplayUtil.sp2px(this, 16))
-            .setTimeTextColor(timeTextColor)
+            .setTrySelectRowTextSize(DisplayUtil.sp2px(this, 16)).setTimeTextColor(timeTextColor)
             .setTrySelectRowColor(trySelectRowColor)
 
         // 设置歌词拖动监听，拖动歌词时跳转到对应时间
@@ -238,9 +238,10 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * 加载并显示歌词，无歌词时隐藏 LrcView
+     * 加载并显示歌词，无歌词时自动从网络下载，下载成功后刷新 LrcView
      */
     private fun loadAndShowLrc(audioPath: String) {
+        Log.d(TAG, "loadAndShowLrc: path=$audioPath")
         // 切换歌曲时，如果LrcView处于全屏状态，先退出全屏
         if (isLrcFullscreen) {
             exitLrcFullscreen()
@@ -249,20 +250,86 @@ class PlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val lrcRows = LrcHelper.loadLrcFromAudioPath(audioPath)
+                Log.d(TAG, "loadLrcFromAudioPath 返回: ${lrcRows?.size ?: "null"} 行")
                 if (!lrcRows.isNullOrEmpty()) {
                     binding.lrcView.setLrcData(lrcRows)
                     binding.lrcView.visibility = View.VISIBLE
-                    Log.d("PlayerActivity", "歌词加载成功: ${lrcRows.size} 行")
+                    Log.d(TAG, "本地歌词加载成功: ${lrcRows.size} 行")
                 } else {
-                    // 没有歌词时隐藏 LrcView，避免显示"歌词加载中"
+                    // 本地无歌词，立即清空 LrcView，避免显示上一首的歌词
+                    binding.lrcView.setLrcData(emptyList())
                     binding.lrcView.visibility = View.GONE
-                    Log.d("PlayerActivity", "未找到歌词文件，隐藏 LrcView")
+                    // 尝试从网络下载
+                    Log.d(TAG, "本地无歌词，尝试网络下载")
+                    fetchLrcFromNetwork(audioPath)
                 }
             } catch (e: Exception) {
                 binding.lrcView.visibility = View.GONE
-                LogWriter.writeError("PlayerActivity", "加载歌词失败", e)
+                Log.e(TAG, "加载歌词失败", e)
             }
         }
+    }
+
+    /**
+     * 从网络下载歌词，下载成功后刷新 LrcView
+     */
+    private fun fetchLrcFromNetwork(audioPath: String) {
+        LrcFetcher.fetchLrc(audioPath, object : LrcFetcher.LrcFetchCallback {
+            override fun onSuccess(lrcFile: java.io.File) {
+                lifecycleScope.launch {
+                    // 检查当前播放的还是不是这首歌，避免切歌后显示旧歌词
+                    if (!isCurrentSong(audioPath)) {
+                        Log.d(TAG, "歌曲已切换，丢弃旧歌词: $audioPath")
+                        return@launch
+                    }
+                    try {
+                        val lrcRows = LrcHelper.loadLrcFromPath(lrcFile.absolutePath)
+                        if (!lrcRows.isNullOrEmpty()) {
+                            binding.lrcView.setLrcData(lrcRows)
+                            binding.lrcView.visibility = View.VISIBLE
+                            Log.d(TAG, "网络歌词加载成功: ${lrcRows.size} 行")
+                        } else {
+                            binding.lrcView.visibility = View.GONE
+                            Log.d(TAG, "下载的歌词文件解析为空")
+                        }
+                    } catch (e: Exception) {
+                        binding.lrcView.visibility = View.GONE
+                        Log.e(TAG, "加载网络歌词失败", e)
+                    }
+                }
+            }
+
+            override fun onFileExists(lrcFile: java.io.File) {
+                // 已在 loadAndShowLrc 中处理本地文件，此处忽略
+                Log.d(TAG, "歌词文件已存在（回调）: ${lrcFile.absolutePath}")
+            }
+
+            override fun onNoLyricsFound() {
+                lifecycleScope.launch {
+                    // 切歌后不应影响新歌曲的 LrcView 状态
+                    if (!isCurrentSong(audioPath)) return@launch
+                    binding.lrcView.visibility = View.GONE
+                    Log.d(TAG, "未搜索到网络歌词，隐藏 LrcView")
+                }
+            }
+
+            override fun onFailure(message: String) {
+                lifecycleScope.launch {
+                    // 切歌后不应影响新歌曲的 LrcView 状态
+                    if (!isCurrentSong(audioPath)) return@launch
+                    binding.lrcView.visibility = View.GONE
+                    Log.e(TAG, "网络下载歌词失败: $message")
+                }
+            }
+        })
+    }
+
+    /**
+     * 判断指定的音频路径是否对应当前正在播放的歌曲
+     */
+    private fun isCurrentSong(audioPath: String): Boolean {
+        val currentPath = musicService?.currentSong?.value?.path
+        return currentPath != null && currentPath == audioPath
     }
 
     /**
@@ -285,9 +352,7 @@ class PlayerActivity : AppCompatActivity() {
             binding.viewPager.registerOnPageChangeCallback(object :
                 androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
                 override fun onPageScrolled(
-                    position: Int,
-                    positionOffset: Float,
-                    positionOffsetPixels: Int
+                    position: Int, positionOffset: Float, positionOffsetPixels: Int
                 ) {
                     super.onPageScrolled(position, positionOffset, positionOffsetPixels)
                     // 标记用户正在滑动
@@ -303,8 +368,7 @@ class PlayerActivity : AppCompatActivity() {
                             isUserScrolling = false
                         }
 
-                        androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_DRAGGING,
-                        androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_SETTLING -> {
+                        androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_DRAGGING, androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_SETTLING -> {
                             // 用户开始滑动
                             isUserScrolling = true
                         }
@@ -341,30 +405,30 @@ class PlayerActivity : AppCompatActivity() {
                 val startPosition = if (currentSong != null) {
                     val index = songs.indexOfFirst { it.id == currentSong.id }
                     if (index >= 0) {
-                        Log.d("PlayerActivity", "Found current song at position $index")
+                        Log.d(TAG, "Found current song at position $index")
                         index
                     } else {
                         Log.w(
-                            "PlayerActivity",
+                            TAG,
                             "Current song not in list, using index ${service.currentIndex}"
                         )
                         service.currentIndex
                     }
                 } else {
-                    Log.d("PlayerActivity", "No current song, using index ${service.currentIndex}")
+                    Log.d(TAG, "No current song, using index ${service.currentIndex}")
                     service.currentIndex
                 }
 
                 // 设置初始歌曲
                 pagerAdapter.updateSongs(songs, startPosition)
                 Log.d(
-                    "PlayerActivity",
+                    TAG,
                     "Initialized ViewPager with ${songs.size} songs, starting at position $startPosition"
                 )
 
                 // 重要：确保初始设置时不触发播放
                 // 只更新当前歌曲，不播放
-                Log.d("PlayerActivity", "Setting current song: ${songs[startPosition].title}")
+                Log.d(TAG, "Setting current song: ${songs[startPosition].title}")
                 service.setCurrentSong(songs[startPosition])
             }
 
@@ -427,7 +491,7 @@ class PlayerActivity : AppCompatActivity() {
 
             // 如果是初始设置，不触发播放
             if (isInitialSetup) {
-                Log.d("PlayerActivity", "Initial setup, skipping playback")
+                Log.d(TAG, "Initial setup, skipping playback")
                 return
             }
 
@@ -467,20 +531,20 @@ class PlayerActivity : AppCompatActivity() {
                             val index = songs.indexOfFirst { it.id == currentSong.id }
                             if (index >= 0) {
                                 Log.d(
-                                    "PlayerActivity",
+                                    TAG,
                                     "Found current song at position $index in loaded list"
                                 )
                                 index
                             } else {
                                 Log.w(
-                                    "PlayerActivity",
+                                    TAG,
                                     "Current song not in loaded list, using index ${service.currentIndex}"
                                 )
                                 service.currentIndex.coerceIn(0, songs.size - 1)
                             }
                         } else {
                             Log.d(
-                                "PlayerActivity",
+                                TAG,
                                 "No current song, using index ${service.currentIndex}"
                             )
                             service.currentIndex.coerceIn(0, songs.size - 1)
@@ -494,7 +558,7 @@ class PlayerActivity : AppCompatActivity() {
                         // 加载成功后隐藏空状态
                         hideEmptyState()
                         Log.d(
-                            "PlayerActivity",
+                            TAG,
                             "Loaded ${songs.size} songs from database, starting at position $startPosition"
                         )
 
@@ -505,14 +569,12 @@ class PlayerActivity : AppCompatActivity() {
                         // 注意：不再自动重启播放，让歌曲从当前位置继续
                         // 这样可以避免进入PlayerActivity时歌曲从头开始播放的问题
                     } else {
-                        Log.w("PlayerActivity", "No songs found in database")
+                        Log.w(TAG, "No songs found in database")
                     }
                 }
             } catch (e: Exception) {
                 LogWriter.writeError(
-                    "PlayerActivity",
-                    "Error loading songs from database: ${e.message}",
-                    e
+                    TAG, "Error loading songs from database: ${e.message}", e
                 )
             }
         }
@@ -549,6 +611,8 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // 取消所有进行中的歌词网络请求，避免回调访问已销毁的 UI
+        LrcFetcher.cancelAll()
         // 取消待处理的任务
         scrollDebounceHandler.removeCallbacksAndMessages(null)
         isHandlingSongChange = false

@@ -2,6 +2,9 @@
 
 本文件为 Claude Code (claude.ai/code) 在此仓库中工作时提供指导。
 
+> ⚠️ **铁律：创建任何新文件时，换行符必须使用 CRLF（`\r\n`），禁止使用 LF（`\n`）。**
+> 包括 `.kt`、`.java`、`.xml`、`.md`、`.gradle`、`.pro` 等所有文本文件。Write 工具默认输出 LF，生成后必须立即转换。
+
 详细规则约束请参阅 `.claude/rules/` 目录：
 - `coding-standards.md` — 编码规范（CRLF、分包、ViewBinding、交互语言）
 - `architecture-patterns.md` — 架构模式（服务绑定、ID 查找、Job 取消、动画生命周期等）
