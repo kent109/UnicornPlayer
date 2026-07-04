@@ -61,6 +61,13 @@
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
+        <activity
+            android:name=".LrcSearchActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.UnicornPlayer"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
         <service
             android:name=".service.MusicService"
             android:exported="false"

@@ -12,6 +12,7 @@ import android.util.Log
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -207,6 +208,21 @@ class PlayerActivity : AppCompatActivity() {
                 enterLrcFullscreen()
             }
         }
+
+        // 长按LrcView进入歌词搜索界面（通过容器拦截，绕过 LrcView 不调用 super.onTouchEvent 的问题）
+        binding.lrcViewContainer.onLongPressListener = {
+            val song = musicService?.currentSong?.value
+            if (song != null) {
+                val intent = Intent(this, LrcSearchActivity::class.java).apply {
+                    putExtra(LrcSearchActivity.EXTRA_ARTIST, song.artist)
+                    putExtra(LrcSearchActivity.EXTRA_TITLE, song.title)
+                    putExtra(LrcSearchActivity.EXTRA_AUDIO_PATH, song.path)
+                }
+                startActivity(intent)
+            } else {
+                Toast.makeText(this, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     /**
@@ -217,15 +233,20 @@ class PlayerActivity : AppCompatActivity() {
         if (isLrcFullscreen) return
         isLrcFullscreen = true
 
-        // 先设置LrcView布局为全屏
-        val lrcParams = binding.lrcView.layoutParams as ConstraintLayout.LayoutParams
-        lrcParams.height = 0 // 0dp，配合约束撑满父布局
-        lrcParams.topMargin = DisplayUtil.dp2px(this, 50f)
-        lrcParams.bottomMargin = DisplayUtil.dp2px(this, 20f)
-        lrcParams.marginStart = 0
-        lrcParams.marginEnd = 0
-        lrcParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
-        lrcParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+        // 容器约束设为全屏（容器在 ConstraintLayout 内）
+        val containerParams = binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
+        containerParams.height = 0 // 0dp，配合约束撑满父布局
+        containerParams.topMargin = DisplayUtil.dp2px(this, 50f)
+        containerParams.bottomMargin = DisplayUtil.dp2px(this, 20f)
+        containerParams.marginStart = 0
+        containerParams.marginEnd = 0
+        containerParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+        containerParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+        binding.lrcViewContainer.layoutParams = containerParams
+
+        // LrcView 在 FrameLayout 容器内撑满
+        val lrcParams = binding.lrcView.layoutParams as android.widget.FrameLayout.LayoutParams
+        lrcParams.height = android.widget.FrameLayout.LayoutParams.MATCH_PARENT
         binding.lrcView.layoutParams = lrcParams
         binding.lrcView.visibility = View.VISIBLE
 
@@ -268,15 +289,20 @@ class PlayerActivity : AppCompatActivity() {
             android.view.animation.Animation.AnimationListener {
             override fun onAnimationStart(animation: android.view.animation.Animation?) {}
             override fun onAnimationEnd(animation: android.view.animation.Animation?) {
-                // 恢复LrcView原始布局
-                val lrcParams = binding.lrcView.layoutParams as ConstraintLayout.LayoutParams
-                lrcParams.height = DisplayUtil.dp2px(this@PlayerActivity, 120f)
-                lrcParams.topToTop = ConstraintLayout.LayoutParams.UNSET
-                lrcParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
-                lrcParams.topMargin = 0
-                lrcParams.bottomMargin = DisplayUtil.dp2px(this@PlayerActivity, 20f)
-                lrcParams.marginStart = DisplayUtil.dp2px(this@PlayerActivity, 16f)
-                lrcParams.marginEnd = DisplayUtil.dp2px(this@PlayerActivity, 16f)
+                // 恢复容器原始布局（ConstraintLayout.LayoutParams）
+                val containerParams = binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
+                containerParams.height = DisplayUtil.dp2px(this@PlayerActivity, 120f)
+                containerParams.topToTop = ConstraintLayout.LayoutParams.UNSET
+                containerParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                containerParams.topMargin = 0
+                containerParams.bottomMargin = DisplayUtil.dp2px(this@PlayerActivity, 20f)
+                containerParams.marginStart = DisplayUtil.dp2px(this@PlayerActivity, 16f)
+                containerParams.marginEnd = DisplayUtil.dp2px(this@PlayerActivity, 16f)
+                binding.lrcViewContainer.layoutParams = containerParams
+
+                // 恢复 LrcView 在 FrameLayout 内撑满
+                val lrcParams = binding.lrcView.layoutParams as android.widget.FrameLayout.LayoutParams
+                lrcParams.height = android.widget.FrameLayout.LayoutParams.MATCH_PARENT
                 binding.lrcView.layoutParams = lrcParams
             }
 

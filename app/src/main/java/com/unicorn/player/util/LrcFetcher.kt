@@ -4,6 +4,7 @@ import android.util.Log
 import com.github.houbb.opencc4j.util.ZhConverterUtil
 import com.google.gson.Gson
 import com.google.gson.JsonArray
+import com.unicorn.player.model.LrcSearchResult
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -59,6 +60,103 @@ object LrcFetcher {
 
         /** 网络或解析失败 */
         fun onFailure(message: String)
+    }
+
+    /**
+     * 搜索回调接口（返回多条结果供用户选择）
+     */
+    interface LrcSearchCallback {
+        /** 搜索成功，返回结果列表（可能为空） */
+        fun onSearchResults(results: List<LrcSearchResult>)
+
+        /** 网络或解析失败 */
+        fun onSearchFailure(message: String)
+    }
+
+    /**
+     * 根据歌手和歌名搜索歌词，返回所有匹配结果
+     *
+     * @param artist 歌手名（可为空）
+     * @param title 歌名
+     * @param callback 结果回调（在子线程执行，勿直接操作 UI）
+     */
+    fun searchLyrics(artist: String, title: String, callback: LrcSearchCallback) {
+        if (!lyricsEnabled || title.isBlank()) {
+            callback.onSearchFailure("歌名为空")
+            return
+        }
+
+        val query = "${encodeUrlParam(artist)} ${encodeUrlParam(title)}".trim()
+        val url = SEARCH_URL + ZhConverterUtil.toSimple(query)
+        Log.i(TAG, "搜索歌词: $url")
+
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "UnicornPlayer/1.0 (https://github.com/unicorn-player)")
+            .build()
+
+        val call = client.newCall(request)
+        pendingCalls.add(call)
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                pendingCalls.remove(call)
+                if (call.isCanceled()) return
+                Log.e(TAG, "歌词搜索请求失败: ${e.message}")
+                callback.onSearchFailure("网络请求失败: ${e.message}")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                pendingCalls.remove(call)
+                if (call.isCanceled()) return
+                if (!response.isSuccessful) {
+                    callback.onSearchFailure("HTTP 错误: ${response.code}")
+                    return
+                }
+
+                val json = response.body?.string()
+                if (json.isNullOrBlank()) {
+                    callback.onSearchResults(emptyList())
+                    return
+                }
+
+                try {
+                    val results = parseSearchResults(json)
+                    callback.onSearchResults(results)
+                } catch (e: Exception) {
+                    Log.e(TAG, "解析搜索结果失败: ${e.message}", e)
+                    callback.onSearchFailure("解析失败: ${e.message}")
+                }
+            }
+        })
+    }
+
+    /**
+     * 解析 JSON 搜索结果，返回所有有 syncedLyrics 的条目
+     */
+    private fun parseSearchResults(json: String): List<LrcSearchResult> {
+        val jsonArray = gson.fromJson(json, JsonArray::class.java)
+        if (jsonArray == null || jsonArray.size() == 0) {
+            return emptyList()
+        }
+
+        return jsonArray.mapNotNull { element ->
+            val obj = element.asJsonObject ?: return@mapNotNull null
+            val syncedLyrics = obj.get("syncedLyrics")?.takeIf { !it.isJsonNull }?.asString
+            if (syncedLyrics.isNullOrBlank()) return@mapNotNull null
+
+            val trackName = obj.get("trackName")?.takeIf { !it.isJsonNull }?.asString ?: ""
+            val artistName = obj.get("artistName")?.takeIf { !it.isJsonNull }?.asString ?: ""
+            val albumName = obj.get("albumName")?.takeIf { !it.isJsonNull }?.asString ?: ""
+            val duration = obj.get("duration")?.takeIf { !it.isJsonNull }?.asDouble ?: 0.0
+
+            LrcSearchResult(
+                trackName = trackName,
+                artistName = artistName,
+                albumName = albumName,
+                duration = duration,
+                syncedLyrics = syncedLyrics
+            )
+        }
     }
 
     /**
@@ -245,15 +343,26 @@ object LrcFetcher {
             Log.i(TAG, "精确匹配成功: trackName=$matchedTrackName")
         }
 
+        // 清理歌词中的 <数字:数字.数字> 标签（如 <00:26.623>）
+        val cleanedLyrics = cleanTimestampTags(syncedLyrics)
+
         // 首行插入 "[00:00.00]Artist - Title"
         val header = "[00:00.00]$artist - $title"
-        val lrcContent = header + "\r\n" + syncedLyrics
+        val lrcContent = header + "\r\n" + cleanedLyrics
 
         // 转为简体中文后写入文件（CRLF 换行）
         val simplifiedContent = ZhConverterUtil.toSimple(lrcContent)
         lrcFile.writeText(simplifiedContent, Charsets.UTF_8)
         Log.i(TAG, "歌词保存成功: ${lrcFile.absolutePath}")
         callback.onSuccess(lrcFile)
+    }
+
+    /**
+     * 清理歌词中的 <数字:数字.数字> 标签（如 <00:26.623>）
+     * 这些是非标准 LrcView 时间戳标签，需删除以保证歌词正常显示
+     */
+    internal fun cleanTimestampTags(content: String): String {
+        return content.replace(Regex("<\\d+:\\d+\\.\\d+>"), "")
     }
 
     /**
