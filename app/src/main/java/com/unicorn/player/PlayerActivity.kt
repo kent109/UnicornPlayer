@@ -18,6 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.lifecycleScope
+import com.github.houbb.opencc4j.util.ZhConverterUtil
 import com.hw.lrcviewlib.LrcRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.service.MusicService
@@ -25,9 +26,12 @@ import com.unicorn.player.util.DisplayUtil
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import java.io.File
 
 class PlayerActivity : AppCompatActivity() {
 
@@ -43,7 +47,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // 匹配 LRC 行内所有时间戳标记 [mm:ss.xx] / [mm:ss.xxx]
-    private val LRC_TIME_PATTERN_REGEX = Regex("\\[\\d{2}:\\d{2}\\.\\d{2,3}\\]")
+    private val LRC_TIME_PATTERN_REGEX = Regex("\\[\\d{2}:\\d{2}\\.\\d{2,3}]")
 
     /**
      * 同步读取"显示时间标签"DataStore 键
@@ -209,18 +213,108 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
 
-        // 长按LrcView进入歌词搜索界面（通过容器拦截，绕过 LrcView 不调用 super.onTouchEvent 的问题）
-        binding.lrcViewContainer.onLongPressListener = {
+        // 长按LrcView（通过容器拦截，绕过 LrcView 不调用 super.onTouchEvent 的问题）
+        // 全屏模式下：弹出本地歌词预览/编辑弹窗；非全屏：进入歌词搜索界面
+        binding.lrcViewContainer.onLongPressListener = listener@{
             val song = musicService?.currentSong?.value
-            if (song != null) {
-                val intent = Intent(this, LrcSearchActivity::class.java).apply {
+            if (song == null) {
+                Toast.makeText(this@PlayerActivity, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
+                return@listener
+            }
+            if (isLrcFullscreen) {
+                showLrcPreviewForLocalFile(song.path)
+            } else {
+                val intent = Intent(this@PlayerActivity, LrcSearchActivity::class.java).apply {
                     putExtra(LrcSearchActivity.EXTRA_ARTIST, song.artist)
                     putExtra(LrcSearchActivity.EXTRA_TITLE, song.title)
                     putExtra(LrcSearchActivity.EXTRA_AUDIO_PATH, song.path)
                 }
                 startActivity(intent)
-            } else {
-                Toast.makeText(this, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** 当前显示的歌词预览对话框 */
+    private var lrcPreviewDialog: LrcPreviewDialog? = null
+
+    /**
+     * 全屏模式下长按 LrcView 时：读取本地 .lrc 文件内容，弹出编辑预览对话框
+     */
+    private fun showLrcPreviewForLocalFile(audioPath: String) {
+        val lrcFile = File(audioPath).let { File(it.parent, it.nameWithoutExtension + ".lrc") }
+        if (!lrcFile.exists()) {
+            Toast.makeText(this, "本地歌词文件不存在", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val content = try {
+            lrcFile.readText(Charsets.UTF_8)
+        } catch (e: Exception) {
+            Log.e(TAG, "读取本地歌词失败: ${e.message}", e)
+            Toast.makeText(this, "读取歌词文件失败", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // 以 LrcView 中心作为弹窗动画起点
+        val location = IntArray(2)
+        binding.lrcView.getLocationOnScreen(location)
+        val centerX = location[0] + binding.lrcView.width / 2f
+        val centerY = location[1] + binding.lrcView.height / 2f
+
+        lrcPreviewDialog = LrcPreviewDialog(
+            this,
+            content,
+            centerX,
+            centerY,
+            onContentUpdated = { updatedContent ->
+                saveLocalLrcAndReload(audioPath, updatedContent)
+            }
+        ).also { it.show() }
+    }
+
+    /**
+     * 保存编辑后的歌词到本地文件，Toast 提示成功，并重新加载 LrcView
+     */
+    private fun saveLocalLrcAndReload(audioPath: String, content: String) {
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val audioFile = File(audioPath)
+                    val parentDir = audioFile.parent ?: throw Exception("无法获取文件目录")
+                    val baseName = audioFile.nameWithoutExtension
+                    val lrcFile = File(parentDir, "$baseName.lrc")
+                    // 转为简体中文以保持一致
+                    val simplified = ZhConverterUtil.toSimple(content)
+                    lrcFile.writeText(simplified, Charsets.UTF_8)
+                }
+                Toast.makeText(this@PlayerActivity, "修改成功", Toast.LENGTH_SHORT).show()
+                // 仍在播放当前歌曲时重载 LrcView 数据
+                if (isCurrentSong(audioPath)) {
+                    reloadLrcView(audioPath)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "保存本地歌词失败: ${e.message}", e)
+                Toast.makeText(this@PlayerActivity, "保存失败: ${e.message}", Toast.LENGTH_SHORT)
+                    .show()
+            }
+        }
+    }
+
+    /**
+     * 重新加载 LrcView 数据（解析本地 .lrc 文件并刷新视图）
+     */
+    private fun reloadLrcView(audioPath: String) {
+        lifecycleScope.launch {
+            try {
+                val lrcRows = LrcHelper.loadLrcFromAudioPath(audioPath)
+                if (!lrcRows.isNullOrEmpty()) {
+                    binding.lrcView.setLrcData(applyTimeLabelToRows(lrcRows))
+                    binding.lrcView.visibility = View.VISIBLE
+                    // 同步到当前播放位置
+                    val pos = musicService?.getCurrentPosition() ?: 0
+                    binding.lrcView.seekLrcToTime(pos.toLong())
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "重载歌词失败: ${e.message}", e)
             }
         }
     }
@@ -290,7 +384,8 @@ class PlayerActivity : AppCompatActivity() {
             override fun onAnimationStart(animation: android.view.animation.Animation?) {}
             override fun onAnimationEnd(animation: android.view.animation.Animation?) {
                 // 恢复容器原始布局（ConstraintLayout.LayoutParams）
-                val containerParams = binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
+                val containerParams =
+                    binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
                 containerParams.height = DisplayUtil.dp2px(this@PlayerActivity, 120f)
                 containerParams.topToTop = ConstraintLayout.LayoutParams.UNSET
                 containerParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
@@ -301,7 +396,8 @@ class PlayerActivity : AppCompatActivity() {
                 binding.lrcViewContainer.layoutParams = containerParams
 
                 // 恢复 LrcView 在 FrameLayout 内撑满
-                val lrcParams = binding.lrcView.layoutParams as android.widget.FrameLayout.LayoutParams
+                val lrcParams =
+                    binding.lrcView.layoutParams as android.widget.FrameLayout.LayoutParams
                 lrcParams.height = android.widget.FrameLayout.LayoutParams.MATCH_PARENT
                 binding.lrcView.layoutParams = lrcParams
             }
@@ -695,6 +791,9 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // 关闭歌词预览对话框，避免内存泄漏
+        lrcPreviewDialog?.dismiss()
+        lrcPreviewDialog = null
         // 取消所有进行中的歌词网络请求，避免回调访问已销毁的 UI
         LrcFetcher.cancelAll()
         // 取消待处理的任务
