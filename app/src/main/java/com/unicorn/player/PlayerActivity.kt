@@ -15,14 +15,18 @@ import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.graphics.toColorInt
 import androidx.lifecycle.lifecycleScope
+import com.hw.lrcviewlib.LrcRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.util.DisplayUtil
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class PlayerActivity : AppCompatActivity() {
 
@@ -35,6 +39,57 @@ class PlayerActivity : AppCompatActivity() {
 
     companion object {
         const val TAG = "PlayerActivity"
+    }
+
+    // 匹配 LRC 行内所有时间戳标记 [mm:ss.xx] / [mm:ss.xxx]
+    private val LRC_TIME_PATTERN_REGEX = Regex("\\[\\d{2}:\\d{2}\\.\\d{2,3}\\]")
+
+    /**
+     * 同步读取"显示时间标签"DataStore 键
+     */
+    private fun isTimeLabelVisible(timeLabelDefault: Boolean = true): Boolean = runBlocking {
+        try {
+            applicationContext.lyricsDataStore.data.first()[LyricsOptionsActivity.TIME_LABEL_VISIBLE]
+                ?: timeLabelDefault
+        } catch (e: Exception) {
+            Log.e(TAG, "读取 time_label_visible 失败", e)
+            timeLabelDefault
+        }
+    }
+
+    /**
+     * 根据"显示时间标签"设置转换 LrcRow 列表。
+     *
+     * 两路解析路径形状不同：
+     *  - LrcDataBuilder.Build：RowData 仅含 [mm:ss.xx] 之后的纯文本
+     *  - parseLrcManually：RowData 含整行 [mm:ss.xx]歌词文本
+     *
+     * 为统一格式，开关打开时一律基于 CurrentRowTime 重新格式化为 "[mm:ss.xx] 歌词文本"
+     * （中括号括起，百分秒两位）。开关关闭时一律剥离时间戳标记，仅保留纯文本。
+     */
+    private fun applyTimeLabelToRows(rows: List<LrcRow>): List<LrcRow> {
+        val visible = isTimeLabelVisible(timeLabelDefault = true)
+        return rows.map { row ->
+            if (visible) {
+                val textOnly = row.rowData.replace(LRC_TIME_PATTERN_REGEX, "").trim()
+                val formatted = formatTimeLabel(row.CurrentRowTime)
+                LrcRow("$formatted $textOnly", "", row.CurrentRowTime)
+            } else {
+                val textOnly = row.rowData.replace(LRC_TIME_PATTERN_REGEX, "").trim()
+                LrcRow(textOnly, "", row.CurrentRowTime)
+            }
+        }
+    }
+
+    /**
+     * 把毫秒时间戳格式化成 "mm:ss.xx" 形式，用方括号包裹，例如 "[01:23.45]"
+     */
+    private fun formatTimeLabel(timeMs: Long): String {
+        val totalCentis = timeMs / 10
+        val minutes = totalCentis / 6000
+        val seconds = (totalCentis % 6000) / 100
+        val centis = totalCentis % 100
+        return "[%02d:%02d.%02d]".format(minutes, seconds, centis)
     }
 
     private val serviceConnection = object : ServiceConnection {
@@ -146,13 +201,6 @@ class PlayerActivity : AppCompatActivity() {
             .setTrySelectRowTextSize(DisplayUtil.sp2px(this, 16)).setTimeTextColor(timeTextColor)
             .setTrySelectRowColor(trySelectRowColor)
 
-        // 设置歌词拖动监听，拖动歌词时跳转到对应时间
-        lrcView.setLrcViewSeekListener { currentLrcRow, currentSelectedRowTime ->
-            if (currentSelectedRowTime > 0) {
-                musicService?.seekTo(currentSelectedRowTime.toInt())
-            }
-        }
-
         // 点击LrcView进入全屏显示
         lrcView.setOnClickListener {
             if (!isLrcFullscreen) {
@@ -258,7 +306,7 @@ class PlayerActivity : AppCompatActivity() {
                 val lrcRows = LrcHelper.loadLrcFromAudioPath(audioPath)
                 Log.d(TAG, "loadLrcFromAudioPath 返回: ${lrcRows?.size ?: "null"} 行")
                 if (!lrcRows.isNullOrEmpty()) {
-                    binding.lrcView.setLrcData(lrcRows)
+                    binding.lrcView.setLrcData(applyTimeLabelToRows(lrcRows))
                     binding.lrcView.visibility = View.VISIBLE
                     Log.d(TAG, "本地歌词加载成功: ${lrcRows.size} 行")
                 } else {
@@ -291,7 +339,7 @@ class PlayerActivity : AppCompatActivity() {
                     try {
                         val lrcRows = LrcHelper.loadLrcFromPath(lrcFile.absolutePath)
                         if (!lrcRows.isNullOrEmpty()) {
-                            binding.lrcView.setLrcData(lrcRows)
+                            binding.lrcView.setLrcData(applyTimeLabelToRows(lrcRows))
                             binding.lrcView.visibility = View.VISIBLE
                             Log.d(TAG, "网络歌词加载成功: ${lrcRows.size} 行")
                         } else {
@@ -611,6 +659,10 @@ class PlayerActivity : AppCompatActivity() {
             if (isServiceBound) {
                 val currentPos = service.getCurrentPosition()
                 binding.lrcView.seekLrcToTime(currentPos.toLong())
+                // 重新应用"显示时间标签"设置，让设置页面修改后即时生效
+                if (LrcFetcher.lyricsEnabled) {
+                    service.currentSong.value?.let { song -> loadAndShowLrc(song.path) }
+                }
             }
         }
     }
@@ -650,7 +702,7 @@ class PlayerActivity : AppCompatActivity() {
                 textSize = 16f
                 gravity = android.view.Gravity.CENTER
                 setPadding(50, 50, 50, 50)
-                setTextColor(android.graphics.Color.parseColor("#666666"))
+                setTextColor("#666666".toColorInt())
             }
             binding.root.addView(emptyTextView)
         }

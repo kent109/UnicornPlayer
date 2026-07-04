@@ -88,7 +88,16 @@
       "Bash(xargs grep -l \"SwitchButton\")",
       "Bash(unzip -p library-2.1.0-sources.jar com/kyleduo/switchbutton/SwitchButton.java)",
       "Read(//tmp/**)",
-      "Bash(gradle app:installDebug)"
+      "Bash(gradle app:installDebug)",
+      "Bash(/d/Program Files/Java/jdk-25.0.2/bin/javap *)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p LrcRow.class)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p \"./LrcRow.class\")",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -classpath /tmp lrcRow)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p com.hw.lrcviewlib.LrcRow)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p com.hw.lrcviewlib.LrcDataBuilder)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p com.hw.lrcviewlib.DefaultLrcRowsParser)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -c -p com.hw.lrcviewlib.DefaultLrcRowsParser)"
     ]
   }
 }

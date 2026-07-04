@@ -36,7 +36,7 @@ import kotlinx.coroutines.runBlocking
 //     → Kotlin 顶层属性就是 static-like，全进程一份，lifecycle 超出任何
 //      Activity，符合 DataStore 要求。
 // ---------------------------------------------------------------------------
-private val Context.lyricsDataStore by preferencesDataStore(name = "lyrics_settings")
+internal val Context.lyricsDataStore by preferencesDataStore(name = "lyrics_settings")
 
 /**
  * 歌词显示设置页面

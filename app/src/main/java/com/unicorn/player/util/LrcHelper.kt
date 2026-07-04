@@ -137,8 +137,7 @@ object LrcHelper {
             else -> return null
         }
         val timeText = matcher.group(0) ?: return null // 完整的时间戳文本 [mm:ss.xxx]
-        val text = trimmed.replace(LRC_TIME_PATTERN.toRegex(), "").trim()
-
-        return LrcRow(text, timeText, timeMs)
+        // 整行保留（含时间戳）；开关关闭时由调用方去掉时间戳
+        return LrcRow(trimmed, timeText, timeMs)
     }
 }
