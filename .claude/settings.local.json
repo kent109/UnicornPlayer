@@ -84,7 +84,11 @@
       "Bash(perl -i -pe 'y/\\\\r//d; s/\\\\n/\\\\r\\\\n/g' \"D:/workspace/android_studio/UnicornPlayer/app/src/main/java/com/unicorn/player/util/LrcFetcher.kt\")",
       "Bash(grep -P \"\\\\s0a\\( [^0]|$\\)\")",
       "Bash(awk '{hex=$2\" \"$3\" \"$4\" \"$5\" \"$6\" \"$7\" \"$8\" \"$9\" \"$10\" \"$11\" \"$12\" \"$13\" \"$14\" \"$15\" \"$16\" \"$17; if\\(hex ~ / 0a$/\\) print NR\": \"$0}')",
-      "Bash(awk '{for\\(i=2;i<=17;i++\\) if\\($i==\"0a\" && $\\(i-1\\)!=\"0d\"\\) print NR\": pos \"i\": \"$0}')"
+      "Bash(awk '{for\\(i=2;i<=17;i++\\) if\\($i==\"0a\" && $\\(i-1\\)!=\"0d\"\\) print NR\": pos \"i\": \"$0}')",
+      "Bash(xargs grep -l \"SwitchButton\")",
+      "Bash(unzip -p library-2.1.0-sources.jar com/kyleduo/switchbutton/SwitchButton.java)",
+      "Read(//tmp/**)",
+      "Bash(gradle app:installDebug)"
     ]
   }
 }

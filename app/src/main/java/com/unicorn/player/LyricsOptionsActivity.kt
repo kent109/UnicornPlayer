@@ -2,15 +2,41 @@ package com.unicorn.player
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.lifecycle.lifecycleScope
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.unicorn.player.databinding.ActivityLyricsOptionsBinding
+import com.unicorn.player.util.LrcFetcher
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+
+// ---------------------------------------------------------------------------
+// 进程级单例 DataStore 委托
+//
+// 关键约束（来自 DataStore 官方文档）：
+//   1. 每个文件在整个进程内只能有唯一 DataStore 实例
+//   2. `by preferencesDataStore(name = "...")` 这种 property-delegate 写法会
+//      在 delegate 对象的生命周期内维护一个单例；但如果 delegate 是类内部
+//      Activity 实例的成员属性，每次 Activity 重建都会创建一个新的 delegate
+//      实例 → 第二个 delegate 要绑定同一文件时被第一个 DataStore 还活着 →
+//         IllegalStateException: "There are multiple DataStores active for the
+//         same file"
+//   3. 修复方法：delegate 必须设在 **top-level**（文件级/static），整个进程
+//      仅实例化一次，所有 Activity 共享。
+//     → Kotlin 顶层属性就是 static-like，全进程一份，lifecycle 超出任何
+//      Activity，符合 DataStore 要求。
+// ---------------------------------------------------------------------------
+private val Context.lyricsDataStore by preferencesDataStore(name = "lyrics_settings")
 
 /**
  * 歌词显示设置页面
@@ -18,12 +44,9 @@ import com.unicorn.player.databinding.ActivityLyricsOptionsBinding
  */
 class LyricsOptionsActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityLyricsOptionsBinding
-
-    // 歌词设置 DataStore
-    val Context.lyricsDataStore by preferencesDataStore(name = "lyrics_settings")
-
     companion object {
+        private const val TAG = "LyricsOptions"
+
         // 歌词设置键
         val LYRICS_ENABLED = booleanPreferencesKey("lyrics_enabled")
         val TIME_LABEL_VISIBLE = booleanPreferencesKey("time_label_visible")
@@ -39,13 +62,26 @@ class LyricsOptionsActivity : AppCompatActivity() {
         const val COLOR_THEME_SYSTEM = 0
         const val COLOR_THEME_LIGHT = 1
         const val COLOR_THEME_DARK = 2
+
+        // SWITCH 类型设置项的 key → DataStore 键 映射
+        val switchKeyMap = mapOf(
+            "lyrics_enable" to LYRICS_ENABLED,
+            "time_label" to TIME_LABEL_VISIBLE
+        )
+
+        // SWITCH 类型设置项的 key → 默认值 映射
+        val switchDefaultMap = mapOf(
+            "lyrics_enable" to true,
+            "time_label" to true
+        )
     }
+
+    private lateinit var binding: ActivityLyricsOptionsBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLyricsOptionsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
         setupSettingsItems()
     }
 
@@ -174,6 +210,57 @@ class LyricsOptionsActivity : AppCompatActivity() {
         val ivChevron = view.findViewById<android.widget.ImageView>(R.id.ivChevron)
         ivChevron.visibility = if (item.hasChevron) View.VISIBLE else View.GONE
 
+        // 设置 SwitchButton（仅 SWITCH 类型显示）
+        // 使用官方 MaterialSwitch（替换三方 com.suke.widget.SwitchButton），
+        // 彻底消除三方库内部状态与 Android SavedState 恢复冲突的 bug。
+        val switchButton = view.findViewById<SwitchMaterial>(R.id.switchButton)
+        if (item.type == SettingItemType.SWITCH) {
+            switchButton.visibility = View.VISIBLE
+            // 根据 item.key 获取对应的 DataStore 键与默认值
+            val prefKey = switchKeyMap[item.key]
+            val defaultValue = switchDefaultMap[item.key] ?: true
+
+            // 【方案 A】同步读取 DataStore 恢复开关状态。
+            // 放在 onCreate 主线程直接 runBlocking，避免 lifecycleScope 在 Activity
+            // 快速退出时被 cancel → CancellationException 被 catch 吞掉 → 回退到
+            // defaultValue=true（自动打开的根因）。
+            //
+            // 关键：必须从 applicationContext 取 DataStore，保证进程级单例 —— 否则每次
+            // Activity 重建（销毁后重新进入）委托再跑一次，会尝试再建一个新 DataStore
+            // 持有同一文件 → IllegalStateException: "multiple DataStores active"。
+            val enabled = runBlocking {
+                try {
+                    if (prefKey != null) {
+                        applicationContext.lyricsDataStore.data.first()[prefKey] ?: defaultValue
+                    } else defaultValue
+                } catch (e: Exception) {
+                    Log.e(TAG, "读取设置失败: ${item.key}", e)
+                    defaultValue
+                }
+            }
+            switchButton.isChecked = enabled
+            // 同步到对应的运行时状态（避免 Activity 重建后 object 状态丢失）
+            if (item.key == "lyrics_enable") {
+                LrcFetcher.lyricsEnabled = enabled
+            }
+
+            // 【方案 C】监听开关变化：即时同步运行时状态 + 即时异步写入 DataStore，
+            // 移除 pendingSwitchStates 中间层 —— 解决 runBlocking 在 onPause 中可被中断的问题。
+            switchButton.setOnCheckedChangeListener { _, isChecked ->
+                if (item.key == "lyrics_enable") LrcFetcher.lyricsEnabled = isChecked
+                lifecycleScope.launch {
+                    try {
+                        val k = switchKeyMap[item.key] ?: return@launch
+                        applicationContext.lyricsDataStore.edit { it[k] = isChecked }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "写入设置失败: ${item.key}", e)
+                    }
+                }
+            }
+        } else {
+            switchButton.visibility = View.GONE
+        }
+
         // 设置背景
         val bgRes = when {
             item.isFirst && item.isLast -> R.drawable.bg_preference_single
@@ -183,11 +270,17 @@ class LyricsOptionsActivity : AppCompatActivity() {
         }
         view.setBackgroundResource(bgRes)
 
-        // 设置点击事件
-        view.isClickable = item.onClick != null
-        view.isFocusable = item.onClick != null
-        item.onClick?.let { clickListener ->
-            view.setOnClickListener { clickListener() }
+        // 设置点击事件（仅 NORMAL/SELECT 类型的 item 有 onClick；SWITCH 类型不能拦截，否则开关无效）
+        if (item.type != SettingItemType.SWITCH) {
+            view.isClickable = item.onClick != null
+            view.isFocusable = item.onClick != null
+            item.onClick?.let { clickListener ->
+                view.setOnClickListener { clickListener() }
+            }
+        } else {
+            // SWITCH 类型：行本身不接点击，让 SwitchMaterial 自己处理
+            view.isClickable = false
+            view.isFocusable = false
         }
 
         return view

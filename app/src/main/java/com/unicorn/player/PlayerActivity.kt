@@ -242,6 +242,12 @@ class PlayerActivity : AppCompatActivity() {
      */
     private fun loadAndShowLrc(audioPath: String) {
         Log.d(TAG, "loadAndShowLrc: path=$audioPath")
+        // 歌词功能被关闭时，清空并隐藏 LrcView
+        if (!LrcFetcher.lyricsEnabled) {
+            binding.lrcView.setLrcData(emptyList())
+            binding.lrcView.visibility = View.GONE
+            return
+        }
         // 切换歌曲时，如果LrcView处于全屏状态，先退出全屏
         if (isLrcFullscreen) {
             exitLrcFullscreen()

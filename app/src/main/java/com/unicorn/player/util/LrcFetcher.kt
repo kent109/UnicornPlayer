@@ -33,6 +33,10 @@ object LrcFetcher {
 
     private val gson = Gson()
 
+    // 歌词功能总开关：为 true 时正常加载本地歌词/请求网络歌词；为 false 时 fetchLrc 直接跳过
+    @Volatile
+    var lyricsEnabled: Boolean = true
+
     // 正在请求中的音频路径集合，防止同一首歌重复发起网络请求
     private val inFlightRequests = Collections.synchronizedSet<String>(LinkedHashSet())
 
@@ -63,6 +67,10 @@ object LrcFetcher {
      * @param callback 结果回调（在子线程执行，勿直接操作 UI）
      */
     fun fetchLrc(audioPath: String, callback: LrcFetchCallback) {
+        if (!lyricsEnabled) {
+            return
+        }
+
         if (audioPath.isBlank()) {
             callback.onFailure("音频路径为空")
             return

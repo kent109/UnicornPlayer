@@ -107,4 +107,6 @@ dependencies {
 
     // Gson - JSON 解析
     implementation 'com.google.code.gson:gson:2.10.1'
+
+    implementation 'com.github.zcweng:switch-button:0.0.3@aar'
 }
