@@ -144,12 +144,14 @@ object LrcFetcher {
             val syncedLyrics = obj.get("syncedLyrics")?.takeIf { !it.isJsonNull }?.asString
             if (syncedLyrics.isNullOrBlank()) return@mapNotNull null
 
+            val id = obj.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: 0
             val trackName = obj.get("trackName")?.takeIf { !it.isJsonNull }?.asString ?: ""
             val artistName = obj.get("artistName")?.takeIf { !it.isJsonNull }?.asString ?: ""
             val albumName = obj.get("albumName")?.takeIf { !it.isJsonNull }?.asString ?: ""
             val duration = obj.get("duration")?.takeIf { !it.isJsonNull }?.asDouble ?: 0.0
 
             LrcSearchResult(
+                id = id,
                 trackName = trackName,
                 artistName = artistName,
                 albumName = albumName,

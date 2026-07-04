@@ -5,6 +5,8 @@ package com.unicorn.player.model
  * 对应 lrclib.net 返回的 JSON 对象中用于展示的字段
  */
 data class LrcSearchResult(
+    /** 歌词id */
+    val id: Long,
     /** 歌曲名 */
     val trackName: String,
     /** 艺术家 */

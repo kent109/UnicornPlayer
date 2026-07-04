@@ -26,7 +26,9 @@ import java.io.File
  * 歌词搜索界面
  * 允许用户手动输入歌手/歌名搜索 lrclib.net 并选择下载歌词
  */
-class LrcSearchActivity : AppCompatActivity(), LrcSearchResultAdapter.OnResultClickListener {
+class LrcSearchActivity : AppCompatActivity(),
+    LrcSearchResultAdapter.OnResultClickListener,
+    LrcSearchResultAdapter.OnResultLongClickListener {
 
     private lateinit var binding: ActivityLrcSearchBinding
     private lateinit var adapter: LrcSearchResultAdapter
@@ -60,7 +62,7 @@ class LrcSearchActivity : AppCompatActivity(), LrcSearchResultAdapter.OnResultCl
         binding.etTitle.setText(title)
 
         // 初始化 RecyclerView
-        adapter = LrcSearchResultAdapter(this)
+        adapter = LrcSearchResultAdapter(this, this)
         binding.rvResults.layoutManager = LinearLayoutManager(this)
         binding.rvResults.adapter = adapter
 
@@ -136,10 +138,13 @@ class LrcSearchActivity : AppCompatActivity(), LrcSearchResultAdapter.OnResultCl
         })
     }
 
+    /** 当前显示的歌词预览对话框 */
+    private var previewDialog: LrcPreviewDialog? = null
+
     /**
-     * 搜索结果点击 - 弹出确认对话框
+     * 搜索结果点击 - 弹出歌词预览对话框（从 item 位置弹出，可滑动关闭，支持编辑）
      */
-    override fun onResultClick(result: LrcSearchResult) {
+    override fun onResultLongClick(result: LrcSearchResult) {
         MaterialAlertDialogBuilder(this)
             .setTitle("使用歌词")
             .setMessage("确定要使用「${result.trackName} - ${result.artistName}」的歌词吗？")
@@ -148,6 +153,41 @@ class LrcSearchActivity : AppCompatActivity(), LrcSearchResultAdapter.OnResultCl
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    /**
+     * 更新搜索结果项的歌词内容
+     */
+    private fun updateResultContent(result: LrcSearchResult, newContent: String) {
+        val currentList = adapter.currentList.toMutableList()
+        val index = currentList.indexOfFirst { it.id == result.id }
+        if (index >= 0) {
+            currentList[index] = result.copy(syncedLyrics = newContent)
+            adapter.submitList(currentList)
+            Log.i(TAG, "已更新第 ${index + 1} 条搜索结果歌词内容")
+        }
+    }
+
+    /**
+     * 搜索结果长按 - 弹出"使用歌词"确认对话框
+     */
+    override fun onResultClick(result: LrcSearchResult) {
+        // 获取列表在屏幕上的中心位置作为动画起点
+        val location = IntArray(2)
+        binding.rvResults.getLocationOnScreen(location)
+        val centerX = location[0] + binding.rvResults.width / 2f
+        val centerY = location[1] + binding.rvResults.height / 2f
+
+        previewDialog = LrcPreviewDialog(
+            this,
+            result.syncedLyrics,
+            centerX,
+            centerY,
+            onContentUpdated = { updatedContent ->
+                // 更新列表 item 的 syncedLyrics
+                updateResultContent(result, updatedContent)
+            }
+        ).also { it.show() }
     }
 
     /**

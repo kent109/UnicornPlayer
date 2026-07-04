@@ -130,8 +130,17 @@ class LyricsOptionsActivity : AppCompatActivity() {
                     summary = "跟随系统",
                     hasChevron = true,
                     isFirst = false,
-                    isLast = true,
+                    isLast = false,
                     type = SettingItemType.SELECT
+                ),
+                SettingItem(
+                    key = "search_lyrics",
+                    title = "搜索歌词",
+                    summary = "全屏播放页长按歌词进入搜索",
+                    hasChevron = false,
+                    isFirst = false,
+                    isLast = true,
+                    type = SettingItemType.NORMAL
                 )
             )
         )

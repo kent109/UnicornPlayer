@@ -13,11 +13,16 @@ import java.util.Locale
  * 搜索结果列表适配器
  */
 class LrcSearchResultAdapter(
-    private val listener: OnResultClickListener
+    private val listener: OnResultClickListener,
+    private val longClickListener: OnResultLongClickListener? = null
 ) : ListAdapter<LrcSearchResult, LrcSearchResultAdapter.ResultViewHolder>(ResultDiffCallback()) {
 
     interface OnResultClickListener {
         fun onResultClick(result: LrcSearchResult)
+    }
+
+    interface OnResultLongClickListener {
+        fun onResultLongClick(result: LrcSearchResult)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ResultViewHolder {
@@ -41,6 +46,10 @@ class LrcSearchResultAdapter(
             binding.tvAlbumName.text = result.albumName
             binding.tvDuration.text = formatDuration(result.duration)
             binding.root.setOnClickListener { listener.onResultClick(result) }
+            binding.root.setOnLongClickListener {
+                longClickListener?.onResultLongClick(result)
+                true
+            }
         }
 
         private fun formatDuration(seconds: Double): String {
@@ -53,10 +62,7 @@ class LrcSearchResultAdapter(
 
     private class ResultDiffCallback : DiffUtil.ItemCallback<LrcSearchResult>() {
         override fun areItemsTheSame(oldItem: LrcSearchResult, newItem: LrcSearchResult): Boolean {
-            // 以 trackName + artistName + 前50字符歌词作为唯一标识
-            val oldKey = "${oldItem.trackName}|${oldItem.artistName}|${oldItem.syncedLyrics.take(50)}"
-            val newKey = "${newItem.trackName}|${newItem.artistName}|${newItem.syncedLyrics.take(50)}"
-            return oldKey == newKey
+            return oldItem.id == newItem.id
         }
 
         override fun areContentsTheSame(oldItem: LrcSearchResult, newItem: LrcSearchResult): Boolean {
