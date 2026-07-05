@@ -75,13 +75,13 @@ class PlayerActivity : AppCompatActivity() {
     private fun applyTimeLabelToRows(rows: List<LrcRow>): List<LrcRow> {
         val visible = isTimeLabelVisible(timeLabelDefault = true)
         return rows.map { row ->
+            val textOnly = row.rowData.replace(LRC_TIME_PATTERN_REGEX, "").trim()
+            val formatted = formatTimeLabel(row.CurrentRowTime)
+            // 注意必须保留 TimeText，LrcView 拖动时左侧时间标签就是从这字段画出的
             if (visible) {
-                val textOnly = row.rowData.replace(LRC_TIME_PATTERN_REGEX, "").trim()
-                val formatted = formatTimeLabel(row.CurrentRowTime)
-                LrcRow("$formatted $textOnly", "", row.CurrentRowTime)
+                LrcRow("$formatted $textOnly", formatted, row.CurrentRowTime)
             } else {
-                val textOnly = row.rowData.replace(LRC_TIME_PATTERN_REGEX, "").trim()
-                LrcRow(textOnly, "", row.CurrentRowTime)
+                LrcRow(textOnly, formatted, row.CurrentRowTime)
             }
         }
     }
@@ -128,6 +128,18 @@ class PlayerActivity : AppCompatActivity() {
     // 标记LrcView是否处于全屏状态
     var isLrcFullscreen = false
         private set
+
+    // 普通行颜色与高亮行颜色，进入/退出全屏时切换
+    private var normalRowColor: Int = 0
+    private var highlightRowColor: Int = 0
+
+    // 缓存普通行字号，用于在非全屏时让高亮行字号与普通行一致（视觉上"禁止"高亮）
+    private var normalRowTextSize: Int = 0
+    private var highlightRowTextSize: Int = 0
+
+    // 拖动选中行的独立颜色和字号，非全屏时也与普通行一致
+    private var trySelectRowColor: Int = 0
+    private var trySelectRowTextSize: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -191,20 +203,36 @@ class PlayerActivity : AppCompatActivity() {
         val lrcView = binding.lrcView
 
         // 从资源获取颜色，自动适配白天/黑夜模式
-        val normalRowColor = getColor(R.color.lrc_normal_row)
+        this.normalRowColor = getColor(R.color.lrc_normal_row)
         val selectLineColor = getColor(R.color.lrc_select_line)
-        val highlightRowColor = getColor(R.color.lrc_highlight_row)
+        this.highlightRowColor = getColor(R.color.lrc_highlight_row)
+        this.normalRowTextSize = DisplayUtil.sp2px(this, 15)
+        this.highlightRowTextSize = DisplayUtil.sp2px(this, 18)
         val timeTextColor = getColor(R.color.lrc_time_text)
-        val trySelectRowColor = getColor(R.color.lrc_try_select_row)
+        this.trySelectRowColor = getColor(R.color.lrc_try_select_row)
+        this.trySelectRowTextSize = DisplayUtil.sp2px(this, 16)
 
         // 配置歌词显示样式
+        // 正常大小时：高亮行恢复醒目颜色（高亮当前播放行），但字号保持普通行大小，避免行高跳动；
+        // 拖动选中行仍保持普通行样式（拖动文字不会带上选中色）。
+        // 全屏时恢复为醒目的高亮色与大字号，便于拖动时定位当前行。
         lrcView.lrcSetting.setNormalRowColor(normalRowColor)
             .setTimeTextSize(DisplayUtil.sp2px(this, 14)).setSelectLineColor(selectLineColor)
             .setSelectLineTextSize(DisplayUtil.sp2px(this, 18)).setHeightRowColor(highlightRowColor)
-            .setNormalRowTextSize(DisplayUtil.sp2px(this, 15))
-            .setHeightLightRowTextSize(DisplayUtil.sp2px(this, 18))
-            .setTrySelectRowTextSize(DisplayUtil.sp2px(this, 16)).setTimeTextColor(timeTextColor)
-            .setTrySelectRowColor(trySelectRowColor)
+            .setNormalRowTextSize(normalRowTextSize)
+            .setHeightLightRowTextSize(normalRowTextSize)
+            .setTrySelectRowTextSize(normalRowTextSize).setTimeTextColor(timeTextColor)
+            .setTrySelectRowColor(normalRowColor)
+            // 默认不显示拖动指示器；进入全屏后再开启，退出全屏后关闭
+            .setShowTimeText(false)
+            .setShowTriangle(false)
+            .setShowSelectLine(false)
+        // 应用设置（确保 ShowTimeText/ShowTriangle 生效）
+        lrcView.commitLrcSettings()
+        // 三角形宽度默认 0，库只在 viewWidth>0 且 TriangleWidth==0 时按 viewWidth/50 赋默认值；
+        // onCreate 时 viewWidth 仍是 0，显式指定像素宽度并在测量完成后再次 commit，确保三角形可见
+        binding.lrcView.lrcSetting.setTriangleWidth(DisplayUtil.dp2px(this, 10f))
+        binding.lrcView.post { binding.lrcView.commitLrcSettings() }
 
         // 点击LrcView进入全屏显示
         lrcView.setOnClickListener {
@@ -361,6 +389,15 @@ class PlayerActivity : AppCompatActivity() {
         val slideUpIn = AnimationUtils.loadAnimation(this, R.anim.slide_up_in)
         slideUpIn.startOffset = 0
         binding.lrcView.startAnimation(slideUpIn)
+
+        // 全屏模式：开启拖动时间标签 + 三角形指示器，高亮行+拖动选中行恢复醒目颜色和字号
+        binding.lrcView.lrcSetting.setShowTimeText(true).setShowTriangle(true)
+            .setShowSelectLine(true)
+            .setHeightRowColor(highlightRowColor)
+            .setHeightLightRowTextSize(highlightRowTextSize)
+            .setTrySelectRowColor(trySelectRowColor)
+            .setTrySelectRowTextSize(trySelectRowTextSize)
+        binding.lrcView.commitLrcSettings()
     }
 
     /**
@@ -400,6 +437,17 @@ class PlayerActivity : AppCompatActivity() {
                     binding.lrcView.layoutParams as android.widget.FrameLayout.LayoutParams
                 lrcParams.height = android.widget.FrameLayout.LayoutParams.MATCH_PARENT
                 binding.lrcView.layoutParams = lrcParams
+
+                // 退出全屏：关闭拖动时间标签 + 三角形指示器
+                // 高亮行恢复为普通字号但保留醒目颜色（非全屏下仍高亮当前播放行）
+                // 拖动选中行保持普通行样式（拖动文字不带选中色）
+                binding.lrcView.lrcSetting.setShowTimeText(false).setShowTriangle(false)
+                    .setShowSelectLine(false)
+                    .setHeightRowColor(highlightRowColor)
+                    .setHeightLightRowTextSize(normalRowTextSize)
+                    .setTrySelectRowColor(normalRowColor)
+                    .setTrySelectRowTextSize(normalRowTextSize)
+                binding.lrcView.commitLrcSettings()
             }
 
             override fun onAnimationRepeat(animation: android.view.animation.Animation?) {}

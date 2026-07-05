@@ -97,7 +97,21 @@
       "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p com.hw.lrcviewlib.LrcRow)",
       "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p com.hw.lrcviewlib.LrcDataBuilder)",
       "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p com.hw.lrcviewlib.DefaultLrcRowsParser)",
-      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -c -p com.hw.lrcviewlib.DefaultLrcRowsParser)"
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -c -p com.hw.lrcviewlib.DefaultLrcRowsParser)",
+      "Bash(jar tf *)",
+      "Bash(xxd)",
+      "Bash(gradle :app:compileDebugKotlin)",
+      "Bash(find \"C:/Users/Administrator/.gradle/caches\" -path \"*lrcviewlib*\" -name \"*.jar\" -o -path \"*lrcviewlib*\" -name \"*.aar\")",
+      "Bash(find \"C:/Users/Administrator/.gradle/caches/9.5.1/transforms\" -path \"*lrcviewlib*\" -type d)",
+      "Bash(unzip -o /tmp/lrcview_extracted/classes.jar -d /tmp/lrcview_classes)",
+      "Bash(cp /tmp/lrcview_classes/com/hw/lrcviewlib/LrcViewSetting.class /tmp/LrcViewSetting.class)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p /tmp/LrcViewSetting.class)",
+      "Bash(cp /tmp/lrcview_classes/com/hw/lrcviewlib/LrcView.class /tmp/LrcView.class)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p /tmp/LrcView.class)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -c -p /tmp/LrcView.class)",
+      "Bash(cp /tmp/lrcview_classes/com/hw/lrcviewlib/LrcViewContext.class /tmp/LrcViewContext.class)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p -c /tmp/LrcViewContext.class)",
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -c -p /tmp/LrcViewContext.class)"
     ]
   }
 }

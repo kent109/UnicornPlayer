@@ -16,5 +16,7 @@ data class LrcSearchResult(
     /** 时长（秒） */
     val duration: Double,
     /** 同步歌词内容（LRC 格式） */
-    val syncedLyrics: String
+    val syncedLyrics: String,
+    /** 是否已通过预览弹窗修改过内容 */
+    val isModified: Boolean = false
 )

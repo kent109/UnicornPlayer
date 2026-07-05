@@ -74,18 +74,13 @@ object LrcFetcher {
     }
 
     /**
-     * 根据歌手和歌名搜索歌词，返回所有匹配结果
+     * 根据歌手和歌名搜索歌词(不能两个都为空)，返回所有匹配结果
      *
-     * @param artist 歌手名（可为空）
+     * @param artist 歌手名
      * @param title 歌名
      * @param callback 结果回调（在子线程执行，勿直接操作 UI）
      */
     fun searchLyrics(artist: String, title: String, callback: LrcSearchCallback) {
-        if (!lyricsEnabled || title.isBlank()) {
-            callback.onSearchFailure("歌名为空")
-            return
-        }
-
         val query = "${encodeUrlParam(artist)} ${encodeUrlParam(title)}".trim()
         val url = SEARCH_URL + ZhConverterUtil.toSimple(query)
         Log.i(TAG, "搜索歌词: $url")

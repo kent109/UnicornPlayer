@@ -89,16 +89,6 @@ class LrcSearchActivity : AppCompatActivity(),
                 Toast.makeText(this, "请填写歌手和歌名", Toast.LENGTH_SHORT).show()
                 return
             }
-
-            artist.isBlank() -> {
-                Toast.makeText(this, "请填写歌手", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            title.isBlank() -> {
-                Toast.makeText(this, "请填写歌名", Toast.LENGTH_SHORT).show()
-                return
-            }
         }
 
         // 隐藏输入法
@@ -156,15 +146,15 @@ class LrcSearchActivity : AppCompatActivity(),
     }
 
     /**
-     * 更新搜索结果项的歌词内容
+     * 更新搜索结果项的歌词内容，并标记为已修改（右侧显示已修改图标）
      */
     private fun updateResultContent(result: LrcSearchResult, newContent: String) {
         val currentList = adapter.currentList.toMutableList()
         val index = currentList.indexOfFirst { it.id == result.id }
         if (index >= 0) {
-            currentList[index] = result.copy(syncedLyrics = newContent)
+            currentList[index] = result.copy(syncedLyrics = newContent, isModified = true)
             adapter.submitList(currentList)
-            Log.i(TAG, "已更新第 ${index + 1} 条搜索结果歌词内容")
+            Log.i(TAG, "已更新第 ${index + 1} 条搜索结果歌词内容（已标记修改）")
         }
     }
 
