@@ -22,7 +22,7 @@ class LrcSearchResultAdapter(
 
     /** 当前选中项的 ID，仅记录最后一次点击/长按的项 */
     var selectedId: Long? = null
-        private set
+        set
 
     interface OnResultClickListener {
         fun onResultClick(result: LrcSearchResult)

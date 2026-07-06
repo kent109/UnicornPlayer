@@ -99,6 +99,7 @@ class LrcSearchActivity : AppCompatActivity(),
 
         // 显示 loading，清空旧结果
         binding.progressBar.visibility = View.VISIBLE
+        adapter.selectedId = null
         adapter.submitList(emptyList())
 
         LrcFetcher.searchLyrics(artist, title, object : LrcFetcher.LrcSearchCallback {
