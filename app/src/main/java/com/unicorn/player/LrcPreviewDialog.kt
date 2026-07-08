@@ -24,7 +24,8 @@ class LrcPreviewDialog(
     private val lrcContent: String,
     private val triggerX: Float,
     private val triggerY: Float,
-    private val onContentUpdated: ((String) -> Unit)? = null
+    private val onContentUpdated: ((String) -> Unit)? = null,
+    private val startInEditMode: Boolean = false
 ) {
 
     private var dialog: AlertDialog? = null
@@ -57,6 +58,11 @@ class LrcPreviewDialog(
         // 设置按钮点击监听
         setupButtonListeners()
 
+        // 若指定以编辑模式启动，直接进入编辑态（新建歌词场景）
+        if (startInEditMode) {
+            enterEditMode()
+        }
+
         // 设置触摸监听
         setupTouchListener()
 
@@ -72,9 +78,12 @@ class LrcPreviewDialog(
 
         // 弹窗显示动画 + 设置窗口大小（必须在 show 之后设置才生效）
         dialog?.setOnShowListener {
+            val metrics = context.resources.displayMetrics
+            // 动态把根布局 minHeight 设为屏幕一半：无论 EditText 内容怎么删，窗口高度都不会低于此值
+            previewView.minimumHeight = (metrics.heightPixels * 0.5f).toInt()
+
             dialog?.window?.apply {
                 setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
-                val metrics = context.resources.displayMetrics
                 // 宽度 90%，高度 50%
                 setLayout(
                     (metrics.widthPixels * 0.9f).toInt(),

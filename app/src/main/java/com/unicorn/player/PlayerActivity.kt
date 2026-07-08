@@ -129,6 +129,9 @@ class PlayerActivity : AppCompatActivity() {
     var isLrcFullscreen = false
         private set
 
+    // 标记当前歌曲是否搜索/加载不到歌词（本地+网络均无结果），用于显示"新建歌词"按钮
+    private var showNoLyricsButton = false
+
     // 普通行颜色与高亮行颜色，进入/退出全屏时切换
     private var normalRowColor: Int = 0
     private var highlightRowColor: Int = 0
@@ -234,8 +237,35 @@ class PlayerActivity : AppCompatActivity() {
         binding.lrcView.lrcSetting.setTriangleWidth(DisplayUtil.dp2px(this, 10f))
         binding.lrcView.post { binding.lrcView.commitLrcSettings() }
 
+        // "新建歌词"按钮：弹出歌词编辑对话框（空白编辑模式），保存后写入本地 .lrc 文件并重载 LrcView
+        binding.btnCreateLyrics.setOnClickListener {
+            val song = musicService?.currentSong?.value
+            if (song == null) {
+                Toast.makeText(this@PlayerActivity, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // 以 LrcView 中心作为弹窗动画起点
+            val location = IntArray(2)
+            binding.lrcView.getLocationOnScreen(location)
+            val centerX = location[0] + binding.lrcView.width / 2f
+            val centerY = location[1] + binding.lrcView.height / 2f
+
+            lrcPreviewDialog = LrcPreviewDialog(
+                this@PlayerActivity,
+                "",
+                centerX,
+                centerY,
+                onContentUpdated = { updatedContent ->
+                    saveLocalLrcAndReload(song.path, updatedContent)
+                },
+                startInEditMode = true
+            ).also { it.show() }
+        }
+
         // 点击LrcView进入全屏显示
         lrcView.setOnClickListener {
+            showNoLyricsButton = false
+            binding.btnCreateLyrics.visibility = View.GONE
             if (!isLrcFullscreen) {
                 enterLrcFullscreen()
             }
@@ -335,6 +365,8 @@ class PlayerActivity : AppCompatActivity() {
             try {
                 val lrcRows = LrcHelper.loadLrcFromAudioPath(audioPath)
                 if (!lrcRows.isNullOrEmpty()) {
+                    showNoLyricsButton = false
+                    binding.btnCreateLyrics.visibility = View.GONE
                     binding.lrcView.setLrcData(applyTimeLabelToRows(lrcRows))
                     binding.lrcView.visibility = View.VISIBLE
                     // 同步到当前播放位置
@@ -354,6 +386,8 @@ class PlayerActivity : AppCompatActivity() {
     private fun enterLrcFullscreen() {
         if (isLrcFullscreen) return
         isLrcFullscreen = true
+        // 进入全屏时隐藏"新建歌词"按钮
+        binding.btnCreateLyrics.visibility = View.GONE
 
         // 容器约束设为全屏（容器在 ConstraintLayout 内）
         val containerParams = binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
@@ -420,6 +454,8 @@ class PlayerActivity : AppCompatActivity() {
             android.view.animation.Animation.AnimationListener {
             override fun onAnimationStart(animation: android.view.animation.Animation?) {}
             override fun onAnimationEnd(animation: android.view.animation.Animation?) {
+                // 退出全屏后，若无歌词则重新显示"新建歌词"按钮
+                updateCreateLyricsButtonVisibility()
                 // 恢复容器原始布局（ConstraintLayout.LayoutParams）
                 val containerParams =
                     binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
@@ -460,8 +496,10 @@ class PlayerActivity : AppCompatActivity() {
      */
     private fun loadAndShowLrc(audioPath: String) {
         Log.d(TAG, "loadAndShowLrc: path=$audioPath")
-        // 歌词功能被关闭时，清空并隐藏 LrcView
+        // 歌词功能被关闭时，清空并隐藏 LrcView 和"新建歌词"按钮
         if (!LrcFetcher.lyricsEnabled) {
+            showNoLyricsButton = false
+            binding.btnCreateLyrics.visibility = View.GONE
             binding.lrcView.setLrcData(emptyList())
             binding.lrcView.visibility = View.GONE
             return
@@ -476,6 +514,8 @@ class PlayerActivity : AppCompatActivity() {
                 val lrcRows = LrcHelper.loadLrcFromAudioPath(audioPath)
                 Log.d(TAG, "loadLrcFromAudioPath 返回: ${lrcRows?.size ?: "null"} 行")
                 if (!lrcRows.isNullOrEmpty()) {
+                    showNoLyricsButton = false
+                    binding.btnCreateLyrics.visibility = View.GONE
                     binding.lrcView.setLrcData(applyTimeLabelToRows(lrcRows))
                     binding.lrcView.visibility = View.VISIBLE
                     Log.d(TAG, "本地歌词加载成功: ${lrcRows.size} 行")
@@ -495,6 +535,17 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
+     * 根据当前状态更新"新建歌词"按钮可见性：仅当标记为无歌词、且 LrcView 未处于全屏时显示
+     */
+    private fun updateCreateLyricsButtonVisibility() {
+        if (showNoLyricsButton && !isLrcFullscreen) {
+            binding.btnCreateLyrics.visibility = View.VISIBLE
+        } else {
+            binding.btnCreateLyrics.visibility = View.GONE
+        }
+    }
+
+    /**
      * 从网络下载歌词，下载成功后刷新 LrcView
      */
     private fun fetchLrcFromNetwork(audioPath: String) {
@@ -509,10 +560,14 @@ class PlayerActivity : AppCompatActivity() {
                     try {
                         val lrcRows = LrcHelper.loadLrcFromPath(lrcFile.absolutePath)
                         if (!lrcRows.isNullOrEmpty()) {
+                            showNoLyricsButton = false
+                            binding.btnCreateLyrics.visibility = View.GONE
                             binding.lrcView.setLrcData(applyTimeLabelToRows(lrcRows))
                             binding.lrcView.visibility = View.VISIBLE
                             Log.d(TAG, "网络歌词加载成功: ${lrcRows.size} 行")
                         } else {
+                            showNoLyricsButton = true
+                            updateCreateLyricsButtonVisibility()
                             binding.lrcView.visibility = View.GONE
                             Log.d(TAG, "下载的歌词文件解析为空")
                         }
@@ -532,8 +587,10 @@ class PlayerActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     // 切歌后不应影响新歌曲的 LrcView 状态
                     if (!isCurrentSong(audioPath)) return@launch
+                    showNoLyricsButton = true
+                    updateCreateLyricsButtonVisibility()
                     binding.lrcView.visibility = View.GONE
-                    Log.d(TAG, "未搜索到网络歌词，隐藏 LrcView")
+                    Log.d(TAG, "未搜索到网络歌词，显示新建歌词按钮")
                 }
             }
 
@@ -541,6 +598,8 @@ class PlayerActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     // 切歌后不应影响新歌曲的 LrcView 状态
                     if (!isCurrentSong(audioPath)) return@launch
+                    showNoLyricsButton = true
+                    updateCreateLyricsButtonVisibility()
                     binding.lrcView.visibility = View.GONE
                     Log.e(TAG, "网络下载歌词失败: $message")
                 }

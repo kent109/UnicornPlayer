@@ -13,6 +13,9 @@
     <string name="notification_channel_name">音乐播放</string>
     <string name="notification_channel_description">音乐播放通知</string>
 
+    <!-- 无歌词时的新建歌词按钮 -->
+    <string name="create_new_lyrics">新建歌词</string>
+
     <!-- 歌词设置 -->
     <string name="lyrics_settings">歌词显示</string>
     <string name="lyrics_enabled">显示歌词</string>
