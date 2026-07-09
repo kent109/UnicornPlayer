@@ -19,6 +19,9 @@ object LrcHelper {
     // LRC时间戳格式: [mm:ss.xx] 或 [mm:ss.xxx]
     private val LRC_TIME_PATTERN = Pattern.compile("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})]")
 
+    // LRC offset 标签格式: [offset:±500]，单位毫秒（正=提前，负=延后）
+    private val LRC_OFFSET_PATTERN = Pattern.compile("^\\[offset:\\s*([+-]?\\d+)\\s*]\\s*$")
+
     /**
      * 根据音频文件路径加载对应的歌词数据
      * 歌词文件应与音频文件在同一目录下，同名但扩展名为 .lrc
@@ -61,28 +64,77 @@ object LrcHelper {
     /**
      * 解析 LRC 文件
      * 先尝试使用 LrcDataBuilder，失败则使用手动解析
+     * 若文件中存在 [offset:±xxx] 标签，则对所有行的时间戳做补偿：DISPLAY_TIME = LRC_TIME + offset
      */
     private fun parseLrcFile(lrcFile: File): List<LrcRow>? {
+        // 先扫描 offset 标签
+        val offset = parseOffsetFromLrc(lrcFile)
+        if (offset != 0) {
+            Log.i(TAG, "检测到 offset 标签: ${offset}ms")
+        }
+
         // 方法1: 尝试使用 LrcDataBuilder (可能参数类型不对)
         try {
             val result = LrcDataBuilder().Build(lrcFile)
             if (result != null && result.isNotEmpty()) {
                 Log.i(TAG, "LrcDataBuilder 解析成功: ${result.size} 行")
-                return result
+                return if (offset != 0) applyOffsetToRows(result, offset) else result
             }
         } catch (e: Exception) {
             LogWriter.writeError(TAG, "LrcDataBuilder 解析失败: ${e.message}")
         }
 
-        // 方法2: 手动解析 LRC 文件
-        return parseLrcManually(lrcFile)
+        // 方法2: 手动解析 LRC 文件（offset 在 tag 行过滤阶段自然剔除）
+        return parseLrcManually(lrcFile, offset)
+    }
+
+    /**
+     * 扫描 LRC 文件中的 [offset:±xxx] 标签，返回补偿毫秒数
+     * 正偏移 → 歌词延后显示；负偏移 → 歌词提前显示
+     *
+     * 标准语义：DISPLAY_TIME = LRC_TIME + offset
+     */
+    private fun parseOffsetFromLrc(lrcFile: File): Int {
+        try {
+            lrcFile.inputStream().bufferedReader(Charsets.UTF_8)?.use { reader ->
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    line?.let { raw ->
+                        val trimmed = raw.trim()
+                        val m = LRC_OFFSET_PATTERN.matcher(trimmed)
+                        if (m.matches()) {
+                            return m.group(1)?.toIntOrNull() ?: 0
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "解析 offset 标签失败: ${e.message}")
+        }
+        return 0
+    }
+
+    /**
+     * 对已解析的 LrcRow 列表应用时间偏移
+     * 过滤 offset 标签行，调整每行的 currentRowTime
+     */
+    private fun applyOffsetToRows(rows: List<LrcRow>, offset: Int): List<LrcRow> {
+        return rows.filter { row ->
+            // 过滤掉 offset 标签行本身
+            !LRC_OFFSET_PATTERN.matcher(row.rowData.trim()).matches()
+        }.map { row ->
+            val newTime = (row.CurrentRowTime + offset).coerceAtLeast(0)
+            LrcRow(row.rowData, row.TimeText, newTime)
+        }.sortedBy { it.currentRowTime }
     }
 
     /**
      * 手动解析 LRC 文件格式
      * 标准 LRC 格式: [mm:ss.xxx]歌词文本（3位毫秒）
+     *
+     * @param offset 毫秒偏移量，会被加到每一行的 currentRowTime 上
      */
-    private fun parseLrcManually(lrcFile: File): List<LrcRow>? {
+    private fun parseLrcManually(lrcFile: File, offset: Int = 0): List<LrcRow>? {
         val lrcRows = mutableListOf<LrcRow>()
 
         try {
@@ -92,7 +144,13 @@ object LrcHelper {
 
             while (reader.readLine().also { line = it } != null) {
                 line?.let { lrcLine ->
-                    parseLrcLine(lrcLine)?.let { row -> lrcRows.add(row) }
+                    val trimmed = lrcLine.trim()
+                    // 跳过 offset 标签行（它们不含歌词时间戳，不应被解析为歌词行）
+                    if (LRC_OFFSET_PATTERN.matcher(trimmed).matches()) return@let
+                    parseLrcLine(lrcLine)?.let { row ->
+                        val newTime = (row.CurrentRowTime + offset).coerceAtLeast(0)
+                        lrcRows.add(LrcRow(row.rowData, row.TimeText, newTime))
+                    }
                 }
             }
             reader.close()

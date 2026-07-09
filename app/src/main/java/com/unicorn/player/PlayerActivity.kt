@@ -216,14 +216,14 @@ class PlayerActivity : AppCompatActivity() {
         this.trySelectRowTextSize = DisplayUtil.sp2px(this, 16)
 
         // 配置歌词显示样式
-        // 正常大小时：高亮行恢复醒目颜色（高亮当前播放行），但字号保持普通行大小，避免行高跳动；
+        // 正常大小时：高亮行恢复醒目颜色（高亮当前播放行）；
         // 拖动选中行仍保持普通行样式（拖动文字不会带上选中色）。
         // 全屏时恢复为醒目的高亮色与大字号，便于拖动时定位当前行。
         lrcView.lrcSetting.setNormalRowColor(normalRowColor)
             .setTimeTextSize(DisplayUtil.sp2px(this, 14)).setSelectLineColor(selectLineColor)
             .setSelectLineTextSize(DisplayUtil.sp2px(this, 18)).setHeightRowColor(highlightRowColor)
             .setNormalRowTextSize(normalRowTextSize)
-            .setHeightLightRowTextSize(normalRowTextSize)
+            .setHeightLightRowTextSize(highlightRowTextSize)
             .setTrySelectRowTextSize(normalRowTextSize).setTimeTextColor(timeTextColor)
             .setTrySelectRowColor(normalRowColor)
             // 默认不显示拖动指示器；进入全屏后再开启，退出全屏后关闭
@@ -475,12 +475,12 @@ class PlayerActivity : AppCompatActivity() {
                 binding.lrcView.layoutParams = lrcParams
 
                 // 退出全屏：关闭拖动时间标签 + 三角形指示器
-                // 高亮行恢复为普通字号但保留醒目颜色（非全屏下仍高亮当前播放行）
+                // 高亮行恢复为醒目颜色（非全屏下仍高亮当前播放行）
                 // 拖动选中行保持普通行样式（拖动文字不带选中色）
                 binding.lrcView.lrcSetting.setShowTimeText(false).setShowTriangle(false)
                     .setShowSelectLine(false)
                     .setHeightRowColor(highlightRowColor)
-                    .setHeightLightRowTextSize(normalRowTextSize)
+                    .setHeightLightRowTextSize(highlightRowTextSize)
                     .setTrySelectRowColor(normalRowColor)
                     .setTrySelectRowTextSize(normalRowTextSize)
                 binding.lrcView.commitLrcSettings()
