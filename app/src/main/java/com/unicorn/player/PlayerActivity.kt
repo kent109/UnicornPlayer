@@ -129,6 +129,9 @@ class PlayerActivity : AppCompatActivity() {
     var isLrcFullscreen = false
         private set
 
+    // 进入全屏时正在播放的歌曲路径，用于判断切歌时是否退出全屏
+    private var fullscreenSongPath: String? = null
+
     // 标记当前歌曲是否搜索/加载不到歌词（本地+网络均无结果），用于显示"新建歌词"按钮
     private var showNoLyricsButton = false
 
@@ -386,6 +389,8 @@ class PlayerActivity : AppCompatActivity() {
     private fun enterLrcFullscreen() {
         if (isLrcFullscreen) return
         isLrcFullscreen = true
+        // 记录进入全屏时的歌曲路径，切歌判断用
+        fullscreenSongPath = musicService?.currentSong?.value?.path
         // 进入全屏时隐藏"新建歌词"按钮
         binding.btnCreateLyrics.visibility = View.GONE
 
@@ -441,6 +446,8 @@ class PlayerActivity : AppCompatActivity() {
     private fun exitLrcFullscreen() {
         if (!isLrcFullscreen) return
         isLrcFullscreen = false
+        // 清除全屏歌曲路径标记
+        fullscreenSongPath = null
 
         // ViewPager向下滑入动画 (XML定义)
         val slideInDown = AnimationUtils.loadAnimation(this, R.anim.slide_in_down)
@@ -504,8 +511,9 @@ class PlayerActivity : AppCompatActivity() {
             binding.lrcView.visibility = View.GONE
             return
         }
-        // 切换歌曲时，如果LrcView处于全屏状态，先退出全屏
-        if (isLrcFullscreen) {
+        // 切换到不同歌曲时，如果LrcView处于全屏状态，才退出全屏；
+        // 同一首歌（如 onResume 重新加载歌词）保持全屏不变
+        if (isLrcFullscreen && audioPath != fullscreenSongPath) {
             exitLrcFullscreen()
         }
 
