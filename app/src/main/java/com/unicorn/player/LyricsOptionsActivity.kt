@@ -6,8 +6,10 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -78,6 +80,9 @@ class LyricsOptionsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLyricsOptionsBinding
 
+    // 字体大小弹窗
+    private var fontPopup: android.widget.PopupWindow? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLyricsOptionsBinding.inflate(layoutInflater)
@@ -118,11 +123,12 @@ class LyricsOptionsActivity : AppCompatActivity() {
                 SettingItem(
                     key = "font_size",
                     title = "字体大小",
-                    summary = "中",
+                    summary = getFontSizeSummary(),
                     hasChevron = true,
                     isFirst = false,
                     isLast = false,
-                    type = SettingItemType.SELECT
+                    type = SettingItemType.SELECT,
+                    onClick = { anchor -> showFontSizeMenu(anchor) }
                 ),
                 SettingItem(
                     key = "color_theme",
@@ -213,6 +219,7 @@ class LyricsOptionsActivity : AppCompatActivity() {
         if (item.summary != null) {
             tvSummary.text = item.summary
             tvSummary.visibility = View.VISIBLE
+            tvSummary.tag = "${item.key}_summary"
         }
 
         // 设置箭头
@@ -284,7 +291,7 @@ class LyricsOptionsActivity : AppCompatActivity() {
             view.isClickable = item.onClick != null
             view.isFocusable = item.onClick != null
             item.onClick?.let { clickListener ->
-                view.setOnClickListener { clickListener() }
+                view.setOnClickListener { clickListener(view) }
             }
         } else {
             // SWITCH 类型：行本身不接点击，让 SwitchMaterial 自己处理
@@ -308,6 +315,139 @@ class LyricsOptionsActivity : AppCompatActivity() {
     }
 
     /**
+     * 获取字体大小 summary 文字（小/中/大）
+     */
+    private fun getFontSizeSummary(): String {
+        val size = runBlocking {
+            try {
+                applicationContext.lyricsDataStore.data.first()[FONT_SIZE] ?: FONT_SIZE_MEDIUM
+            } catch (e: Exception) {
+                FONT_SIZE_MEDIUM
+            }
+        }
+        return when (size) {
+            FONT_SIZE_SMALL -> "小"
+            FONT_SIZE_LARGE -> "大"
+            else -> "中"
+        }
+    }
+
+    /**
+     * 显示字体大小选择弹窗
+     */
+    private fun showFontSizeMenu(anchorView: View) {
+        fontPopup?.let {
+            if (it.isShowing) {
+                it.dismiss()
+                return
+            }
+        }
+
+        val popupView = LayoutInflater.from(this).inflate(R.layout.popup_font_size, null)
+        val tvSmall = popupView.findViewById<android.widget.TextView>(R.id.tvFontSmall)
+        val tvMedium = popupView.findViewById<android.widget.TextView>(R.id.tvFontMedium)
+        val tvLarge = popupView.findViewById<android.widget.TextView>(R.id.tvFontLarge)
+
+        // 当前字号，用于显示钩号
+        val currentSize = runBlocking {
+            try {
+                applicationContext.lyricsDataStore.data.first()[FONT_SIZE] ?: FONT_SIZE_MEDIUM
+            } catch (e: Exception) {
+                FONT_SIZE_MEDIUM
+            }
+        }
+
+        val checkColor = ContextCompat.getColor(this, android.R.color.holo_red_light)
+        val normalColor = ContextCompat.getColor(this, R.color.text_primary)
+
+        setupFontSizeItem(tvSmall, currentSize == FONT_SIZE_SMALL, checkColor, normalColor)
+        setupFontSizeItem(tvMedium, currentSize == FONT_SIZE_MEDIUM, checkColor, normalColor)
+        setupFontSizeItem(tvLarge, currentSize == FONT_SIZE_LARGE, checkColor, normalColor)
+
+        // 点击选项
+        tvSmall.setOnClickListener {
+            onFontSizeSelected(FONT_SIZE_SMALL)
+        }
+        tvMedium.setOnClickListener {
+            onFontSizeSelected(FONT_SIZE_MEDIUM)
+        }
+        tvLarge.setOnClickListener {
+            onFontSizeSelected(FONT_SIZE_LARGE)
+        }
+
+        val popupWidthPx = (180 * resources.displayMetrics.density).toInt()
+
+        fontPopup = PopupWindow(
+            popupView, popupWidthPx, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true
+        ).apply {
+            elevation = 8f
+            isOutsideTouchable = true
+            animationStyle = R.style.PopupAnimation
+            setOnDismissListener { fontPopup = null }
+        }
+
+        // 弹窗右边缘对齐锚点（字体大小行）右边缘，并保证不超出屏幕左右边界
+        val anchorLoc = IntArray(2)
+        anchorView.getLocationOnScreen(anchorLoc)
+        val screenWidth = resources.displayMetrics.widthPixels
+        val xOff = anchorView.width - popupWidthPx
+        val clampedXOff = xOff.coerceIn(
+            -anchorLoc[0],
+            screenWidth - anchorLoc[0] - popupWidthPx
+        )
+        fontPopup?.showAsDropDown(anchorView, clampedXOff, -50)
+    }
+
+    /**
+     * 设置字体大小 item 样式：选中=红色文字+红色钩号
+     */
+    private fun setupFontSizeItem(
+        textView: android.widget.TextView,
+        isSelected: Boolean,
+        checkColor: Int,
+        normalColor: Int
+    ) {
+        textView.setTextColor(if (isSelected) checkColor else normalColor)
+        textView.setCompoundDrawablesWithIntrinsicBounds(
+            0, 0, if (isSelected) R.drawable.ic_check else 0, 0
+        )
+        if (isSelected) {
+            textView.compoundDrawables[2]?.setTint(checkColor)
+        }
+    }
+
+    /**
+     * 字号选中回调：持久化 + 更新 summary + 关闭弹窗
+     */
+    private fun onFontSizeSelected(size: Int) {
+        lifecycleScope.launch {
+            try {
+                applicationContext.lyricsDataStore.edit { it[FONT_SIZE] = size }
+            } catch (e: Exception) {
+                Log.e(TAG, "写入 font_size 失败", e)
+            }
+        }
+        updateFontSizeSummary(size)
+        fontPopup?.dismiss()
+        fontPopup = null
+    }
+
+    /**
+     * 刷新"字体大小"行的 summary 文本
+     */
+    private fun updateFontSizeSummary(size: Int) {
+        val summary = when (size) {
+            FONT_SIZE_SMALL -> "小"
+            FONT_SIZE_LARGE -> "大"
+            else -> "中"
+        }
+        // 通过 tag 定位"字体大小"行的 summary（tag 在 createSettingItem 里赋值为 "${item.key}_summary"）
+        binding.settingsContainer
+            .findViewWithTag<android.widget.TextView>("font_size_summary")
+            ?.text = summary
+    }
+
+    /**
      * dp转px
      */
     private fun dpToPx(dp: Int): Int {
@@ -324,7 +464,7 @@ class LyricsOptionsActivity : AppCompatActivity() {
         val hasChevron: Boolean = false,
         val isFirst: Boolean = false,
         val isLast: Boolean = false,
-        val onClick: (() -> Unit)? = null,
+        val onClick: ((View) -> Unit)? = null,
         val type: SettingItemType = SettingItemType.NORMAL
     )
 

@@ -203,6 +203,49 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
+     * 字号档位（小/中/大）对应的像素值。
+     * 数组下标对应 FONT_SIZE_SMALL=0 / MEDIUM=1 / LARGE=2，
+     * 三个元素分别为 { 普通行字号, 高亮行字号, 拖动选中行字号 }。
+     */
+    private val fontSizeTiers = arrayOf(
+        intArrayOf(13, 16, 14),  // 小
+        intArrayOf(15, 18, 16),  // 中（默认）
+        intArrayOf(19, 22, 20)   // 大
+    )
+
+    /**
+     * 从 DataStore 读取字体大小设置并应用到 LrcView。
+     * 非全屏模式：拖动选中行保持普通行字号；全屏模式：拖动选中行独立字号。
+     */
+    private fun applyFontSize() {
+        val tier = runBlocking {
+            try {
+                val size = applicationContext.lyricsDataStore.data.first()[LyricsOptionsActivity.FONT_SIZE]
+                    ?: LyricsOptionsActivity.FONT_SIZE_MEDIUM
+                size.coerceIn(0, 2)
+            } catch (e: Exception) {
+                Log.e(TAG, "读取 font_size 失败", e)
+                LyricsOptionsActivity.FONT_SIZE_MEDIUM
+            }
+        }
+        val sizes = fontSizeTiers[tier]
+        normalRowTextSize = DisplayUtil.sp2px(this, sizes[0])
+        highlightRowTextSize = DisplayUtil.sp2px(this, sizes[1])
+        trySelectRowTextSize = DisplayUtil.sp2px(this, sizes[2])
+
+        if (!::binding.isInitialized) return
+        val setting = binding.lrcView.lrcSetting
+            .setNormalRowTextSize(normalRowTextSize)
+            .setHeightLightRowTextSize(highlightRowTextSize)
+        if (isLrcFullscreen) {
+            setting.setTrySelectRowTextSize(trySelectRowTextSize)
+        } else {
+            setting.setTrySelectRowTextSize(normalRowTextSize)
+        }
+        binding.lrcView.commitLrcSettings()
+    }
+
+    /**
      * 初始化 LrcView 配置
      */
     private fun initLrcView() {
@@ -212,10 +255,12 @@ class PlayerActivity : AppCompatActivity() {
         this.normalRowColor = getColor(R.color.lrc_normal_row)
         val selectLineColor = getColor(R.color.lrc_select_line)
         this.highlightRowColor = getColor(R.color.lrc_highlight_row)
-        this.normalRowTextSize = DisplayUtil.sp2px(this, 15)
-        this.highlightRowTextSize = DisplayUtil.sp2px(this, 18)
         val timeTextColor = getColor(R.color.lrc_time_text)
         this.trySelectRowColor = getColor(R.color.lrc_try_select_row)
+
+        // 字号由 applyFontSize() 读取 DataStore 后设置（下方），此处仅提供默认值兜底
+        this.normalRowTextSize = DisplayUtil.sp2px(this, 15)
+        this.highlightRowTextSize = DisplayUtil.sp2px(this, 18)
         this.trySelectRowTextSize = DisplayUtil.sp2px(this, 16)
 
         // 配置歌词显示样式
@@ -239,6 +284,9 @@ class PlayerActivity : AppCompatActivity() {
         // onCreate 时 viewWidth 仍是 0，显式指定像素宽度并在测量完成后再次 commit，确保三角形可见
         binding.lrcView.lrcSetting.setTriangleWidth(DisplayUtil.dp2px(this, 10f))
         binding.lrcView.post { binding.lrcView.commitLrcSettings() }
+
+        // 应用字号设置（从 DataStore 读取字体大小偏好）
+        applyFontSize()
 
         // "新建歌词"按钮：弹出歌词编辑对话框（空白编辑模式），保存后写入本地 .lrc 文件并重载 LrcView
         binding.btnCreateLyrics.setOnClickListener {
@@ -891,6 +939,8 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 字体大小/时间标签可能在设置页被修改，恢复时即时生效
+        applyFontSize()
         // 恢复时重新同步歌词到当前播放位置
         musicService?.let { service ->
             if (isServiceBound) {
