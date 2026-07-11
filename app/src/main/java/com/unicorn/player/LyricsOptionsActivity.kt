@@ -53,17 +53,11 @@ class LyricsOptionsActivity : AppCompatActivity() {
         val LYRICS_ENABLED = booleanPreferencesKey("lyrics_enabled")
         val TIME_LABEL_VISIBLE = booleanPreferencesKey("time_label_visible")
         val FONT_SIZE = intPreferencesKey("font_size")
-        val COLOR_THEME = intPreferencesKey("color_theme")
 
         // 字体大小常量
         const val FONT_SIZE_SMALL = 0
         const val FONT_SIZE_MEDIUM = 1
         const val FONT_SIZE_LARGE = 2
-
-        // 颜色主题常量
-        const val COLOR_THEME_SYSTEM = 0
-        const val COLOR_THEME_LIGHT = 1
-        const val COLOR_THEME_DARK = 2
 
         // SWITCH 类型设置项的 key → DataStore 键 映射
         val switchKeyMap = mapOf(
@@ -74,7 +68,7 @@ class LyricsOptionsActivity : AppCompatActivity() {
         // SWITCH 类型设置项的 key → 默认值 映射
         val switchDefaultMap = mapOf(
             "lyrics_enable" to true,
-            "time_label" to true
+            "time_label" to false
         )
     }
 
@@ -129,15 +123,6 @@ class LyricsOptionsActivity : AppCompatActivity() {
                     isLast = false,
                     type = SettingItemType.SELECT,
                     onClick = { anchor -> showFontSizeMenu(anchor) }
-                ),
-                SettingItem(
-                    key = "color_theme",
-                    title = "颜色主题",
-                    summary = "跟随系统",
-                    hasChevron = true,
-                    isFirst = false,
-                    isLast = false,
-                    type = SettingItemType.SELECT
                 ),
                 SettingItem(
                     key = "search_lyrics",
