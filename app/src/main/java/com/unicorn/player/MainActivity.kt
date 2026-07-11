@@ -13,7 +13,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -55,22 +54,34 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         const val TAG = "MainActivity"
     }
 
-    private val storagePermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            loadMusic()
-        } else {
-            Toast.makeText(this, "需要存储权限才能访问音乐文件", Toast.LENGTH_LONG).show()
-            finish()
-        }
-    }
+    private val multiPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        results.forEach { (permission, granted) ->
+            when {
+                granted -> Unit
+                permission == Manifest.permission.READ_MEDIA_AUDIO -> {
+                    Toast.makeText(this, "需要存储权限才能访问音乐文件", Toast.LENGTH_LONG).show()
+                    finish()
+                }
 
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (!isGranted) {
-            Toast.makeText(this, "通知权限被拒绝，通知功能可能受限", Toast.LENGTH_LONG).show()
+                permission == Manifest.permission.POST_NOTIFICATIONS -> {
+                    Toast.makeText(this, "通知权限被拒绝，通知功能可能受限", Toast.LENGTH_LONG)
+                        .show()
+                }
+
+                permission == Manifest.permission.BLUETOOTH_CONNECT -> {
+                    Toast.makeText(
+                        this,
+                        "允许蓝牙连接(附近设备)权限才能监听蓝牙事件",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+        // READ_MEDIA_AUDIO 已授予时加载音乐（用户拒绝时 finish() 已调用）
+        if (results[Manifest.permission.READ_MEDIA_AUDIO] == true) {
+            loadMusic()
         }
     }
 
@@ -734,38 +745,44 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
     }
 
     private fun checkPermissions() {
-        // 先检查通知权限（Android 13及以上）
+        // 收集所有未授予的运行时权限，一次性申请（一个弹窗）
+        val permissionsToRequest = mutableListOf<String>()
+
+        // 存储权限（Android 13+ 使用 READ_MEDIA_AUDIO，及以下使用 READ_EXTERNAL_STORAGE）
+        val storagePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        if (ContextCompat.checkSelfPermission(this, storagePermission)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionsToRequest.add(storagePermission)
+        }
+
+        // 通知权限（Android 13+）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
             ) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
-        // 检查存储权限
-        when {
-            ContextCompat.checkSelfPermission(
-                this, Manifest.permission.READ_MEDIA_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                loadMusic()
+        // 蓝牙连接权限（Android 12+）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
             }
+        }
 
-            ActivityCompat.shouldShowRequestPermissionRationale(
-                this, Manifest.permission.READ_MEDIA_AUDIO
-            ) -> {
-                // Show explanation if needed
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    storagePermissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
-                }
-            }
-
-            else -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    storagePermissionLauncher.launch(Manifest.permission.READ_MEDIA_AUDIO)
-                }
-            }
+        if (permissionsToRequest.isNotEmpty()) {
+            multiPermissionLauncher.launch(permissionsToRequest.toTypedArray())
+        } else {
+            // 所有权限都已授予，直接加载音乐
+            loadMusic()
         }
     }
 
