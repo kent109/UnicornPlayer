@@ -58,16 +58,6 @@ class SettingsActivity : AppCompatActivity() {
                     onClick = {
                         startActivity(Intent(this, LyricsOptionsActivity::class.java))
                     }
-                ),
-                SettingItem(
-                    key = "account",
-                    title = "我的账号",
-                    hasChevron = true,
-                    isFirst = false,
-                    isLast = true,
-                    onClick = {
-                        Toast.makeText(this, "账号功能开发中", Toast.LENGTH_SHORT).show()
-                    }
                 )
             )
         )
