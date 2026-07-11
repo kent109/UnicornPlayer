@@ -111,7 +111,11 @@
       "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -c -p /tmp/LrcView.class)",
       "Bash(cp /tmp/lrcview_classes/com/hw/lrcviewlib/LrcViewContext.class /tmp/LrcViewContext.class)",
       "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -p -c /tmp/LrcViewContext.class)",
-      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -c -p /tmp/LrcViewContext.class)"
+      "Bash(\"/d/Program Files/Java/jdk-25.0.2/bin/javap\" -c -p /tmp/LrcViewContext.class)",
+      "Bash(unix2dos app/src/main/res/layout/fragment_songs.xml app/src/main/res/layout/fragment_placeholder.xml app/src/main/res/layout/activity_main.xml app/src/main/java/com/unicorn/player/ui/PlaceholderFragment.kt app/src/main/java/com/unicorn/player/ui/MainPagerAdapter.kt app/src/main/java/com/unicorn/player/ui/SongsFragment.kt app/src/main/java/com/unicorn/player/MainActivity.kt)",
+      "Bash(unix2dos app/src/main/java/com/unicorn/player/ui/PlaceholderFragment.kt)",
+      "Bash(app/src/main/res/values/styles.xml app/src/main/res/layout/activity_main.xml app/src/main/java/com/unicorn/player/MainActivity.kt)",
+      "Bash(/usr/bin/unix2dos app/src/main/res/values/styles.xml)"
     ]
   }
 }

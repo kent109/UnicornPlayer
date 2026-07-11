@@ -15,34 +15,28 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.Glide
-import com.unicorn.player.adapter.SongAdapter
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
 import com.unicorn.player.databinding.ActivityMainBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
+import com.unicorn.player.ui.MainPagerAdapter
+import com.unicorn.player.ui.SongsFragment
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 
-class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
-    SongAdapter.OnSongMoreClickListener {
+class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MusicViewModel
-    private lateinit var songAdapter: SongAdapter
     private lateinit var songInfoHelper: SongInfoHelper
 
-    // 歌曲数量 TextView
-    private lateinit var tvSongCount: android.widget.TextView
-
-    private var musicService: MusicService? = null
+    // SongListHost 接口实现：暴露给 SongsFragment 使用
+    override var musicService: MusicService? = null
+        private set
     private var isServiceBound = false
-
-    private val hideHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private var hideRunnable: Runnable = Runnable {
-        binding.btnScrollToCurrent.visibility = android.view.View.GONE
-    }
 
     // 将 scrollToContentClick 提升为类级别变量，解决作用域问题
     private var scrollToContentClick = false
@@ -73,7 +67,7 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
                 permission == Manifest.permission.BLUETOOTH_CONNECT -> {
                     Toast.makeText(
                         this,
-                        "允许蓝牙连接(附近设备)权限才能监听蓝牙事件",
+                        "禁止蓝牙连接(附近设备)无法监听蓝牙事件",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -102,6 +96,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             if (viewModel.fullSongs.value?.isNotEmpty() == true) {
                 updateServiceSongList()
             }
+            // 通知歌曲 Fragment 服务已连接
+            getSongsFragment()?.onServiceConnected()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -109,6 +105,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
             isServiceBound = false
             // 清理观察者，避免内存泄漏
             removeBottomPlayerObservers()
+            // 通知歌曲 Fragment 服务已断开
+            getSongsFragment()?.onServiceDisconnected()
         }
     }
 
@@ -131,14 +129,50 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         }
 
         setupViewModel()
-        setupRecyclerView()
-        setupSmartRefreshLayout()
+        setupViewPager()
         setupSearchView()
         setupBottomPlayer()
         setupBackPressHandler()
 
         checkPermissions()
         bindMusicService()
+    }
+
+    /**
+     * 设置 ViewPager2 与 TabLayout 联动（滑动切换与标签点击双向同步）
+     */
+    private fun setupViewPager() {
+        val titles = listOf("歌曲", "歌手", "专辑", "歌单")
+        val pagerAdapter = MainPagerAdapter(this, titles)
+        binding.viewPager.adapter = pagerAdapter
+        TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
+            tab.text = titles[position]
+        }.attach()
+
+        // 切换标签页时，仅在"歌曲"页显示排序按钮
+        binding.viewPager.registerOnPageChangeCallback(object :
+            androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                updateSortButtonVisibility(position)
+            }
+        })
+        // 初始化时同步一次可见性
+        updateSortButtonVisibility(binding.viewPager.currentItem)
+    }
+
+    /**
+     * 仅在"歌曲"标签页（position 0）显示排序按钮，其余页面隐藏
+     */
+    private fun updateSortButtonVisibility(position: Int) {
+        binding.ivSort.visibility =
+            if (position == 0) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    /**
+     * 获取歌曲 Fragment 实例（ViewPager2 中 position 0 对应标签 "f0"），用于服务连接通知
+     */
+    private fun getSongsFragment(): SongsFragment? {
+        return supportFragmentManager.findFragmentByTag("f0") as? SongsFragment
     }
 
     /**
@@ -183,12 +217,8 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
                     val currentTime = System.currentTimeMillis()
                     val doubleTapTimeout = android.view.ViewConfiguration.getDoubleTapTimeout()
                     if (currentTime - lastSearchTapTime < doubleTapTimeout) {
-                        // 双击检测
-                        val layoutManager =
-                            binding.recyclerView.layoutManager as? LinearLayoutManager
-                        if (layoutManager != null && layoutManager.itemCount > 0) {
-                            binding.recyclerView.smoothScrollToPosition(0)
-                        }
+                        // 双击检测：滚动歌曲列表到顶部
+                        getSongsFragment()?.scrollToTop()
                         lastSearchTapTime = 0L
                     } else {
                         lastSearchTapTime = currentTime
@@ -206,24 +236,6 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         val factory = MusicViewModelFactory(repository, this)
         viewModel = ViewModelProvider(this, factory)[MusicViewModel::class.java]
 
-        // Observe LiveData after ViewModel is ready
-        viewModel.allSongs.observe(this) { songs ->
-            if (::songAdapter.isInitialized) {
-                songAdapter.submitList(songs)
-            }
-            // 更新歌曲数量
-            updateSongCount(songs.size)
-            // 扫描完成后更新列表
-            if (isScanning) {
-                onScanComplete()
-            }
-        }
-
-        viewModel.isLoading.observe(this) { isLoading ->
-            binding.progressBar.visibility =
-                if (isLoading) android.view.View.VISIBLE else android.view.View.GONE
-        }
-
         // 监听完整歌曲列表变化，当服务已绑定时自动同步排序后的列表到 MusicService
         // 这确保应用重启后，MusicService 的播放顺序与 UI 显示的排序一致
         viewModel.fullSongs.observe(this) { songs ->
@@ -233,161 +245,20 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         }
     }
 
-    private fun setupRecyclerView() {
-        songAdapter = SongAdapter(this, this)
-        binding.recyclerView.apply {
-            layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = songAdapter
-            // 设置 RecyclerView 引用，以便 Adapter 能够找到 ViewHolder
-            songAdapter.setRecyclerView(this@apply)
+    /**
+     * 将排序后的完整列表同步到 MusicService，确保播放顺序与 UI 一致
+     */
+    private fun updateServiceSongList() {
+        val sortedSongs = viewModel.getSortedFullSongs()
+        if (sortedSongs.isEmpty()) return
+
+        val currentSong = musicService?.currentSong?.value
+        val currentIndex = if (currentSong != null) {
+            sortedSongs.indexOfFirst { it.id == currentSong.id }.takeIf { it != -1 } ?: 0
+        } else {
+            0
         }
-
-        // 初始化歌曲数量 TextView
-        tvSongCount = binding.tvSongCount
-
-        // 初始化滚动状态监听
-        setupScrollStateListener()
-    }
-
-    // 更新歌曲数量显示
-    private fun updateSongCount(count: Int) {
-        tvSongCount.text = "共 $count 首歌曲"
-    }
-
-    private fun setupSmartRefreshLayout() {
-        val smartRefreshLayout = binding.smartRefreshLayout
-
-        // 创建二级刷新头（TwoLevelHeader）
-        val twoLevelHeader = com.scwang.smart.refresh.header.TwoLevelHeader(this)
-        smartRefreshLayout.setRefreshHeader(twoLevelHeader)
-
-        // 配置参数
-        smartRefreshLayout.setHeaderHeight(120f) // Header 高度 120dp
-        smartRefreshLayout.setEnableOverScrollBounce(true) // 启用回弹效果
-        smartRefreshLayout.setEnableRefresh(true) // 启用下拉刷新
-        smartRefreshLayout.setEnableOverScrollDrag(true) // 启用拖拽效果
-
-        // 设置下拉刷新监听
-        smartRefreshLayout.setOnRefreshListener {
-            Log.d(TAG, "下拉刷新触发, isScanning=$isScanning")
-            // 如果正在扫描，忽略本次刷新
-            if (isScanning) {
-                Log.d(TAG, "正在扫描中，忽略本次刷新")
-                smartRefreshLayout.finishRefresh(0)
-                return@setOnRefreshListener
-            }
-            // 保存当前播放状态
-            savedCurrentSongId = musicService?.currentSong?.value?.id
-            savedIsPlaying = musicService?.isPlaying?.value == true
-            // 开始扫描
-            isScanning = true
-            loadMusic()
-        }
-
-        // 设置二级刷新监听
-        twoLevelHeader.setOnTwoLevelListener {
-            Log.d(TAG, "二级刷新触发")
-            // 这里可以添加更多数据加载逻辑
-            true // 返回true表示处理完成
-        }
-    }
-
-    private fun setupScrollStateListener() {
-        var isScrolling = false
-
-        // 监听滚动状态
-        binding.recyclerView.addOnScrollListener(object :
-            androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
-            override fun onScrollStateChanged(
-                recyclerView: androidx.recyclerview.widget.RecyclerView, newState: Int
-            ) {
-                when (newState) {
-                    // 开始滚动
-                    androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_DRAGGING -> {
-                        Log.d(TAG, "SCROLL_STATE_DRAGGING")
-                        isScrolling = true
-                        // 滑动过程中隐藏定位按钮
-                        binding.btnScrollToCurrent.visibility = android.view.View.GONE
-                        // 移除延迟消息
-                        hideRunnable.let { hideHandler.removeCallbacks(it) }
-                    }
-                    // 停止滚动
-                    androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE -> {
-                        Log.d(TAG, "SCROLL_STATE_IDLE, scrollToContentClick=$scrollToContentClick")
-                        isScrolling = false
-                        if (!scrollToContentClick) {
-                            binding.btnScrollToCurrent.visibility = android.view.View.VISIBLE
-                            // 设置延迟隐藏
-                            hideRunnable.let { hideHandler.removeCallbacks(it) }
-                            hideHandler.postDelayed(hideRunnable, 1000)
-                        } else {
-                            binding.btnScrollToCurrent.visibility = android.view.View.GONE
-                        }
-                        scrollToContentClick = false;
-                    }
-                }
-            }
-
-            override fun onScrolled(
-                recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int
-            ) {
-                Log.d(TAG, "onScrolled, isScrolling=$isScrolling, dy=$dy")
-                // 滑动过程中保持按钮隐藏
-                if (isScrolling) {
-                    binding.btnScrollToCurrent.visibility = android.view.View.GONE
-                }
-
-                // 检测是否滚动到底部，显示或隐藏歌曲数量
-                val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
-                if (layoutManager != null) {
-                    val totalItemCount = layoutManager.itemCount
-                    val lastVisibleItem = layoutManager.findLastVisibleItemPosition()
-
-                    // 精确判断：最后一个 item 可见且其底部已经到达或超过 RecyclerView 底部
-                    val isAtBottom = if (lastVisibleItem == totalItemCount - 1) {
-                        val lastItemView = layoutManager.findViewByPosition(lastVisibleItem)
-                        lastItemView != null && lastItemView.bottom <= recyclerView.bottom
-                    } else {
-                        false
-                    }
-
-                    // 在底部显示歌曲数量，不在底部隐藏
-                    tvSongCount.visibility =
-                        if (isAtBottom) android.view.View.VISIBLE else android.view.View.GONE
-                }
-            }
-        })
-
-        // 点击定位按钮的处理逻辑
-        binding.btnScrollToCurrent.setOnClickListener {
-            scrollToContentClick = true
-            // 移除延迟消息
-            hideRunnable.let { hideHandler.removeCallbacks(it) }
-            scrollToCurrentlyPlayingSong()
-        }
-    }
-
-    private fun scrollToCurrentlyPlayingSong() {
-        val currentSong = musicService?.currentSong?.value ?: return
-        val allSongs = viewModel.allSongs.value ?: return
-
-        // 查找当前播放歌曲在列表中的位置
-        val position = allSongs.indexOfFirst { it.id == currentSong.id }
-        if (position != -1) {
-            binding.btnScrollToCurrent.visibility = android.view.View.GONE
-            binding.recyclerView.smoothScrollToPosition(position)
-
-            // 修复：延迟重置 scrollToContentClick 标志
-            // 确保即使 smoothScrollToPosition 不触发滚动状态变化，也能正确重置
-            hideHandler.postDelayed({
-                scrollToContentClick = false
-            }, 500) // 500ms 延迟，足够覆盖 smoothScrollToPosition 的动画时间
-        }
-    }
-
-    private fun highlightCurrentSong(position: Int) {
-        // 实现高亮逻辑，例如改变背景颜色或显示指示器
-        // 这里可以调用SongAdapter中的方法来高亮显示指定位置的歌曲
+        musicService?.setSongList(sortedSongs, currentIndex)
     }
 
     private fun setupSearchView() {
@@ -518,22 +389,6 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         }
     }
 
-    /**
-     * 将排序后的完整列表同步到 MusicService，确保播放顺序与 UI 一致
-     */
-    private fun updateServiceSongList() {
-        val sortedSongs = viewModel.getSortedFullSongs()
-        if (sortedSongs.isEmpty()) return
-
-        val currentSong = musicService?.currentSong?.value
-        val currentIndex = if (currentSong != null) {
-            sortedSongs.indexOfFirst { it.id == currentSong.id }.takeIf { it != -1 } ?: 0
-        } else {
-            0
-        }
-        musicService?.setSongList(sortedSongs, currentIndex)
-    }
-
     private fun setupBottomPlayer() {
         binding.bottomPlayer.setOnClickListener {
             val intent = Intent(this, PlayerActivity::class.java)
@@ -648,19 +503,11 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         // 先移除旧的观察者，避免重复注册
         removeBottomPlayerObservers()
 
-        // Observe playing state to update play button icon and animation
+        // Observe playing state to update play button icon
         isPlayingObserver = androidx.lifecycle.Observer { isPlaying ->
             binding.playButton.setImageResource(
                 if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
             )
-            // 更新Adapter的播放状态
-            songAdapter.isPlaying = isPlaying
-            // 直接控制动画，避免notifyItemChanged触发onBindViewHolder重置角度
-            if (isPlaying) {
-                songAdapter.resumeCurrentSongAnimation()
-            } else {
-                songAdapter.pauseCurrentSongAnimation()
-            }
         }
         musicService?.isPlaying?.observe(this, isPlayingObserver!!)
 
@@ -668,9 +515,6 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         currentSongObserver = androidx.lifecycle.Observer { song ->
             song?.let { nonNullSong ->
                 updateBottomPlayer(nonNullSong)
-                // 更新Adapter中的当前播放歌曲状态
-                songAdapter.currentPlayingSong = nonNullSong
-                songAdapter.notifyDataSetChanged()
             }
         }
         musicService?.currentSong?.observe(this, currentSongObserver!!)
@@ -790,30 +634,6 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         viewModel.loadMusic()
     }
 
-    // 保存扫描前的当前播放歌曲信息
-    private var savedCurrentSongId: Long? = null
-    private var savedIsPlaying: Boolean = false
-
-    // 扫描完成后更新列表
-    private fun onScanComplete() {
-        // 扫描完成，重置标志位
-        isScanning = false
-
-        // 保持当前播放状态
-        val currentSong = musicService?.currentSong?.value
-        if (currentSong != null && currentSong.id != savedCurrentSongId) {
-            // 当前播放的歌曲被删除，停止播放
-            if (savedIsPlaying) {
-                musicService?.pause()
-            }
-        }
-
-        // 结束刷新动画
-        binding.smartRefreshLayout.finishRefresh(500)
-
-        Log.d(TAG, "扫描完成，列表已更新")
-    }
-
     private fun bindMusicService() {
         val intent = Intent(this, MusicService::class.java)
         // 先startService确保服务在前台运行
@@ -821,6 +641,9 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         // 再bindService确保能正确绑定
         bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
     }
+
+    // ==================== SongListHost 接口实现 ====================
+    // 由 SongsFragment 转发的歌曲点击事件
 
     override fun onSongClick(song: Song, position: Int) {
         // 使用 fullSongs（完整列表）而不是 allSongs（可能是搜索结果）
@@ -901,37 +724,25 @@ class MainActivity : AppCompatActivity(), SongAdapter.OnSongClickListener,
         // 只更新UI状态，不重新设置观察者或加载播放状态
         if (isServiceBound && musicService != null) {
             updateBottomPlayerUI()
-            // 恢复Adapter中的播放状态和动画
-            songAdapter.isPlaying = musicService?.isPlaying?.value == true
-            songAdapter.currentPlayingSong = musicService?.currentSong?.value
-            // 清除暂停标记
-            songAdapter.isPaused = false
-            // 恢复动画（从0角度开始，简化状态管理）
-            songAdapter.resumeCurrentSongAnimation()
         }
     }
 
     override fun onPause() {
         super.onPause()
         musicService?.savePlaybackState()
-        // 设置暂停标记，暂停当前播放歌曲的动画（保留角度）
-        songAdapter.isPaused = true
-        songAdapter.pauseCurrentSongAnimation()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         // 清理观察者，避免内存泄漏
         removeBottomPlayerObservers()
-        // 停止所有动画，释放资源
-        songAdapter.stopCurrentSongAnimation()
         if (isServiceBound) {
             unbindService(serviceConnection)
             isServiceBound = false
         }
     }
 
-    // 实现 OnSongMoreClickListener 接口
+    // 由 SongsFragment 转发的更多操作事件
     override fun onMoreClick(song: Song, position: Int) {
         songInfoHelper.showSongInfoDialog(song)
     }

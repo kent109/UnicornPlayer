@@ -32,19 +32,19 @@
         app:layout_constraintTop_toTopOf="@+id/searchView">
 
         <ImageView
-            android:id="@+id/ivLoop"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="20dp"
-            android:src="@drawable/ic_sequence"
-            tools:ignore="ContentDescription" />
-
-        <ImageView
             android:id="@+id/ivSort"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="20dp"
             android:src="@drawable/ic_sort"
+            tools:ignore="ContentDescription" />
+
+        <ImageView
+            android:id="@+id/ivLoop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="20dp"
+            android:src="@drawable/ic_sequence"
             tools:ignore="ContentDescription" />
 
         <ImageView
@@ -55,71 +55,31 @@
             tools:ignore="ContentDescription" />
     </LinearLayout>
 
-    <!-- 歌曲数量显示，位于底部，当 RecyclerView 滚到底部继续上拉时可见 -->
-    <TextView
-        android:id="@+id/tvSongCount"
+    <!-- 标签栏 -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabLayout"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        android:padding="12dp"
-        android:text="共 0 首歌曲"
-        android:textColor="@color/onSurfaceVariant"
-        android:textSize="14sp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/bottomPlayer"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <com.scwang.smart.refresh.layout.SmartRefreshLayout
-        android:id="@+id/smartRefreshLayout"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        app:layout_constraintBottom_toTopOf="@+id/bottomPlayer"
+        android:background="@color/surface"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/searchView"
-        app:srlEnableOverScrollBounce="true"
-        app:srlEnableRefresh="true"
-        app:srlEnableTwoLevel="true"
-        app:srlHeaderMaxDragRate="1.5"
-        app:srlMaxRate="2.5">
+        app:tabIndicatorColor="@color/primary"
+        app:tabIndicatorFullWidth="false"
+        app:tabMode="fixed"
+        app:tabSelectedTextColor="@color/primary"
+        app:tabTextAppearance="@style/TabLayoutText"
+        app:tabTextColor="@color/onSurfaceVariant" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recyclerView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            tools:listitem="@layout/item_song" />
-
-    </com.scwang.smart.refresh.layout.SmartRefreshLayout>
-
-    <ProgressBar
-        android:id="@+id/progressBar"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
+    <!-- 中间内容区：ViewPager2 承载各标签页 Fragment -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@+id/bottomPlayer"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- 定位到当前播放歌曲的图标 -->
-    <ImageView
-        android:id="@+id/btnScrollToCurrent"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="96dp"
-        android:background="@drawable/bg_location"
-        android:clickable="true"
-        android:focusable="true"
-        android:padding="12dp"
-        android:scaleType="center"
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:srcCompat="@drawable/ic_location"
-        tools:ignore="ContentDescription" />
+        app:layout_constraintTop_toBottomOf="@+id/tabLayout" />
 
     <androidx.cardview.widget.CardView
         android:id="@+id/bottomPlayer"
