@@ -75,6 +75,17 @@ class MusicService : Service() {
     // 公共方法设置当前歌曲
     fun setCurrentSong(song: Song) {
         _currentSong.value = song
+        // 重启恢复链中的典型竞争：Service 的 songList 在 DataStore 恢复出 currentSong 之前就被
+        // MainActivity 装填（updateServiceSongList 用 index=0 兜底），导致 currentIndex=0 并不指向
+        // currentSong，prev/next 就会从错误的 0 偏移，总是播同一首固定 item。
+        // currentSong 是最终确定的真值，因此在它被设到这里时，把它在 songList 中的位置同步到 currentIndex，
+        // 重建不变式：songList[currentIndex].id == currentSong.id。
+        if (songList.isNotEmpty()) {
+            val realIndex = songList.indexOfFirst { it.id == song.id }
+            if (realIndex >= 0) {
+                currentIndex = realIndex
+            }
+        }
     }
 
     private val _isPlaying = MutableLiveData(false)
@@ -228,6 +239,15 @@ class MusicService : Service() {
     }
 
     companion object {
+        // 排序模式，ordinal 与 sort_mode_prefs 存储值一致，默认 BY_TIME
+        enum class SortMode { BY_TIME, BY_TITLE, BY_ARTIST }
+
+        fun sortSongs(songs: List<Song>, mode: SortMode): List<Song> = when (mode) {
+            SortMode.BY_TIME -> songs.sortedByDescending { it.lastModified }
+            SortMode.BY_TITLE -> songs.sortedBy { it.title.lowercase() }
+            SortMode.BY_ARTIST -> songs.sortedBy { it.artist.lowercase() }
+        }
+
         const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "music_player_channel"
 
@@ -1383,14 +1403,30 @@ class MusicService : Service() {
         }
     }
 
-    // 从数据库加载歌曲列表
+    // 从 SharedPreferences 同步读取排序模式（与 MusicViewModel.restoreSortMode 同逻辑）
+    private fun readSortModeFromPrefs(): SortMode {
+        val ordinal = try {
+            getSharedPreferences("sort_mode_prefs", Context.MODE_PRIVATE)
+                .getInt("sort_mode", 0)
+        } catch (e: Exception) {
+            0
+        }
+        return SortMode.entries.getOrElse(ordinal) { SortMode.BY_TIME }
+    }
+
+    // 从数据库加载歌曲列表，并按用户当前排序模式排序，
+    // 确保恢复的 songList 与 UI 显示顺序一致，上一首/下一首导航正确
     private fun loadSongListFromDatabase() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val database = MusicDatabase.getDatabase(this@MusicService)
-                val songs = database.songDao().getAllSongs().first()
+                val songsFromDb = database.songDao().getAllSongs().first()
 
-                if (songs.isNotEmpty()) {
+                if (songsFromDb.isNotEmpty()) {
+                    // 按当前排序模式排序，而非使用数据库默认的 title ASC
+                    val sortMode = readSortModeFromPrefs()
+                    val songs = sortSongs(songsFromDb, sortMode)
+
                     val currentSongId = _currentSong.value?.id
                     val currentIndexInList = if (currentSongId != null) {
                         songs.indexOfFirst { it.id == currentSongId }
@@ -1398,22 +1434,19 @@ class MusicService : Service() {
                         -1
                     }
 
-                    val startIndex = if (currentIndexInList >= 0) currentIndexInList else 0
+                    // startIndex > 0 表示 currentSong 在排序后列表中的真实位置（setSongList 会尊重）；
+                    // currentSong 尚未恢复或不在列表中时传 0，setSongList 内会按 currentSong 位置再做兜底修正。
+                    val startIndex = if (currentIndexInList > 0) currentIndexInList else 0
 
                     withContext(Dispatchers.Main) {
-                        // 只在 songList 为空时设置，避免覆盖 MainActivity 已同步的排序列表
-                        if (songList.isEmpty()) {
-                            setSongList(songs, startIndex)
-                            Log.d(
-                                TAG,
-                                "Loaded ${songs.size} songs from database, current song at index $startIndex"
-                            )
-                        } else {
-                            Log.d(
-                                TAG,
-                                "Skipping database load: songList already set (${songList.size} songs)"
-                            )
-                        }
+                        // 始终装填列表：与 UI 使用相同的 SortMode 排序，
+                        // 确保 service 的 songList 与 MainActivity 完全一致。
+                        // setCurrentSong 负责把 currentIndex 修正到 currentSong 的真实位置。
+                        setSongList(songs, startIndex)
+                        Log.d(
+                            TAG,
+                            "Loaded ${songs.size} songs from database (mode=$sortMode), currentIndex=$startIndex"
+                        )
                     }
                 }
             } catch (e: Exception) {

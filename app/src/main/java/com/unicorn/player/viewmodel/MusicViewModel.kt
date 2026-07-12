@@ -26,7 +26,7 @@ class MusicViewModel(
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
-    // 排序模式
+    // 排序模式，ordinal 与 sort_mode_prefs 存储值一致，默认 BY_TIME
     enum class SortMode { BY_TIME, BY_TITLE, BY_ARTIST }
 
     private val _sortMode = MutableLiveData(SortMode.BY_TITLE)
@@ -79,12 +79,10 @@ class MusicViewModel(
         }
     }
 
-    private fun sortSongsInternal(songs: List<Song>, mode: SortMode): List<Song> {
-        return when (mode) {
-            SortMode.BY_TIME -> songs.sortedByDescending { it.lastModified }
-            SortMode.BY_TITLE -> songs.sortedBy { it.title.lowercase() }
-            SortMode.BY_ARTIST -> songs.sortedBy { it.artist.lowercase() }
-        }
+    private fun sortSongsInternal(songs: List<Song>, mode: SortMode): List<Song> = when (mode) {
+        SortMode.BY_TIME -> songs.sortedByDescending { it.lastModified }
+        SortMode.BY_TITLE -> songs.sortedBy { it.title.lowercase() }
+        SortMode.BY_ARTIST -> songs.sortedBy { it.artist.lowercase() }
     }
 
     fun loadMusic() {
