@@ -115,7 +115,8 @@
       "Bash(unix2dos app/src/main/res/layout/fragment_songs.xml app/src/main/res/layout/fragment_placeholder.xml app/src/main/res/layout/activity_main.xml app/src/main/java/com/unicorn/player/ui/PlaceholderFragment.kt app/src/main/java/com/unicorn/player/ui/MainPagerAdapter.kt app/src/main/java/com/unicorn/player/ui/SongsFragment.kt app/src/main/java/com/unicorn/player/MainActivity.kt)",
       "Bash(unix2dos app/src/main/java/com/unicorn/player/ui/PlaceholderFragment.kt)",
       "Bash(app/src/main/res/values/styles.xml app/src/main/res/layout/activity_main.xml app/src/main/java/com/unicorn/player/MainActivity.kt)",
-      "Bash(/usr/bin/unix2dos app/src/main/res/values/styles.xml)"
+      "Bash(/usr/bin/unix2dos app/src/main/res/values/styles.xml)",
+      "Bash(gradle app:compileDebugKotlin --console=plain)"
     ]
   }
 }

@@ -15,7 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
-import com.bumptech.glide.Glide
 import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.unicorn.player.databinding.ActivityMainBinding
@@ -43,6 +42,9 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
     // 标记是否正在扫描音乐库
     private var isScanning = false
+
+    // 底部播放栏控制器，封装底部播放栏的按钮事件、观察者与 UI 更新
+    private lateinit var bottomPlayerController: BottomPlayerController
 
     companion object {
         const val TAG = "MainActivity"
@@ -390,12 +392,12 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     }
 
     private fun setupBottomPlayer() {
-        binding.bottomPlayer.setOnClickListener {
-            val intent = Intent(this, PlayerActivity::class.java)
-            startActivity(intent)
-            // 主界面淡出，播放界面上滑
-            overridePendingTransition(R.anim.slide_up_in, R.anim.fade_out)
-        }
+        // 初始化底部播放栏控制器，封装播放栏点击跳转、播放/上下首按钮事件
+        bottomPlayerController = BottomPlayerController(
+            this,
+            binding.bottomPlayer
+        ) { musicService }
+        bottomPlayerController.setupClickListeners()
 
         // 播放模式切换按钮点击事件
         binding.ivLoop.setOnClickListener {
@@ -431,9 +433,6 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
         // 增大ivSort和ivSetting的点击范围
         setupTouchDelegate()
-
-        // 设置播放控制按钮点击事件
-        setupBottomPlayerButtons()
     }
 
     private fun setupTouchDelegate() {
@@ -469,31 +468,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         }
     }
 
-    private fun setupBottomPlayerButtons() {
-        binding.playButton.setOnClickListener {
-            musicService?.let { service ->
-                if (service.isPlaying.value == true) {
-                    service.pause()
-                } else {
-                    // 请求音频焦点，如果获得焦点就播放
-                    service.requestAudioFocusAndPlay()
-                }
-            }
-        }
-
-        binding.previousButton.setOnClickListener {
-            musicService?.requestAudioFocusAndPlayPrevious()
-        }
-
-        binding.nextButton.setOnClickListener {
-            musicService?.requestAudioFocusAndPlayNext()
-        }
-    }
-
     // 保存观察者的引用，以便在重新连接时移除旧的观察者
-    private var isPlayingObserver: androidx.lifecycle.Observer<Boolean>? = null
-    private var currentSongObserver: androidx.lifecycle.Observer<com.unicorn.player.model.Song?>? =
-        null
+    // 注意：isPlaying + currentSong 观察者已委托给 BottomPlayerController
     private var fileChangedObserver: androidx.lifecycle.Observer<Unit>? = null
     private var requestSongListObserver: androidx.lifecycle.Observer<com.unicorn.player.service.Event<Boolean>>? =
         null
@@ -503,21 +479,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         // 先移除旧的观察者，避免重复注册
         removeBottomPlayerObservers()
 
-        // Observe playing state to update play button icon
-        isPlayingObserver = androidx.lifecycle.Observer { isPlaying ->
-            binding.playButton.setImageResource(
-                if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
-            )
-        }
-        musicService?.isPlaying?.observe(this, isPlayingObserver!!)
-
-        // Observe current song to update bottom player info
-        currentSongObserver = androidx.lifecycle.Observer { song ->
-            song?.let { nonNullSong ->
-                updateBottomPlayer(nonNullSong)
-            }
-        }
-        musicService?.currentSong?.observe(this, currentSongObserver!!)
+        // 委托控制器绑定播放按钮图标 + 歌曲信息观察者
+        musicService?.let { bottomPlayerController.observe(it) }
 
         // 监听文件变化，自动刷新列表
         fileChangedObserver = androidx.lifecycle.Observer {
@@ -563,27 +526,20 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     }
 
     private fun removeBottomPlayerObservers() {
-        isPlayingObserver?.let { musicService?.isPlaying?.removeObserver(it) }
-        currentSongObserver?.let { musicService?.currentSong?.removeObserver(it) }
+        // 委托控制器移除播放按钮图标 + 歌曲信息观察者
+        bottomPlayerController.removeObservers()
         fileChangedObserver?.let { musicService?.fileChanged?.removeObserver(it) }
         requestSongListObserver?.let { musicService?.requestSongList?.removeObserver(it) }
         playModeObserver?.let { musicService?.playModeLiveData?.removeObserver(it) }
-        isPlayingObserver = null
-        currentSongObserver = null
         fileChangedObserver = null
         requestSongListObserver = null
         playModeObserver = null
     }
 
     private fun updateBottomPlayerUI() {
-        // Update UI with current playing state
+        // 委托控制器刷新播放按钮图标与歌曲信息
         val service = musicService ?: return
-        if (service.currentSong.value != null) {
-            updateBottomPlayer(service.currentSong.value!!)
-        }
-        binding.playButton.setImageResource(
-            if (service.isPlaying.value == true) R.drawable.ic_pause else R.drawable.ic_play
-        )
+        bottomPlayerController.updateUI(service)
         // 注意：updateLoopIcon 现在通过 playModeObserver 异步更新，不再在这里同步调用
         // 这样可以确保 loadPlaybackState() 完成后正确恢复图标
     }
@@ -699,24 +655,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     }
 
     private fun updateBottomPlayer(song: Song) {
-        // 检查 Activity 是否已销毁，避免 Glide 在 destroyed activity 上加载导致 crash
-        if (isDestroyed || isFinishing) return
-
-        binding.bottomPlayer.visibility = android.view.View.VISIBLE
-        binding.songTitle.text = song.title
-        binding.artistName.text = song.artist
-
-        // 激活跑马灯效果
-        binding.songTitle.post {
-            binding.songTitle.isSelected = true
-            binding.songTitle.requestFocus()
-        }
-
-        // 使用Glide加载专辑封面并添加圆角
-        Glide.with(this).load(song.albumArt).placeholder(R.drawable.ic_music_note)
-            .error(R.drawable.ic_music_note)
-            .transform(com.bumptech.glide.load.resource.bitmap.RoundedCorners(20))
-            .into(binding.albumArt)
+        // 委托控制器更新标题、艺术家、专辑封面
+        bottomPlayerController.updateSongInfo(song)
     }
 
     override fun onResume() {

@@ -1,5 +1,6 @@
 package com.unicorn.player.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -7,6 +8,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.unicorn.player.ArtistSongsActivity
 import com.unicorn.player.adapter.ArtistAdapter
 import com.unicorn.player.databinding.FragmentArtistBinding
 import com.unicorn.player.model.Artist
@@ -123,6 +125,6 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
     }
 
     override fun onArtistClick(artist: Artist, position: Int) {
-        // 歌手点击事件，后续可扩展为进入歌手详情
+        startActivity(ArtistSongsActivity.newIntent(requireContext(), artist.name))
     }
 }
