@@ -116,7 +116,10 @@
       "Bash(unix2dos app/src/main/java/com/unicorn/player/ui/PlaceholderFragment.kt)",
       "Bash(app/src/main/res/values/styles.xml app/src/main/res/layout/activity_main.xml app/src/main/java/com/unicorn/player/MainActivity.kt)",
       "Bash(/usr/bin/unix2dos app/src/main/res/values/styles.xml)",
-      "Bash(gradle app:compileDebugKotlin --console=plain)"
+      "Bash(gradle app:compileDebugKotlin --console=plain)",
+      "Bash(git check-ignore *)",
+      "Bash(git checkout *)",
+      "Bash(python3 -)"
     ]
   }
 }

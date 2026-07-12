@@ -111,4 +111,9 @@ dependencies {
     implementation 'com.github.zcweng:switch-button:0.0.3@aar'
 
     implementation 'com.github.houbb:opencc4j:1.14.0'
+
+    // 拼音转换：中文专辑名按拼音首字母分组（啊→A）
+    implementation 'com.belerweb:pinyin4j:2.5.1'
+
+    implementation 'com.github.nanchen2251:WaveSideBar:1.0.6'
 }
