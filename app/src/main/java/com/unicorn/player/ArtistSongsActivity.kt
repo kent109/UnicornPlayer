@@ -109,6 +109,9 @@ class ArtistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMore
 
     override fun onResume() {
         super.onResume()
+        // 重新注册观察者（onPause 中已移除），LiveData 会立即把当前值投递给新观察者，
+        // 触发 notifyDataSetChanged()，刷新高亮与动画，使列表与当前播放歌曲一致。
+        observeMusicService()
         musicService?.let { service ->
             songAdapter.isPlaying = service.isPlaying.value == true
             songAdapter.currentPlayingSong = service.currentSong.value
@@ -239,7 +242,8 @@ class ArtistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMore
     override fun onSongClick(song: Song, position: Int) {
         if (isServiceBound) {
             // 以当前歌手的歌曲列表作为播放列表，确保上下曲仅在歌手内切换
-            val index = artistSongs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
+            val index =
+                artistSongs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
             musicService?.setSongList(artistSongs, index)
             if (musicService?.currentSong?.value?.id == song.id) {
                 if (musicService?.isPlaying?.value != true) {
