@@ -85,8 +85,18 @@ class MusicViewModel(
         SortMode.BY_ARTIST -> songs.sortedBy { it.artist.lowercase() }
     }
 
-    fun loadMusic() {
+    /**
+     * 扫描媒体库。
+     *
+     * @param force 是否强制扫描。默认 false：仅在数据库无歌曲时才真正扫描（避免重启应用时重复全表扫描）；
+     *              true 表示用户显式触发（下拉刷新、文件变更通知），无论是否已有歌曲都扫描。
+     */
+    fun loadMusic(force: Boolean = false) {
         viewModelScope.launch {
+            // 重启自动扫描时，若数据库已有歌曲则跳过，避免每次启动都全表扫描 MediaStore
+            if (!force && repository.hasSongsInDb()) {
+                return@launch
+            }
             _isLoading.postValue(true)
             try {
                 repository.scanMusicFiles()

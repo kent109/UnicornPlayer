@@ -118,6 +118,14 @@ class MusicRepository(private val context: Context) {
 
     fun getAllSongs() = songDao.getAllSongs()
 
+    /**
+     * 同步判断数据库中是否已有歌曲，用于启动时决定是否跳过自动扫描。
+     * 在 IO 调度器上执行，避免阻塞主线程。
+     */
+    suspend fun hasSongsInDb(): Boolean = withContext(Dispatchers.IO) {
+        songDao.getSongIdsSync().isNotEmpty()
+    }
+
     suspend fun getSongById(id: Long) = songDao.getSongById(id)
 
     fun searchSongs(query: String) = songDao.searchSongs("%$query%")

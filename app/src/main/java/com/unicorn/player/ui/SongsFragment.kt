@@ -222,7 +222,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
             savedCurrentSongId = host?.musicService?.currentSong?.value?.id
             savedIsPlaying = host?.musicService?.isPlaying?.value == true
             isScanning = true
-            viewModel.loadMusic()
+            viewModel.loadMusic(force = true)
         }
 
         twoLevelHeader.setOnTwoLevelListener {

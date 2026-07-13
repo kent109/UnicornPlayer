@@ -9,13 +9,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
-import com.google.android.material.tabs.TabLayout
 import com.google.android.material.tabs.TabLayoutMediator
 import com.unicorn.player.databinding.ActivityMainBinding
 import com.unicorn.player.model.Song
@@ -482,9 +480,9 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         // 委托控制器绑定播放按钮图标 + 歌曲信息观察者
         musicService?.let { bottomPlayerController.observe(it) }
 
-        // 监听文件变化，自动刷新列表
+        // 监听文件变化，自动刷新列表（文件被外部修改，需强制扫描）
         fileChangedObserver = androidx.lifecycle.Observer {
-            loadMusic()
+            viewModel.loadMusic(force = true)
         }
         musicService?.fileChanged?.observe(this, fileChangedObserver!!)
 
