@@ -165,8 +165,9 @@ class SongAdapter(
                     holder.startRotationAnimation()
                 }
             } else {
-                // 暂停播放，保存当前角度并暂停动画（不重置角度）
-                rotationAngleMap[song.id] = holder.binding.albumArt.rotation
+                // 暂停播放，恢复保存的角度并暂停动画（不重置角度）
+                val savedAngle = rotationAngleMap[song.id] ?: 0f
+                holder.binding.albumArt.rotation = savedAngle
                 holder.pauseRotationAnimation()
             }
         } else {
@@ -330,16 +331,11 @@ class SongAdapter(
 
         /**
          * 暂停旋转动画（保留角度）
+         * 注意：只 cancel 动画，不修改 rotationAngleMap —— 角度由调用方在 cancel 前负责保存。
+         * 重绑定 holder 时 albumArt.rotation 为 0f，若在此写入 map 会覆盖真实角度。
          */
         fun pauseRotationAnimation() {
             currentAnimator?.let {
-                // 保存当前角度后取消动画
-                if (bindingAdapterPosition != RecyclerView.NO_POSITION) {
-                    val song = currentList.getOrNull(bindingAdapterPosition)
-                    if (song != null) {
-                        rotationAngleMap[song.id] = binding.albumArt.rotation
-                    }
-                }
                 it.cancel()
                 currentAnimator = null
             }
