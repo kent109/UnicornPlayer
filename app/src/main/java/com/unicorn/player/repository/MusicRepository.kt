@@ -6,8 +6,11 @@ import android.media.MediaMetadataRetriever
 import android.provider.MediaStore
 import androidx.core.net.toUri
 import com.unicorn.player.database.MusicDatabase
+import com.unicorn.player.model.Playlist
+import com.unicorn.player.model.PlaylistSong
 import com.unicorn.player.model.Song
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -16,6 +19,7 @@ class MusicRepository(private val context: Context) {
 
     private val database = MusicDatabase.getDatabase(context)
     private val songDao = database.songDao()
+    private val playlistDao = database.playlistDao()
 
     suspend fun scanMusicFiles(): List<Song> = withContext(Dispatchers.IO) {
         val newSongs = mutableListOf<Song>()
@@ -154,6 +158,39 @@ class MusicRepository(private val context: Context) {
         } catch (e: Exception) {
             null
         }
+    }
+
+    // ==================== 歌单（Playlist） ====================
+
+    fun getAllPlaylists() = playlistDao.getAllPlaylists()
+
+    suspend fun getPlaylistById(id: Long): Playlist? = withContext(Dispatchers.IO) {
+        playlistDao.getPlaylistById(id).firstOrNull()
+    }
+
+    suspend fun createPlaylist(name: String): Long = withContext(Dispatchers.IO) {
+        playlistDao.insertPlaylist(Playlist(name = name))
+    }
+
+    suspend fun renamePlaylist(id: Long, name: String) = withContext(Dispatchers.IO) {
+        playlistDao.updatePlaylistName(id, name, System.currentTimeMillis())
+    }
+
+    suspend fun deletePlaylistById(id: Long) = withContext(Dispatchers.IO) {
+        // 先清关联表（CASCADE 也会删，但显式清更稳妥），再删歌单
+        playlistDao.clearPlaylist(id)
+        // 需要完整 Playlist 对象供 @Delete，此处先取再删
+        val pl = getPlaylistById(id) ?: return@withContext
+        playlistDao.deletePlaylist(pl)
+    }
+
+    fun getPlaylistSongIds(playlistId: Long) = playlistDao.getPlaylistSongIds(playlistId)
+
+    fun getPlaylistSongs(playlistId: Long) = playlistDao.getPlaylistSongs(playlistId)
+
+    suspend fun addSongsToPlaylist(playlistId: Long, songs: List<Song>) = withContext(Dispatchers.IO) {
+        if (songs.isEmpty()) return@withContext
+        playlistDao.addSongsToPlaylist(songs.map { PlaylistSong(playlistId, it.id) })
     }
 
     fun classifyQuality(mime: String?, file: File): String {

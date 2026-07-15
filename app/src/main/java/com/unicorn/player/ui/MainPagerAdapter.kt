@@ -20,7 +20,7 @@ class MainPagerAdapter(
             0 -> SongsFragment()
             1 -> ArtistFragment.newInstance()
             2 -> AlbumFragment.newInstance()
-            3 -> PlaylistFragment.newInstance()
+            3 -> com.unicorn.player.ui.PlaylistFragment.newInstance()
             else -> PlaceholderFragment.newInstance(titles.getOrElse(position) { "" })
         }
     }

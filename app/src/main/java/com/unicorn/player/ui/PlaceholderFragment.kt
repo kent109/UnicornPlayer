@@ -38,11 +38,3 @@ open class PlaceholderFragment : Fragment() {
     }
 }
 
-/**
- * 歌单标签页
- */
-class PlaylistFragment : PlaceholderFragment() {
-    companion object {
-        fun newInstance() = PlaceholderFragment.newInstance("歌单")
-    }
-}

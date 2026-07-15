@@ -9,7 +9,9 @@ data class Playlist(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val name: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val icon: String = "ic_playlist",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
 )
 
 @Entity(

@@ -52,4 +52,24 @@ interface PlaylistDao {
         ORDER BY s.title ASC
     """)
     fun searchPlaylistSongs(playlistId: Long, query: String): Flow<List<Song>>
+
+    // ==================== 批量操作 / 辅助查询 ====================
+
+    /**
+     * 批量向歌单合并添加歌曲（REPLACE 去重，ON DUPLICATE KEY UPDATE 语义）
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun addSongsToPlaylist(songs: List<PlaylistSong>)
+
+    /**
+     * 查询歌单内已存在的 songId 列表（用于弹窗预勾选）
+     */
+    @Query("SELECT songId FROM playlist_songs WHERE playlistId = :playlistId")
+    fun getPlaylistSongIds(playlistId: Long): Flow<List<Long>>
+
+    /**
+     * 重命名歌单并刷新更新时间
+     */
+    @Query("UPDATE playlists SET name = :name, updatedAt = :updatedAt WHERE id = :id")
+    fun updatePlaylistName(id: Long, name: String, updatedAt: Long): Int
 }

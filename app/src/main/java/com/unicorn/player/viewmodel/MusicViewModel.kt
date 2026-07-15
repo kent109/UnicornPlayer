@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -25,6 +26,12 @@ class MusicViewModel(
 
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
+
+    // 当前歌单的歌曲列表（PlaylistSongsActivity 使用）
+    private val _playlistSongs = MutableLiveData<List<Song>>(emptyList())
+    val playlistSongs: LiveData<List<Song>> = _playlistSongs
+
+    private var playlistSongsJob: Job? = null
 
     // 排序模式，ordinal 与 sort_mode_prefs 存储值一致，默认 BY_TIME
     enum class SortMode { BY_TIME, BY_TITLE, BY_ARTIST }
@@ -153,5 +160,71 @@ class MusicViewModel(
         val fullSongs = _fullSongs.value ?: return emptyList()
         val mode = _sortMode.value ?: SortMode.BY_TIME
         return sortSongsInternal(fullSongs, mode)
+    }
+
+    /**
+     * 加载指定歌单的歌曲列表，写入 [_playlistSongs]（PlaylistSongsActivity 使用）
+     */
+    fun loadPlaylistSongs(playlistId: Long) {
+        playlistSongsJob?.cancel()
+        playlistSongsJob = viewModelScope.launch {
+            try {
+                repository.getPlaylistSongs(playlistId).collect { songs ->
+                    _playlistSongs.postValue(songs)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /**
+     * 同步更新歌单歌曲列表（添加歌曲、删除歌曲后立即刷新）
+     */
+    fun updatePlaylistSongs(songs: List<Song>) {
+        _playlistSongs.postValue(songs)
+    }
+
+    /**
+     * 合并添加歌曲到指定歌单（REPLACE 去重）；写完后自动 reload 让 LiveData 更新
+     */
+    fun addSongsToPlaylist(playlistId: Long, songs: List<Song>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.addSongsToPlaylist(playlistId, songs)
+                // 写操作完成后 reload，让 playlistSongs LiveData 立即反映最新
+                loadPlaylistSongsInternal(playlistId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /**
+     * 重命名歌单
+     */
+    fun renamePlaylistName(playlistId: Long, name: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.renamePlaylist(playlistId, name)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /**
+     * 内部：reload 某歌单的歌曲列表并推送到 LiveData
+     */
+    private fun loadPlaylistSongsInternal(playlistId: Long) {
+        viewModelScope.launch {
+            try {
+                repository.getPlaylistSongs(playlistId).collect { songs ->
+                    _playlistSongs.postValue(songs)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 }
