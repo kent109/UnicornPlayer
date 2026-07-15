@@ -1,6 +1,7 @@
 package com.unicorn.player.adapter
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -21,6 +22,9 @@ class PlaylistAdapter(
 
     /** 当前处于"已滑开"状态的位置（单指仅允许一个展开），-1 表示无 */
     private var swipedPosition: Int = -1
+
+    /** 上次量到的操作按钮区宽度（px），作为卡片向左平移的距离 */
+    private var actionWidth: Int = 0
 
     interface OnPlaylistClickListener {
         fun onPlaylistClick(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
@@ -62,6 +66,17 @@ class PlaylistAdapter(
         notifyItemChanged(prev)
     }
 
+    /**
+     * 强制复位 swiped 状态（无视 swipedPosition，一律清零），
+     * 并在下一次绑定时避免残留平移。
+     *
+     * 调用场景：外部列表写入（编辑/删除/新建/刷新）完成后，
+     * 防止 DiffUtil 让新滑入该位置的 item 继承旧平移。
+     */
+    fun forceResetSwipeState() {
+        swipedPosition = -1
+    }
+
     fun isSwiped(position: Int): Boolean = swipedPosition == position
 
     inner class PlaylistHolder(
@@ -78,6 +93,18 @@ class PlaylistAdapter(
                 } else {
                     listener.onPlaylistClick(getItem(pos), pos)
                 }
+            }
+
+            // 整行长按：未滑开时露出操作按钮，已滑开时关闭
+            binding.cardContent.setOnLongClickListener {
+                val pos = bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@setOnLongClickListener false
+                if (swipedPosition == pos) {
+                    resetSwipedItem()
+                } else {
+                    openSwipe(pos)
+                }
+                true
             }
 
             binding.btnEdit.setOnClickListener {
@@ -102,8 +129,22 @@ class PlaylistAdapter(
         ) {
             binding.tvPlaylistName.text = playlist.name
             binding.tvSongCount.text = "${playlist.songCount} 首"
+
+            // 绑定时量一次操作按钮区的实际宽度，作为卡片平移距离，
+            // 使滑开后按钮完整露出且不被卡片遮住。
+            if (!isSwiped) {
+                binding.cardContent.translationX = 0f
+            }
+            binding.actionContainer.visibility = View.VISIBLE
+            binding.actionContainer.post {
+                if (binding.actionContainer.width > 0) {
+                    actionWidth = binding.actionContainer.width
+                }
+            }
             // 滑开时平移内容卡片露出底层操作按钮
-            binding.cardContent.translationX = if (isSwiped) -200f else 0f
+            if (isSwiped) {
+                binding.cardContent.translationX = -actionWidth.toFloat()
+            }
         }
     }
 

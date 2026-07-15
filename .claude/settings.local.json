@@ -120,7 +120,10 @@
       "Bash(git check-ignore *)",
       "Bash(git checkout *)",
       "Bash(python3 -)",
-      "Bash(perl *)"
+      "Bash(perl *)",
+      "Bash(gradle :app:dependencies --configuration releaseRuntimeClasspath)",
+      "Bash(gradle app:compileDebugKotlin --offline)",
+      "Bash(gradle app:compileDebugKotlin --offline -q)"
     ]
   }
 }

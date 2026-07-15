@@ -91,6 +91,13 @@ class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMo
         playlistName = intent.getStringExtra(EXTRA_PLAYLIST_NAME) ?: ""
 
         songInfoHelper = SongInfoHelper(this)
+        songInfoHelper.onDeleteListener = object : SongInfoHelper.OnDeleteListener {
+            override fun onDelete(song: Song) {
+                // 从当前歌单移除该歌曲；ViewModel reload 后列表自动刷新
+                viewModel.removeSongFromPlaylist(playlistId, song.id)
+                setResult(RESULT_OK)
+            }
+        }
 
         // 设置 TitleBar
         binding.titleBar.setTitle(playlistName)
@@ -135,6 +142,8 @@ class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMo
                 val idToSong = allSongs.associateBy { it.id }
                 val toAdd = chosenIds.mapNotNull { idToSong[it] }
                 viewModel.addSongsToPlaylist(playlistId, toAdd)
+                // 通知父 Fragment 歌曲列表有改动，返回后主动刷新歌曲数量/更新时间
+                setResult(RESULT_OK)
             }
         ).show()
     }

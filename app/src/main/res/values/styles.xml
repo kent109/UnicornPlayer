@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- BottomSheetDialog 主题 -->
-    <style name="BottomSheetDialogTheme" parent="Theme.MaterialComponents.Light.BottomSheetDialog">
+    <!-- BottomSheetDialog 主题（DayNight：自动适配黑白模式） -->
+    <style name="BottomSheetDialogTheme" parent="Theme.MaterialComponents.DayNight.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/BottomSheetStyle</item>
         <item name="android:windowIsFloating">false</item>
         <item name="android:windowSoftInputMode">adjustResize</item>
@@ -11,7 +11,8 @@
     </style>
 
     <style name="BottomSheetStyle" parent="Widget.MaterialComponents.BottomSheet.Modal">
-        <item name="backgroundTint">@android:color/transparent</item>
+        <!-- 使用 surface 颜色，在 values/colors.xml（白）与 values-night/colors.xml（黑）中自动适配 -->
+        <item name="backgroundTint">@color/surface</item>
         <item name="shapeAppearance">@style/ShapeAppearanceBottomSheet</item>
     </style>
 

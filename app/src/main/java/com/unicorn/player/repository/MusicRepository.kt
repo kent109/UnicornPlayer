@@ -193,6 +193,10 @@ class MusicRepository(private val context: Context) {
         playlistDao.addSongsToPlaylist(songs.map { PlaylistSong(playlistId, it.id) })
     }
 
+    suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) = withContext(Dispatchers.IO) {
+        playlistDao.removeSongFromPlaylist(PlaylistSong(playlistId, songId))
+    }
+
     fun classifyQuality(mime: String?, file: File): String {
         // 1. 无损格式
         if (mime != null && mime in setOf(

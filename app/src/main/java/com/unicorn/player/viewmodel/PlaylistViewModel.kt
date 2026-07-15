@@ -43,7 +43,12 @@ class PlaylistViewModel(
     private var hasLoadedOnce = false
 
     /**
-     * 首次调用时执行查询；再次调用直接返回（数据由 LiveData 缓存）
+     * 首次可见时由 Fragment 调用。
+     *
+     * - 首次调用时真正查询；
+     * - 非首次则保持懒加载，直接复用 LiveData 缓存（切回 tab 不重查）。
+     *
+     * 写操作返回后，UI 应主动调 [refreshPlaylists] 立即更新列表。
      */
     fun loadPlaylists() {
         if (hasLoadedOnce) return
@@ -52,7 +57,7 @@ class PlaylistViewModel(
     }
 
     /**
-     * 强制重新查询（下拉刷新时调用，忽略 [hasLoadedOnce]）
+     * 强制重新查询（下拉刷新、写操作返回时调用，忽略 [hasLoadedOnce]）
      */
     fun refreshPlaylists() {
         refreshPlaylistsInternal()
@@ -92,32 +97,35 @@ class PlaylistViewModel(
     )
 
     fun createPlaylist(name: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             try {
                 repository.createPlaylist(name)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            refreshPlaylistsInternal()
         }
     }
 
     fun renamePlaylist(id: Long, name: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             try {
                 repository.renamePlaylist(id, name)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            refreshPlaylistsInternal()
         }
     }
 
     fun deletePlaylist(id: Long) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             try {
                 repository.deletePlaylistById(id)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+            refreshPlaylistsInternal()
         }
     }
 }

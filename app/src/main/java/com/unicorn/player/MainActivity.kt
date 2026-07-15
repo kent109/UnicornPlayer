@@ -161,6 +161,16 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     }
 
     /**
+     * 开关 ViewPager2 的用户滑动。
+     *
+     * 歌单列表 item 正在侧滑露出「编辑 / 删除」时，需临时禁用 ViewPager2 的切页滑动，
+     * 避免横向分页手势与 item 侧滑冲突；侧滑结束后恢复。
+     */
+    fun setViewPagerSwipeEnabled(enabled: Boolean) {
+        binding.viewPager.isUserInputEnabled = enabled
+    }
+
+    /**
      * 仅在"歌曲"标签页（position 0）显示排序按钮，其余页面隐藏
      */
     private fun updateSortButtonVisibility(position: Int) {

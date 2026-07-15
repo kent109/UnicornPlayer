@@ -201,6 +201,20 @@ class MusicViewModel(
     }
 
     /**
+     * 从指定歌单移除单首歌曲；写完后自动 reload，让 playlistSongs LiveData 立即反映最新
+     */
+    fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.removeSongFromPlaylist(playlistId, songId)
+                loadPlaylistSongsInternal(playlistId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /**
      * 重命名歌单
      */
     fun renamePlaylistName(playlistId: Long, name: String) {
