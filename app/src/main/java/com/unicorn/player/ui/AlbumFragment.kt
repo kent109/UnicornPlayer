@@ -1,6 +1,8 @@
 package com.unicorn.player.ui
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -8,6 +10,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.AlbumSongsActivity
+import com.unicorn.player.MainActivity
 import com.unicorn.player.adapter.AlbumAdapter
 import com.unicorn.player.databinding.FragmentAlbumBinding
 import com.unicorn.player.model.Album
@@ -34,11 +37,24 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
 
     private val collator = Collator.getInstance(Locale.CHINA)
 
+    /** 延迟恢复 ViewPager 的主线程 Handler，避免在字母选择回调里直接恢复导致手势冲突 */
+    private val handler = Handler(Looper.getMainLooper())
+    private var restoreViewPagerRunnable: Runnable? = null
+
     /** 每个首字母对应的第一个 Header 在扁平列表中的位置，用于侧边栏快速定位 */
     private var letterIndexMap: Map<String, Int> = emptyMap()
 
     companion object {
         fun newInstance() = AlbumFragment()
+
+        /** 字母选择回调停止多久后恢复 ViewPager，太短易频繁切换，太长则松手后响应迟钝 */
+        private const val RESTORE_VIEWPAGER_DELAY_MS = 120L
+
+        /** waveSideBar 淡入/淡出时长（ms），避免突兀显示 */
+        private const val ALPHA_ANIM_DURATION_SHOW_MS = 500L
+
+        /** waveSideBar 淡入/淡出时长（ms），避免突兀隐藏 */
+        private const val ALPHA_ANIM_DURATION_HIDE_MS = 120L
     }
 
     override fun onCreateView(
@@ -59,6 +75,9 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        // 必须移除待执行的回调，否则 Handler 持有旧 Fragment 引用，造成内存泄漏
+        restoreViewPagerRunnable?.let { handler.removeCallbacks(it) }
+        restoreViewPagerRunnable = null
         binding.recyclerView.adapter = null
         _binding = null
     }
@@ -91,10 +110,25 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
             "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "#"
         )
         binding.waveSideBar.setOnSelectIndexItemListener { letter ->
+            // 手指正在 WaveSideBar 上检索字母（每次字母变化都会回调），此时禁用 ViewPager
+            setViewPagerSwipe(false)
+            // 重置延迟恢复：若一定时间内再无新回调，说明手指已松开，恢复 ViewPager
+            restoreViewPagerRunnable?.let { handler.removeCallbacks(it) }
+            restoreViewPagerRunnable = Runnable { setViewPagerSwipe(true) }.also {
+                handler.postDelayed(it, RESTORE_VIEWPAGER_DELAY_MS)
+            }
             val position = letterIndexMap[letter] ?: return@setOnSelectIndexItemListener
             (binding.recyclerView.layoutManager as? LinearLayoutManager)
                 ?.scrollToPositionWithOffset(position, 0)
         }
+    }
+
+    /**
+     * 开关主界面 ViewPager2 的用户滑动。
+     * 手指在 WaveSideBar 上滑动时禁用，避免横向分页手势与字母导航手势冲突。
+     */
+    private fun setViewPagerSwipe(enabled: Boolean) {
+        (activity as? MainActivity)?.setViewPagerSwipeEnabled(enabled)
     }
 
     /**
@@ -191,5 +225,26 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
 
     override fun onAlbumClick(album: Album, position: Int) {
         startActivity(AlbumSongsActivity.newIntent(requireContext(), album.name))
+    }
+
+    /**
+     * 控制 waveSideBar 可见性，带淡入/淡出动画避免突兀显隐。
+     * ViewPager2 切换动画过程中隐藏，避免侧边栏错位；静止后才重新显示。
+     */
+    fun setWaveSideBarVisible(visible: Boolean) {
+        val sideBar = binding?.waveSideBar ?: return
+        // 取消进行中的动画，避免显隐快速切换时互相覆盖
+        sideBar.animate().cancel()
+        if (visible) {
+            // 先可见再以淡入动画显现
+            sideBar.visibility = View.VISIBLE
+            sideBar.alpha = 0f
+            sideBar.animate().alpha(1f).setDuration(ALPHA_ANIM_DURATION_SHOW_MS).start()
+        } else {
+            // 淡出动画结束后再设为 GONE
+            sideBar.animate().alpha(0f).setDuration(ALPHA_ANIM_DURATION_HIDE_MS).withEndAction {
+                sideBar.visibility = View.GONE
+            }.start()
+        }
     }
 }

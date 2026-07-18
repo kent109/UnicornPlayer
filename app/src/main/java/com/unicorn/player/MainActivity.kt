@@ -14,11 +14,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayoutMediator
 import com.unicorn.player.databinding.ActivityMainBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
+import com.unicorn.player.ui.AlbumFragment
 import com.unicorn.player.ui.MainPagerAdapter
 import com.unicorn.player.ui.SongsFragment
 import com.unicorn.player.viewmodel.MusicViewModel
@@ -155,6 +157,14 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
             override fun onPageSelected(position: Int) {
                 updateSortButtonVisibility(position)
             }
+
+            /**
+             * 页面滚动状态变化时控制 AlbumFragment 的 waveSideBar 可见性：
+             * 滑动/动画过程中隐藏，静止（IDLE）后才显示，避免切换动画里侧边栏错位。
+             */
+            override fun onPageScrollStateChanged(state: Int) {
+                getAlbumFragment()?.setWaveSideBarVisible(state == ViewPager2.SCROLL_STATE_IDLE)
+            }
         })
         // 初始化时同步一次可见性
         updateSortButtonVisibility(binding.viewPager.currentItem)
@@ -183,6 +193,13 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
      */
     private fun getSongsFragment(): SongsFragment? {
         return supportFragmentManager.findFragmentByTag("f0") as? SongsFragment
+    }
+
+    /**
+     * 获取专辑 Fragment 实例（ViewPager2 中 position 2 对应标签 "f2"），用于控制 waveSideBar 可见性
+     */
+    private fun getAlbumFragment(): AlbumFragment? {
+        return supportFragmentManager.findFragmentByTag("f2") as? AlbumFragment
     }
 
     /**
