@@ -154,6 +154,15 @@ class MusicViewModel(
     }
 
     /**
+     * 按当前全局排序模式排序任意歌曲列表（供歌手/专辑/歌单详情页展示用），
+     * 让详情页歌曲的展示顺序与主界面 ivSort 所选模式保持一致。
+     */
+    fun sortWithCurrentMode(songs: List<Song>): List<Song> {
+        val mode = _sortMode.value ?: SortMode.BY_TITLE
+        return sortSongsInternal(songs, mode)
+    }
+
+    /**
      * 获取排序后的完整歌曲列表（用于同步到 MusicService）
      */
     fun getSortedFullSongs(): List<Song> {

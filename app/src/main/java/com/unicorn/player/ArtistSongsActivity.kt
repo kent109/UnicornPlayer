@@ -156,17 +156,18 @@ class ArtistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMore
     }
 
     /**
-     * 按歌手名过滤歌曲，按标题排序后提交
+     * 按歌手名过滤歌曲，按全局排序模式排序后提交
      */
     private fun submitArtistSongs(songs: List<Song>) {
-        // 不区分大小写匹配艺术家
+        // 不区分大小写匹配艺术家；展示顺序跟随主界面 ivSort 所选排序模式
         val filtered = songs.filter {
             it.artist.equals(artistName, ignoreCase = true)
-        }.sortedBy { it.title.lowercase() }
+        }
+        val sorted = viewModel.sortWithCurrentMode(filtered)
 
-        artistSongs = filtered
-        songAdapter.submitList(filtered)
-        updateSongCount(filtered.size)
+        artistSongs = sorted
+        songAdapter.submitList(sorted)
+        updateSongCount(sorted.size)
     }
 
     private fun updateSongCount(count: Int) {

@@ -156,17 +156,18 @@ class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreC
     }
 
     /**
-     * 按专辑名过滤歌曲，按标题排序后提交
+     * 按专辑名过滤歌曲，按全局排序模式排序后提交
      */
     private fun submitAlbumSongs(songs: List<Song>) {
-        // 不区分大小写匹配专辑名
+        // 不区分大小写匹配专辑名；展示顺序跟随主界面 ivSort 所选排序模式
         val filtered = songs.filter {
             it.album.equals(albumName, ignoreCase = true)
-        }.sortedBy { it.title.lowercase() }
+        }
+        val sorted = viewModel.sortWithCurrentMode(filtered)
 
-        albumSongs = filtered
-        songAdapter.submitList(filtered)
-        updateSongCount(filtered.size)
+        albumSongs = sorted
+        songAdapter.submitList(sorted)
+        updateSongCount(sorted.size)
     }
 
     private fun updateSongCount(count: Int) {

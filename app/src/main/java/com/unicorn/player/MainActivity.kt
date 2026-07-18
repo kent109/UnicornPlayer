@@ -181,11 +181,10 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     }
 
     /**
-     * 仅在"歌曲"标签页（position 0）显示排序按钮，其余页面隐藏
+     * 切换标签页时，排序按钮始终显示
      */
     private fun updateSortButtonVisibility(position: Int) {
-        binding.ivSort.visibility =
-            if (position == 0) android.view.View.VISIBLE else android.view.View.GONE
+        binding.ivSort.visibility = android.view.View.VISIBLE
     }
 
     /**

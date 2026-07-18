@@ -207,9 +207,11 @@ class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMo
     }
 
     private fun submitPlaylistSongs(songs: List<Song>) {
-        playlistSongs = songs
-        songAdapter.submitList(songs)
-        updateSongCount(songs.size)
+        // 展示顺序跟随主界面 ivSort 所选排序模式
+        val sorted = viewModel.sortWithCurrentMode(songs)
+        playlistSongs = sorted
+        songAdapter.submitList(sorted)
+        updateSongCount(sorted.size)
     }
 
     private fun updateSongCount(count: Int) {
