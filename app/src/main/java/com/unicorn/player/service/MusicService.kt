@@ -61,6 +61,32 @@ object DataStoreKeys {
 
     // 标记用户从最近任务移除应用，防止服务重启后恢复通知
     val TASK_REMOVED_FLAG = intPreferencesKey("task_removed_flag")
+
+    // 播放来源标签：f0 / f1$歌手名 / f2$专辑名 / f3$歌单名；默认 f0（全部歌曲）
+    val PLAY_SOURCE_TAG = stringPreferencesKey("play_source_tag")
+}
+
+/**
+ * 播放来源标签工具：记录用户是从哪个入口点进来播放的，用于恢复时重建作用域内的歌曲列表。
+ *
+ * 标签格式：f0（全部歌曲）/ f1$歌手名 / f2$专辑名 / f3$歌单名。
+ * `$` 为类型与名称的分隔符，按首个 `$` 切分；类型前缀本身不含 `$`。
+ */
+object PlaySource {
+    const val SONGS = "f0"
+    const val ARTIST = "f1"
+    const val ALBUM = "f2"
+    const val PLAYLIST = "f3"
+
+    /** 构建来源标签；名称为空时退化为纯类型，如 "f0"（不带尾随 $） */
+    fun build(type: String, name: String): String =
+        if (name.isEmpty()) type else "$type$$name"
+
+    /** 解析标签：(类型, 名称)；对 f0 返回 ("f0", "") */
+    fun parse(tag: String): Pair<String, String> {
+        val idx = tag.indexOf('$')
+        return if (idx >= 0) tag.substring(0, idx) to tag.substring(idx + 1) else tag to ""
+    }
 }
 
 class MusicService : Service() {
@@ -230,6 +256,18 @@ class MusicService : Service() {
 
     // 播放模式 - 默认为全部循环
     private var playMode = PlayMode.ALL_LOOP
+
+    // 当前播放来源标签（f0 / f1$name / f2$name / $f3$name），默认 f0 全部歌曲
+    @Volatile
+    private var playSourceTag: String = PlaySource.SONGS
+
+    /**
+     * 由播放入口调用，标记本次播放的作用域来源。
+     * 「仅更新列表」的内部路径（updateServiceSongList、resetSongListFromDatabase 等）不应调用此方法。
+     */
+    fun setPlaySource(tag: String) {
+        playSourceTag = tag
+    }
 
     enum class PlayMode {
         ALL_LOOP,       // 全部循环
@@ -454,6 +492,10 @@ class MusicService : Service() {
                 val songId = intent.getLongExtra("songId", -1L)
                 val position = intent.getIntExtra("position", 0)
                 val songListData = intent.getStringArrayListExtra("songList")
+
+                // 记录播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单），默认 f0
+                val sourceTag = intent.getStringExtra("sourceTag") ?: PlaySource.SONGS
+                setPlaySource(sourceTag)
 
                 if (songListData != null) {
                     val songs = songListData.map { songData ->
@@ -1054,6 +1096,8 @@ class MusicService : Service() {
                         )
                     }
                     preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
+                    // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
+                    preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
                 }
                 Log.d(
                     TAG,
@@ -1246,6 +1290,8 @@ class MusicService : Service() {
                         }
                         // 保存播放模式
                         preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
+                        // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
+                        preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
                     } else {
                         // 清除保存的状态
                         preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
@@ -1310,6 +1356,10 @@ class MusicService : Service() {
                 playMode = PlayMode.entries.getOrElse(savedPlayModeOrdinal) { PlayMode.ALL_LOOP }
                 _playModeLiveData.postValue(playMode)
                 Log.d(TAG, "loadPlaybackState: restored playMode=$playMode")
+
+                // 恢复播放来源标签（f0/f1/f2/f3），默认 f0 全部歌曲
+                val savedSourceTag = preferences[DataStoreKeys.PLAY_SOURCE_TAG] ?: PlaySource.SONGS
+                playSourceTag = savedSourceTag
 
                 Log.d(
                     TAG,
@@ -1388,7 +1438,9 @@ class MusicService : Service() {
                     }
 
                     // 加载歌曲列表到service，确保播放完成后能自动播放下一首
-                    loadSongListFromDatabase()
+                    // 根据保存的来源标签（f0/f1/f2/f3）重建作用域内的歌曲列表
+                    val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
+                    loadSongListFromDatabase(sourceType, sourceName, songId)
                 }
 
                 // shouldRestorePosition=false 时（服务被系统重启且任务未被移除），将当前进度同步到 DataStore
@@ -1414,9 +1466,17 @@ class MusicService : Service() {
         return SortMode.entries.getOrElse(ordinal) { SortMode.BY_TIME }
     }
 
-    // 从数据库加载歌曲列表，并按用户当前排序模式排序，
-    // 确保恢复的 songList 与 UI 显示顺序一致，上一首/下一首导航正确
-    private fun loadSongListFromDatabase() {
+    /**
+     * 按「播放来源」重建 songList，并按用户当前排序模式排序，
+     * 确保恢复的 songList 与来源页面显示顺序一致，上一首/下一首导航停留在来源作用域内。
+     *
+     * @param sourceType 播放来源类型（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
+     * @param sourceName 来源名称（歌手/专辑/歌单名；f0 时为空）
+     * @param songId 当前恢复的歌曲 id，用于定位 startIndex
+     *
+     * 退化规则：来源作用域为空（f1/f2 下已无歌曲 / f3 歌单已不存在）→ 退化到全部歌曲（f0）。
+     */
+    private fun loadSongListFromDatabase(sourceType: String, sourceName: String = "", songId: Long = 0L) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val database = MusicDatabase.getDatabase(this@MusicService)
@@ -1425,27 +1485,47 @@ class MusicService : Service() {
                 if (songsFromDb.isNotEmpty()) {
                     // 按当前排序模式排序，而非使用数据库默认的 title ASC
                     val sortMode = readSortModeFromPrefs()
-                    val songs = sortSongs(songsFromDb, sortMode)
 
-                    val currentSongId = _currentSong.value?.id
+                    // 按来源过滤；f0（或未知类型）直接使用全部歌曲
+                    val scoped = when (sourceType) {
+                        PlaySource.ARTIST ->
+                            songsFromDb.filter { it.artist.equals(sourceName, ignoreCase = true) }
+                        PlaySource.ALBUM ->
+                            songsFromDb.filter { it.album.equals(sourceName, ignoreCase = true) }
+                        PlaySource.PLAYLIST -> {
+                            // 按歌单名反查歌单，再取其歌曲列表
+                            val playlist = database.playlistDao().getAllPlaylists().first()
+                                .firstOrNull { it.name.equals(sourceName, ignoreCase = true) }
+                            playlist?.let { database.playlistDao().getPlaylistSongs(it.id).first() }
+                                ?: songsFromDb   // 歌单已不存在 → 退化全部歌曲
+                        }
+                        else -> songsFromDb
+                    }
+
+                    // 来源作用域为空（f1/f2 下已无歌曲）→ 退化到全部歌曲
+                    val finalSongs =
+                        if (scoped.isEmpty() && sourceType != PlaySource.SONGS) songsFromDb else scoped
+                    val songs = sortSongs(finalSongs, sortMode)
+
+                    // 按 songId 或当前播放歌曲定位 startIndex
+                    val currentSongId = if (songId != 0L) songId else _currentSong.value?.id
                     val currentIndexInList = if (currentSongId != null) {
                         songs.indexOfFirst { it.id == currentSongId }
                     } else {
                         -1
                     }
-
-                    // startIndex > 0 表示 currentSong 在排序后列表中的真实位置（setSongList 会尊重）；
-                    // currentSong 尚未恢复或不在列表中时传 0，setSongList 内会按 currentSong 位置再做兜底修正。
                     val startIndex = if (currentIndexInList > 0) currentIndexInList else 0
 
                     withContext(Dispatchers.Main) {
-                        // 始终装填列表：与 UI 使用相同的 SortMode 排序，
-                        // 确保 service 的 songList 与 MainActivity 完全一致。
+                        // 始终装填列表：与 UI 使用相同的来源过滤 + SortMode 排序，
+                        // 确保 service 的 songList 与对应页面完全一致。
                         // setCurrentSong 负责把 currentIndex 修正到 currentSong 的真实位置。
                         setSongList(songs, startIndex)
+                        val logType =
+                            if (finalSongs === songsFromDb && sourceType != PlaySource.SONGS) "$sourceType(degraded)" else sourceType
                         Log.d(
                             TAG,
-                            "Loaded ${songs.size} songs from database (mode=$sortMode), currentIndex=$startIndex"
+                            "Loaded ${songs.size} songs from database (source=$logType, name=$sourceName, mode=$sortMode), currentIndex=$startIndex"
                         )
                     }
                 }
@@ -1485,6 +1565,8 @@ class MusicService : Service() {
                         LogWriter.writeError(TAG, "onTaskRemoved: MediaPlayer state error", e)
                     }
                     preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
+                    // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
+                    preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
                 }
             }
         }

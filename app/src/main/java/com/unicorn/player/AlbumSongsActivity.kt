@@ -18,6 +18,7 @@ import com.unicorn.player.databinding.ActivityAlbumSongsBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
+import com.unicorn.player.service.PlaySource
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 
@@ -246,6 +247,10 @@ class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreC
             val index =
                 albumSongs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
             musicService?.setSongList(albumSongs, index)
+            // 专辑详情作为播放入口：来源为 f2$专辑名
+            musicService?.setPlaySource(
+                PlaySource.build(PlaySource.ALBUM, albumName)
+            )
             if (musicService?.currentSong?.value?.id == song.id) {
                 if (musicService?.isPlaying?.value != true) {
                     musicService?.requestAudioFocusAndPlay()
@@ -262,6 +267,11 @@ class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreC
                 putExtra("songId", song.id)
                 putExtra("position", position)
                 putExtra("songListSize", albumSongs.size)
+                // 专辑详情作为播放入口：来源为 f2$专辑名
+                putExtra(
+                    "sourceTag",
+                    PlaySource.build(PlaySource.ALBUM, albumName)
+                )
                 val songDataList = albumSongs.map { s ->
                     "${s.id}|${s.title}|${s.artist}|${s.album}|${s.duration}|${s.path}|${s.albumArt ?: ""}"
                 }

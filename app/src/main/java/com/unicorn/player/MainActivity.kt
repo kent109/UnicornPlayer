@@ -20,6 +20,7 @@ import com.unicorn.player.databinding.ActivityMainBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
+import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.AlbumFragment
 import com.unicorn.player.ui.MainPagerAdapter
 import com.unicorn.player.ui.SongsFragment
@@ -634,6 +635,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
                 songs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
             if (isServiceBound) {
                 musicService?.setSongList(songs, realPosition)
+                // 歌曲 tab 作为播放入口：来源为 f0（全部歌曲）
+                musicService?.setPlaySource(PlaySource.SONGS)
                 // 检查是否已经在播放同一首歌
                 if (musicService?.currentSong?.value?.id == song.id) {
                     if (musicService?.isPlaying?.value == true) {
@@ -656,6 +659,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
                     putExtra("songId", song.id)
                     putExtra("position", position)
                     putExtra("songListSize", songs.size)
+                    // 歌曲 tab 作为播放入口：来源为 f0（全部歌曲）
+                    putExtra("sourceTag", PlaySource.SONGS)
                     // 将songList转换为可序列化的数据
                     val songDataList = songs.map { song ->
                         "${song.id}|${song.title}|${song.artist}|${song.album}|${song.duration}|${song.path}|${song.albumArt ?: ""}"
