@@ -1,7 +1,7 @@
 package com.unicorn.player.util
 
 import android.util.Log
-import com.github.houbb.opencc4j.util.ZhConverterUtil
+import com.unicorn.player.util.toSimpleCustom
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.unicorn.player.model.LrcSearchResult
@@ -82,7 +82,7 @@ object LrcFetcher {
      */
     fun searchLyrics(artist: String, title: String, callback: LrcSearchCallback) {
         val query = "${encodeUrlParam(artist)} ${encodeUrlParam(title)}".trim()
-        val url = SEARCH_URL + ZhConverterUtil.toSimple(query)
+        val url = SEARCH_URL + query.toSimpleCustom()
         Log.i(TAG, "搜索歌词: $url")
 
         val request = Request.Builder()
@@ -223,7 +223,7 @@ object LrcFetcher {
 
         // 3. 发起网络请求
         val query = "${encodeUrlParam(artist)} ${encodeUrlParam(title)}".trim()
-        val url = SEARCH_URL + ZhConverterUtil.toSimple(query)
+        val url = SEARCH_URL + query.toSimpleCustom()
         Log.i(TAG, "搜索歌词: $url")
 
         val request = Request.Builder()
@@ -348,7 +348,7 @@ object LrcFetcher {
         val lrcContent = header + "\r\n" + cleanedLyrics
 
         // 转为简体中文后写入文件（CRLF 换行）
-        val simplifiedContent = ZhConverterUtil.toSimple(lrcContent)
+        val simplifiedContent = lrcContent.toSimpleCustom()
         lrcFile.writeText(simplifiedContent, Charsets.UTF_8)
         Log.i(TAG, "歌词保存成功: ${lrcFile.absolutePath}")
         callback.onSuccess(lrcFile)

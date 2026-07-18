@@ -18,7 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.lifecycleScope
-import com.github.houbb.opencc4j.util.ZhConverterUtil
+import com.unicorn.player.util.toSimpleCustom
 import com.hw.lrcviewlib.LrcRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.service.MusicService
@@ -392,7 +392,7 @@ class PlayerActivity : AppCompatActivity() {
                     val baseName = audioFile.nameWithoutExtension
                     val lrcFile = File(parentDir, "$baseName.lrc")
                     // 转为简体中文以保持一致
-                    val simplified = ZhConverterUtil.toSimple(content)
+                    val simplified = content.toSimpleCustom()
                     lrcFile.writeText(simplified, Charsets.UTF_8)
                 }
                 Toast.makeText(this@PlayerActivity, "修改成功", Toast.LENGTH_SHORT).show()

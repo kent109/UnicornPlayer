@@ -11,7 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.github.houbb.opencc4j.util.ZhConverterUtil
+import com.unicorn.player.util.toSimpleCustom
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.adapter.LrcSearchResultAdapter
 import com.unicorn.player.databinding.ActivityLrcSearchBinding
@@ -214,7 +214,7 @@ class LrcSearchActivity : AppCompatActivity(),
                     val lrcContent = header + "\r\n" + cleanedLyrics
 
                     // 转为简体中文后写入文件（CRLF 换行）
-                    val simplifiedContent = ZhConverterUtil.toSimple(lrcContent)
+                    val simplifiedContent = lrcContent.toSimpleCustom()
                     lrcFile.writeText(simplifiedContent, Charsets.UTF_8)
                     Log.i(TAG, "歌词保存成功: ${lrcFile.absolutePath}")
                 }
