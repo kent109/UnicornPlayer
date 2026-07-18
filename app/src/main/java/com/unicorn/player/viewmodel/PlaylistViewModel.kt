@@ -96,10 +96,22 @@ class PlaylistViewModel(
         songCount = songCount
     )
 
-    fun createPlaylist(name: String) {
+    /**
+     * 新建歌单；同名（大小写无关）已在库中时，直接回调 [onDuplicate] 而不写库。
+     *
+     * @param name 歌单名（会被 trim，空串视为不允许）
+     * @param onDuplicate 当 [name] 已存在时调用；用于 Fragment 弹 Toast
+     */
+    fun createPlaylist(name: String, onDuplicate: (() -> Unit)? = null) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
         viewModelScope.launch {
             try {
-                repository.createPlaylist(name)
+                if (repository.isPlaylistNameUsed(trimmed)) {
+                    onDuplicate?.invoke()
+                    return@launch
+                }
+                repository.createPlaylist(trimmed)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -107,10 +119,19 @@ class PlaylistViewModel(
         }
     }
 
-    fun renamePlaylist(id: Long, name: String) {
+    /**
+     * 重命名歌单；除自身外存在同名时，回调 [onDuplicate] 而不写库。
+     */
+    fun renamePlaylist(id: Long, name: String, onDuplicate: (() -> Unit)? = null) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
         viewModelScope.launch {
             try {
-                repository.renamePlaylist(id, name)
+                if (repository.isPlaylistNameUsed(trimmed, excludeId = id)) {
+                    onDuplicate?.invoke()
+                    return@launch
+                }
+                repository.renamePlaylist(id, trimmed)
             } catch (e: Exception) {
                 e.printStackTrace()
             }

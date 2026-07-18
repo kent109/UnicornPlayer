@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
@@ -18,6 +19,7 @@ import com.unicorn.player.MainActivity
 import com.unicorn.player.PlaylistSongsActivity
 import com.unicorn.player.adapter.PlaylistAdapter
 import com.unicorn.player.databinding.FragmentPlaylistBinding
+import com.unicorn.player.R
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.viewmodel.PlaylistViewModel
 import com.unicorn.player.viewmodel.PlaylistViewModelFactory
@@ -266,15 +268,28 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
     }
 
     private fun showNewPlaylistDialog(initialName: String = "", editId: Long = -1L) {
+        val isRename = editId != -1L
         NewPlaylistDialog(
             context = requireContext(),
             initialName = initialName,
+            // 在 [onDuplicate] 里关闭对话框，避免先关闭再弹 Toast 的歧义
             onConfirm = { name ->
-                // ViewModel 内部会在写库完成后自动调用 refreshPlaylistsInternal()，这里无需手动刷新
-                if (editId != -1L) {
-                    viewModel.renamePlaylist(editId, name)
+                // 统一在 ViewModel 内部 [trim] + 校验同名；同名时调用 [onDuplicate] 弹 Toast，
+                // 写库成功后 ViewModel 内部会自动 refreshPlaylistsInternal()，这里无需手动刷新。
+                val duplicateHandler: () -> Unit = {
+                    // 关闭输入对话框，避免其遮挡 Toast 并提示用户可重新输入
+                    if (view != null) {
+                        Toast.makeText(
+                            requireContext(),
+                            getString(R.string.playlist_name_exists, name.trim()),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                if (isRename) {
+                    viewModel.renamePlaylist(editId, name, duplicateHandler)
                 } else {
-                    viewModel.createPlaylist(name)
+                    viewModel.createPlaylist(name, duplicateHandler)
                 }
             }
         ).show()

@@ -15,6 +15,17 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE id = :id")
     fun getPlaylistById(id: Long): Flow<Playlist?>
 
+    /**
+     * 按歌单名精确计数（大小写无关），用于新建/重命名时校验同名。
+     * 重命名场景需排除当前自身的 id（调用方传入 [excludeId]）。
+     */
+    // COLLATE NOCASE 让 "我的歌单" 和 "我的歌单"（大小写差异）也视为同名
+    @Query(
+        "SELECT COUNT(*) FROM playlists " +
+            "WHERE name = :name COLLATE NOCASE AND (:excludeId < 0 OR id != :excludeId)"
+    )
+    fun countByName(name: String, excludeId: Long = -1L): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertPlaylist(playlist: Playlist): Long
 

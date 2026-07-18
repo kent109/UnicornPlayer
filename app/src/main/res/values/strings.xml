@@ -30,4 +30,7 @@
     <string name="color_theme_system">跟随系统</string>
     <string name="color_theme_light">浅色</string>
     <string name="color_theme_dark">深色</string>
+
+    <!-- 歌单 -->
+    <string name="playlist_name_exists">歌单「%1$s」已存在</string>
 </resources>

@@ -168,6 +168,15 @@ class MusicRepository(private val context: Context) {
         playlistDao.getPlaylistById(id).firstOrNull()
     }
 
+    /**
+     * 按歌单名精确查询是否已存在同名（大小写无关）。
+     * @param excludeId 重命名时需排除当前歌单自身的 id（传入负数则不排除）
+     */
+    suspend fun isPlaylistNameUsed(name: String, excludeId: Long = -1L): Boolean =
+        withContext(Dispatchers.IO) {
+            playlistDao.countByName(name, excludeId) > 0
+        }
+
     suspend fun createPlaylist(name: String): Long = withContext(Dispatchers.IO) {
         playlistDao.insertPlaylist(Playlist(name = name))
     }
