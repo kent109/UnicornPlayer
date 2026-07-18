@@ -1,8 +1,10 @@
 package com.unicorn.player.adapter
 
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.AccelerateInterpolator
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -14,7 +16,13 @@ import com.unicorn.player.viewmodel.PlaylistViewModel
  *
  * - item 点击 → [OnPlaylistClickListener.onPlaylistClick]
  * - 滑动露出底层按钮：[onEditClicked] / [onDeleteClicked]
- * - 由外部 ItemTouchHelper 操作滑动；[resetSwipedItem] 复位某项
+ * - 由外部 ItemTouchHelper 驱动滑动；[resetSwipedItem] 复位某项。
+ *
+ * 注意：**不**走 ItemTouchHelper 的 SWIPE_SUCCESS 路径。
+ * SWIPE_SUCCESS 会在 ItemTouchHelper 中留下 RecoverAnimation 孤儿（reveal 不 detach 视图），
+ * 导致下一次 tap 被 findAnimation() 吃掉 → "第一次点击看似无效"。
+ * 改为：ItemTouchHelper 仅做 clamp + onChildDraw 视觉；open/close 完全由触摸决策 →
+ * notifyItemChanged → bind() 驱动。
  */
 class PlaylistAdapter(
     private val listener: OnPlaylistClickListener
@@ -25,6 +33,9 @@ class PlaylistAdapter(
 
     /** 上次量到的操作按钮区宽度（px），作为卡片向左平移的距离 */
     private var actionWidth: Int = 0
+
+    /** 供 ItemTouchHelper 读取操作按钮区宽度以限制滑动距离，避免过拉 */
+    internal val actionWidthPx: Int get() = actionWidth
 
     interface OnPlaylistClickListener {
         fun onPlaylistClick(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
@@ -41,7 +52,7 @@ class PlaylistAdapter(
     }
 
     override fun onBindViewHolder(holder: PlaylistHolder, position: Int) {
-        holder.bind(getItem(position), position, swipedPosition == position)
+        holder.bind(getItem(position), position, isSwiped(position))
     }
 
     fun getPlaylistAt(position: Int): PlaylistViewModel.PlaylistInfo? = getItem(position)
@@ -53,12 +64,16 @@ class PlaylistAdapter(
         if (position == swipedPosition) return
         val prev = swipedPosition
         swipedPosition = position
+        Log.d(TAG, "openSwipe position=$position prev=$prev")
         if (prev != -1) notifyItemChanged(prev)
         notifyItemChanged(position)
         listener.onSwipedOpened(position)
     }
 
-    /** 复位当前已滑开项 */
+    /**
+     * 复位当前已滑开项。一律走 notifyItemChanged 驱动 bind() 的平移动画。
+
+     */
     fun resetSwipedItem() {
         if (swipedPosition == -1) return
         val prev = swipedPosition
@@ -80,13 +95,17 @@ class PlaylistAdapter(
     fun isSwiped(position: Int): Boolean = swipedPosition == position
 
     inner class PlaylistHolder(
-        private val binding: ItemPlaylistBinding
+        internal val binding: ItemPlaylistBinding
     ) : RecyclerView.ViewHolder(binding.root) {
+
+        /** 上次绑定的 swiped 状态，用于在 [bind] 中检测"状态切换"从而驱动动画 */
+        var lastSwiped = false
 
         init {
             // 整行点击：若当前已滑开，点击内容区应关闭；否则触发 onPlaylistClick
             binding.cardContent.setOnClickListener {
                 val pos = bindingAdapterPosition
+                Log.d(TAG, "cardContent click pos=$pos swipedPos=$swipedPosition")
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
                 if (swipedPosition == pos) {
                     resetSwipedItem()
@@ -130,25 +149,75 @@ class PlaylistAdapter(
             binding.tvPlaylistName.text = playlist.name
             binding.tvSongCount.text = "${playlist.songCount} 首"
 
-            // 绑定时量一次操作按钮区的实际宽度，作为卡片平移距离，
-            // 使滑开后按钮完整露出且不被卡片遮住。
-            if (!isSwiped) {
-                binding.cardContent.translationX = 0f
-            }
             binding.actionContainer.visibility = View.VISIBLE
+            // 同步量一次操作按钮区的实际宽度，作为卡片平移距离；
+            // post 异步兜底，避免首次滑动时宽度仍为 0。
+            val widthNow = binding.actionContainer.width
+            if (widthNow > 0) {
+                actionWidth = widthNow
+            }
             binding.actionContainer.post {
                 if (binding.actionContainer.width > 0) {
                     actionWidth = binding.actionContainer.width
                 }
             }
-            // 滑开时平移内容卡片露出底层操作按钮
-            if (isSwiped) {
-                binding.cardContent.translationX = -actionWidth.toFloat()
+
+            // 仅当 swiped 状态发生切换时，才播放平移动画，使操作按钮区的显露与收起平滑过渡；
+            // 普通滚动复用（状态不变）时则直接落到目标位，避免残影。
+            // 拖拽过程中的位移由触摸层实时驱动，不走此处。
+            val targetX = if (isSwiped && actionWidth > 0) -actionWidth.toFloat() else 0f
+            val card = binding.cardContent
+            Log.d(
+                TAG, "bind pos=$position isSwiped=$isSwiped lastSwiped=$lastSwiped " +
+                        "curX=${card.translationX} targetX=$targetX"
+            )
+            if (lastSwiped != isSwiped) {
+                lastSwiped = isSwiped
+                card.animate().cancel()
+                card.animate()
+                    .translationX(targetX)
+                    .setDuration(REVEAL_ANIM_MS)
+                    .setInterpolator(AccelerateInterpolator())
+                    .start()
+            } else {
+                card.animate().cancel()
+                card.translationX = targetX
             }
         }
+
+        /** 供触摸层实时写平移（绕过动画，拖动中） */
+        fun setCardX(x: Float) {
+            binding.cardContent.animate().cancel()
+            binding.cardContent.translationX = x
+        }
+
+        /** 供触摸层动画到目标 */
+        fun animateCardTo(targetX: Float, duration: Long = REVEAL_ANIM_MS) {
+            binding.cardContent.animate().cancel()
+            binding.cardContent.animate()
+                .translationX(targetX)
+                .setDuration(duration)
+                .setInterpolator(AccelerateInterpolator())
+                .start()
+        }
+
+        fun cardContent(): View = binding.cardContent
+    }
+
+    /** 回收时清掉平移与过渡态，避免新绑定到该 holder 的 item 播放多余的收起动画 */
+    override fun onViewRecycled(holder: PlaylistHolder) {
+        super.onViewRecycled(holder)
+        holder.binding.cardContent.animate().cancel()
+        holder.binding.cardContent.translationX = 0f
+        holder.lastSwiped = false
     }
 
     companion object {
+        private const val TAG = "PlaylistSwipe"
+
+        /** 内容卡片展开 / 收起过渡动画时长（毫秒） */
+        const val REVEAL_ANIM_MS = 180L
+
         private val DIFF = object : DiffUtil.ItemCallback<PlaylistViewModel.PlaylistInfo>() {
             override fun areItemsTheSame(
                 oldItem: PlaylistViewModel.PlaylistInfo,

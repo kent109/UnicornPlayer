@@ -123,7 +123,13 @@
       "Bash(perl *)",
       "Bash(gradle :app:dependencies --configuration releaseRuntimeClasspath)",
       "Bash(gradle app:compileDebugKotlin --offline)",
-      "Bash(gradle app:compileDebugKotlin --offline -q)"
+      "Bash(gradle app:compileDebugKotlin --offline -q)",
+      "WebSearch",
+      "WebFetch(domain:android.googlesource.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:cs.android.com)",
+      "Bash(echo \"EXIT=$?\")"
     ]
   }
 }

@@ -4,13 +4,13 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
-import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -39,8 +39,6 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
 
     private lateinit var viewModel: PlaylistViewModel
     private lateinit var adapter: PlaylistAdapter
-
-    private var itemTouchHelper: ItemTouchHelper? = null
 
     /**
      * 启动歌单详情页的 launcher；返回 RESULT_OK 时表示歌曲有改动，需刷新列表
@@ -108,100 +106,116 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = this@PlaylistFragment.adapter
-        }
-        attachSwipeHelper()
-    }
-
-    /**
-     * 附加 ItemTouchHelper：左滑露出操作按钮
-     * - onSwiped 触发 adapter.openSwipe 让卡片保持滑开
-     * - 已滑开项再次滑动时复位
-     */
-    /**
-     * 侧滑回调，类级字段以便 [getSwipeDirs] 查询当前已展开项。
-     *
-     * 方向策略：
-     * - 没有展开项时，只允许 LEFT（打开操作区）；
-     * - 有展开项时，只允许 RIGHT（关闭展开项）。
-     *
-     * 配合 [setViewPagerSwipe]：拖拽过程中禁用 ViewPager2 切页，
-     * 手势结束（onSwiped / clearView）后恢复。这样用户不会因为
-     * 横向拖拽 playlist item 而误切主界面的标签页。
-     */
-    private val swipeCallback = object : ItemTouchHelper.SimpleCallback(
-        0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT
-    ) {
-        override fun onMove(
-            recyclerView: RecyclerView,
-            viewHolder: RecyclerView.ViewHolder,
-            target: RecyclerView.ViewHolder
-        ): Boolean = false
-
-        override fun getSwipeDirs(
-            recyclerView: RecyclerView,
-            viewHolder: RecyclerView.ViewHolder
-        ): Int {
-            val pos = viewHolder.bindingAdapterPosition
-            if (pos == RecyclerView.NO_POSITION) return 0
-            // 已展开的项只允许反方向（RIGHT）关闭，避免继续向左时误触别的操作
-            return if (adapter.isSwiped(pos)) {
-                ItemTouchHelper.RIGHT
-            } else {
-                ItemTouchHelper.LEFT
-            }
-        }
-
-        override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-            val pos = viewHolder.bindingAdapterPosition
-            if (pos == RecyclerView.NO_POSITION) return
-            if (adapter.isSwiped(pos)) {
-                adapter.resetSwipedItem()
-            } else {
-                adapter.openSwipe(pos)
-            }
-            // 侧滑手势结束（已 open/reset 到位），恢复主界面 ViewPager2 切页
-            setViewPagerSwipe(true)
-        }
-
-        override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float {
-            // 较大阈值，避免轻扫即误触
-            return 0.35f
-        }
-
-        override fun onChildDraw(
-            c: android.graphics.Canvas,
-            recyclerView: RecyclerView,
-            viewHolder: RecyclerView.ViewHolder,
-            dX: Float,
-            dY: Float,
-            actionState: Int,
-            isCurrentlyActive: Boolean
-        ) {
-            // 手指仍在拖拽 item（横向滑动）的过程中，禁用 ViewPager2 切页，
-            // 避免与主界面分页手势冲突。
-            if (isCurrentlyActive && dX != 0f) {
-                setViewPagerSwipe(false)
-            }
-            super.onChildDraw(
-                c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive
-            )
-        }
-
-        override fun clearView(
-            recyclerView: RecyclerView,
-            viewHolder: RecyclerView.ViewHolder
-        ) {
-            // 手指离开、ItemTouchHelper 即将进入回弹动画；
-            // onSwiped 是否触发都在此处恢复 ViewPager2，确保不遗留禁用态。
-            setViewPagerSwipe(true)
-            super.clearView(recyclerView, viewHolder)
+            // 禁用 item 的 change 动画（notifyItemChanged 触发的交叉淡入淡出）；
+            // 否则展开/关闭操作按钮时 item 会闪一下。保留 add/remove/move 动画。
+            (itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+                ?.supportsChangeAnimations = false
+            // 由 [SwipeRevealListener] 接管手势（点击/长按/左右拖动、松手决策），
+            // 不用 ItemTouchHelper，避免 SWIPE_SUCCESS 路径产生 RecoverAnimation 孤儿，
+            // 从而避免"首次点击无法关闭"的 bug。
+            addOnItemTouchListener(SwipeRevealListener())
         }
     }
 
-    private fun attachSwipeHelper() {
-        itemTouchHelper = ItemTouchHelper(swipeCallback).also {
-            it.attachToRecyclerView(binding.recyclerView)
+    /**
+     * 把手势完全从 ItemTouchHelper 搬到 RecyclerView.OnItemTouchListener：
+     * - 水平拖动：实时 clamp [PlaylistAdapter.setCardX]；
+     * - 松手决策：[-aW*0.4, ∞) 补开到全闭/全开，按当前位置方向翻转到目标；
+     * - 拖动过程中调用 setViewPagerSwipe(false) 防止 ViewPager2 切页；
+     * - 不复用 ItemTouchHelper 的 SWIPE_SUCCESS，故没有 RecoverAnimation 孤儿。
+     */
+    private inner class SwipeRevealListener : RecyclerView.OnItemTouchListener {
+        private val TOUCH_SLOP = 16f
+        private var downX = 0f
+        private var downY = 0f
+        private var dragging = false
+        private var lastDx = 0f
+        private var draggedHolder: PlaylistAdapter.PlaylistHolder? = null
+        private var startTx = 0f
+
+        override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = e.x; downY = e.y
+                    draggedHolder = null; dragging = false; startTx = 0f; lastDx = 0f
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = e.x - downX;
+                    val dy = e.y - downY
+                    if (!dragging && kotlin.math.abs(dx) > TOUCH_SLOP && kotlin.math.abs(dx) >= kotlin.math.abs(
+                            dy
+                        )
+                    ) {
+                        // 找到手指下的 item，确认其 cardContent
+                        val child = rv.findChildViewUnder(downX, downY) ?: return false
+                        val vh =
+                            rv.findContainingViewHolder(child) as? PlaylistAdapter.PlaylistHolder
+                                ?: return false
+                        val pos = vh.bindingAdapterPosition
+                        if (pos == RecyclerView.NO_POSITION) return false
+                        // 已展开时只允许右滑关闭，未开时只允许左滑打开
+                        if (adapter.isSwiped(pos) && dx < 0) return false
+                        if (!adapter.isSwiped(pos) && dx > 0) return false
+                        draggedHolder = vh
+                        startTx = vh.cardContent().translationX
+                        dragging = true
+                        setViewPagerSwipe(false)
+                        return true
+                    }
+                }
+            }
+            return false
         }
+
+        override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {
+            val vh = draggedHolder ?: return
+            when (e.actionMasked) {
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = e.x - downX
+                    lastDx = dx
+                    val aW = adapter.actionWidthPx
+                    val target = (startTx + dx).coerceIn(-aW.toFloat(), 0f)
+                    vh.setCardX(target)
+                    setViewPagerSwipe(false)
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (dragging) {
+                        val pos = vh.bindingAdapterPosition
+                        val aW = adapter.actionWidthPx
+                        if (pos != RecyclerView.NO_POSITION && aW > 0) {
+                            val openThreshold = -aW * 0.4f
+                            val curX = vh.cardContent().translationX
+                            val targetOpen = if (adapter.isSwiped(pos)) {
+                                // 已开，做 close 判定
+                                !(lastDx > aW * 0.2f || curX > -aW * 0.6f)
+                            } else {
+                                // 未开，做 open 判定
+                                lastDx < -aW * 0.2f || curX < openThreshold
+                            }
+                            if (targetOpen && !adapter.isSwiped(pos)) {
+                                vh.setCardX(-aW.toFloat())
+                                adapter.openSwipe(pos)
+                            } else if (!targetOpen && adapter.isSwiped(pos)) {
+                                vh.setCardX(0f)
+                                adapter.resetSwipedItem()
+                            } else {
+                                vh.animateCardTo(
+                                    if (adapter.isSwiped(pos)) -aW.toFloat() else 0f,
+                                    120L
+                                )
+                            }
+                        }
+                    }
+                    dragging = false
+                    draggedHolder = null
+                    setViewPagerSwipe(true)
+                }
+            }
+        }
+
+        override fun onRequestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {}
     }
 
     /**
