@@ -231,6 +231,16 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
      * 控制 waveSideBar 可见性，带淡入/淡出动画避免突兀显隐。
      * ViewPager2 切换动画过程中隐藏，避免侧边栏错位；静止后才重新显示。
      */
+    /**
+     * 双击搜索框时滚动到顶部（由宿主 Activity 调用）
+     */
+    fun scrollToTop() {
+        val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
+        if (layoutManager != null && layoutManager.itemCount > 0) {
+            binding.recyclerView.smoothScrollToPosition(0)
+        }
+    }
+
     fun setWaveSideBarVisible(visible: Boolean) {
         val sideBar = binding?.waveSideBar ?: return
         // 取消进行中的动画，避免显隐快速切换时互相覆盖

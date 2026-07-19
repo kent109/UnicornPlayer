@@ -22,6 +22,7 @@ import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.AlbumFragment
+import com.unicorn.player.ui.ArtistFragment
 import com.unicorn.player.ui.MainPagerAdapter
 import com.unicorn.player.ui.SongsFragment
 import com.unicorn.player.viewmodel.MusicViewModel
@@ -196,10 +197,29 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     }
 
     /**
+     * 获取歌手 Fragment 实例（ViewPager2 中 position 1 对应标签 "f1"），用于双击滚动到顶部
+     */
+    private fun getArtistFragment(): ArtistFragment? {
+        return supportFragmentManager.findFragmentByTag("f1") as? ArtistFragment
+    }
+
+    /**
      * 获取专辑 Fragment 实例（ViewPager2 中 position 2 对应标签 "f2"），用于控制 waveSideBar 可见性
      */
     private fun getAlbumFragment(): AlbumFragment? {
         return supportFragmentManager.findFragmentByTag("f2") as? AlbumFragment
+    }
+
+    /**
+     * 根据当前标签页，滚动对应列表到顶部。
+     * 双击 SearchView 时，歌曲/歌手/专辑页各自的列表滚到顶部。
+     */
+    private fun scrollCurrentTabToTop() {
+        when (binding.viewPager.currentItem) {
+            0 -> getSongsFragment()?.scrollToTop()
+            1 -> getArtistFragment()?.scrollToTop()
+            2 -> getAlbumFragment()?.scrollToTop()
+        }
     }
 
     /**
@@ -244,8 +264,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
                     val currentTime = System.currentTimeMillis()
                     val doubleTapTimeout = android.view.ViewConfiguration.getDoubleTapTimeout()
                     if (currentTime - lastSearchTapTime < doubleTapTimeout) {
-                        // 双击检测：滚动歌曲列表到顶部
-                        getSongsFragment()?.scrollToTop()
+                        // 双击检测：滚动当前标签页列表到顶部
+                        scrollCurrentTabToTop()
                         lastSearchTapTime = 0L
                     } else {
                         lastSearchTapTime = currentTime

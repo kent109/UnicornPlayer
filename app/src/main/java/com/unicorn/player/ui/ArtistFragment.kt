@@ -127,4 +127,14 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
     override fun onArtistClick(artist: Artist, position: Int) {
         startActivity(ArtistSongsActivity.newIntent(requireContext(), artist.name))
     }
+
+    /**
+     * 双击搜索框时滚动到顶部（由宿主 Activity 调用）
+     */
+    fun scrollToTop() {
+        val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
+        if (layoutManager != null && layoutManager.itemCount > 0) {
+            binding.recyclerView.smoothScrollToPosition(0)
+        }
+    }
 }
