@@ -1,5 +1,6 @@
 package com.unicorn.player.util
 
+import android.content.Context
 import android.util.Log
 import com.hw.lrcviewlib.LrcDataBuilder
 import com.hw.lrcviewlib.LrcRow
@@ -10,11 +11,17 @@ import java.util.regex.Pattern
 
 /**
  * 歌词加载工具类
- * 负责从音频文件同目录加载 .lrc 歌词文件
+ * 负责从应用私有外部目录（getExternalFilesDir("Lyrics")）读写 .lrc 歌词文件，并解析为 LrcRow 列表
+ *
+ * 文件命名为 "<音频文件名>.lrc"（不含路径），统一存放在
+ * /storage/emulated/0/Android/data/com.unicorn.player/files/Lyrics/ 目录下，使用 File API 直接读写。
  */
 object LrcHelper {
 
     private const val TAG = "LrcHelper"
+
+    // 歌词存放的子目录名（相对 getExternalFilesDir）
+    private const val LRC_DIR_NAME = "Lyrics"
 
     // LRC时间戳格式: [mm:ss.xx] 或 [mm:ss.xxx]
     private val LRC_TIME_PATTERN = Pattern.compile("\\[(\\d{2}):(\\d{2})\\.(\\d{2,3})]")
@@ -22,43 +29,113 @@ object LrcHelper {
     // LRC offset 标签格式: [offset:±500]，单位毫秒（正=提前，负=延后）
     private val LRC_OFFSET_PATTERN = Pattern.compile("^\\[offset:\\s*([+-]?\\d+)\\s*]\\s*$")
 
+    // ===================== 文件目录 =====================
+
     /**
-     * 根据音频文件路径加载对应的歌词数据
-     * 歌词文件应与音频文件在同一目录下，同名但扩展名为 .lrc
-     *
-     * @param audioPath 音频文件路径
-     * @return 歌词行列表，如果未找到歌词文件则返回 null
+     * 获取歌词存放目录，不存在则创建
+     * 优先使用外部私有目录，回退到内部 filesDir
      */
-    fun loadLrcFromAudioPath(audioPath: String): List<LrcRow>? {
-        if (audioPath.isBlank()) return null
-
-        val audioFile = File(audioPath)
-        val lrcFile = File(audioFile.parent, audioFile.nameWithoutExtension + ".lrc")
-
-        if (!lrcFile.exists()) {
-            Log.i(TAG, "歌词文件不存在: ${lrcFile.absolutePath}")
-            return null
-        }
-
-        return parseLrcFile(lrcFile)
+    private fun getLyricsDir(context: Context): File {
+        val dir = context.getExternalFilesDir(LRC_DIR_NAME)
+            ?: File(context.filesDir, LRC_DIR_NAME)
+        if (!dir.exists()) dir.mkdirs()
+        return dir
     }
 
     /**
-     * 从指定路径加载歌词文件
-     *
-     * @param lrcPath 歌词文件路径
-     * @return 歌词行列表，如果加载失败则返回 null
+     * 根据文件名获取歌词文件对象
      */
-    fun loadLrcFromPath(lrcPath: String): List<LrcRow>? {
-        if (lrcPath.isBlank()) return null
+    private fun getLrcFile(context: Context, fileName: String): File {
+        return File(getLyricsDir(context), fileName)
+    }
 
-        val lrcFile = File(lrcPath)
-        if (!lrcFile.exists()) {
-            LogWriter.writeError(TAG, "歌词文件不存在: $lrcPath")
+    // ===================== 文件读写 =====================
+
+    /**
+     * 将 LRC 歌词内容写入应用私有外部目录，返回是否写入成功。
+     *
+     * 同名文件会被直接覆盖。
+     *
+     * @param fileName 显示名，如 "Artist - Title.lrc"
+     * @param lrcContent 歌词文本内容
+     */
+    fun writeLrcToMusic(context: Context, fileName: String, lrcContent: String): Boolean {
+        return try {
+            val file = getLrcFile(context, fileName)
+            file.writeText(lrcContent, Charsets.UTF_8)
+            true
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "写入 LRC 失败: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * 通过文件名读取歌词内容
+     *
+     * @param fileName 显示名，如 "Artist - Title.lrc"
+     * @return 文件内容；未找到或读取失败返回 null
+     */
+    fun readLrcFromMusic(context: Context, fileName: String): String? {
+        val file = getLrcFile(context, fileName)
+        return try {
+            if (file.exists()) file.readText(Charsets.UTF_8) else null
+        } catch (e: Exception) {
+            Log.e(TAG, "读取 LRC 失败: ${e.message}")
+            LogWriter.writeError(TAG, "读取 LRC 失败: ${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * 删除指定文件名的歌词文件
+     *
+     * @return 是否成功删除到至少一个文件
+     */
+    fun deleteLrcFromMusic(context: Context, fileName: String): Boolean {
+        val file = getLrcFile(context, fileName)
+        return file.exists() && file.delete()
+    }
+
+    // ===================== 歌词加载 =====================
+
+    /**
+     * 根据音频文件路径加载对应的歌词数据
+     * 歌词文件按 "<音频文件名>.lrc" 存放在应用私有外部目录下
+     *
+     * @param audioPath 音频文件完整路径，如 "/storage/music/Artist - Title.flac"
+     * @return 歌词行列表；未找到返回 null
+     */
+    fun loadLrcFromAudioPath(context: Context, audioPath: String): List<LrcRow>? {
+        if (audioPath.isBlank()) return null
+
+        val fileName = File(audioPath).nameWithoutExtension + ".lrc"
+        val content = readLrcFromMusic(context, fileName) ?: run {
+            Log.i(TAG, "歌词文件不存在: $fileName")
             return null
         }
+        return parseLrcContent(context, content)
+    }
 
-        return parseLrcFile(lrcFile)
+    // ===================== 解析 =====================
+
+    /**
+     * 解析 LRC 文本内容。
+     *
+     * 注意：LrcDataBuilder 要求传入 File，因此将内容写入缓存临时文件后再解析，
+     * 解析完成即删除。
+     */
+    private fun parseLrcContent(context: Context, content: String): List<LrcRow>? {
+        val tmpFile = File.createTempFile("lrc_parse", ".lrc", context.cacheDir)
+        return try {
+            tmpFile.writeText(content, Charsets.UTF_8)
+            parseLrcFile(tmpFile)
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "解析 LRC 内容失败: ${e.message}", e)
+            null
+        } finally {
+            tmpFile.delete()
+        }
     }
 
     /**
@@ -73,7 +150,7 @@ object LrcHelper {
             Log.i(TAG, "检测到 offset 标签: ${offset}ms")
         }
 
-        // 方法1: 尝试使用 LrcDataBuilder (可能参数类型不对)
+        // 方法1: 尝试使用 LrcDataBuilder
         try {
             val result = LrcDataBuilder().Build(lrcFile)
             if (result != null && result.isNotEmpty()) {
@@ -96,7 +173,7 @@ object LrcHelper {
      */
     private fun parseOffsetFromLrc(lrcFile: File): Int {
         try {
-            lrcFile.inputStream().bufferedReader(Charsets.UTF_8)?.use { reader ->
+            lrcFile.inputStream().bufferedReader(Charsets.UTF_8).use { reader ->
                 var line: String?
                 while (reader.readLine().also { line = it } != null) {
                     line?.let { raw ->
@@ -125,7 +202,7 @@ object LrcHelper {
         }.map { row ->
             val newTime = (row.CurrentRowTime + offset).coerceAtLeast(0)
             LrcRow(row.rowData, row.TimeText, newTime)
-        }.sortedBy { it.currentRowTime }
+        }.sortedBy { it.CurrentRowTime }
     }
 
     /**
@@ -161,7 +238,7 @@ object LrcHelper {
             }
 
             // 按时间排序
-            return lrcRows.sortedBy { it.currentRowTime }
+            return lrcRows.sortedBy { it.CurrentRowTime }
         } catch (e: Exception) {
             LogWriter.writeError(TAG, "手动解析 LRC 文件失败: ${e.message}", e)
             return null

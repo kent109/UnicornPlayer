@@ -130,7 +130,12 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:cs.android.com)",
       "Bash(echo \"EXIT=$?\")",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(grep -c '\\\\\\\\r')",
+      "Bash(unix2dos app/src/main/java/com/unicorn/player/util/LrcHelper.kt app/src/main/java/com/unicorn/player/util/LrcFetcher.kt app/src/main/java/com/unicorn/player/PlayerActivity.kt app/src/main/java/com/unicorn/player/LrcSearchActivity.kt)",
+      "Bash(unix2dos app/src/main/java/com/unicorn/player/LrcSearchActivity.kt)",
+      "Bash(unix2dos app/src/main/java/com/unicorn/player/util/LrcHelper.kt)",
+      "Bash(unix2dos *)"
     ]
   }
 }

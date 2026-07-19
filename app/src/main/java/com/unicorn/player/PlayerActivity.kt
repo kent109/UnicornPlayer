@@ -18,7 +18,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.toColorInt
 import androidx.lifecycle.lifecycleScope
-import com.unicorn.player.util.toSimpleCustom
 import com.hw.lrcviewlib.LrcRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.service.MusicService
@@ -26,6 +25,7 @@ import com.unicorn.player.util.DisplayUtil
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
+import com.unicorn.player.util.toSimpleCustom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -52,7 +52,7 @@ class PlayerActivity : AppCompatActivity() {
     /**
      * 同步读取"显示时间标签"DataStore 键
      */
-    private fun isTimeLabelVisible(timeLabelDefault: Boolean = true): Boolean = runBlocking {
+    private fun isTimeLabelVisible(timeLabelDefault: Boolean = false): Boolean = runBlocking {
         try {
             applicationContext.lyricsDataStore.data.first()[LyricsOptionsActivity.TIME_LABEL_VISIBLE]
                 ?: timeLabelDefault
@@ -73,7 +73,7 @@ class PlayerActivity : AppCompatActivity() {
      * （中括号括起，百分秒两位）。开关关闭时一律剥离时间戳标记，仅保留纯文本。
      */
     private fun applyTimeLabelToRows(rows: List<LrcRow>): List<LrcRow> {
-        val visible = isTimeLabelVisible(timeLabelDefault = true)
+        val visible = isTimeLabelVisible(timeLabelDefault = false)
         return rows.map { row ->
             val textOnly = row.rowData.replace(LRC_TIME_PATTERN_REGEX, "").trim()
             val formatted = formatTimeLabel(row.CurrentRowTime)
@@ -220,8 +220,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun applyFontSize() {
         val tier = runBlocking {
             try {
-                val size = applicationContext.lyricsDataStore.data.first()[LyricsOptionsActivity.FONT_SIZE]
-                    ?: LyricsOptionsActivity.FONT_SIZE_MEDIUM
+                val size =
+                    applicationContext.lyricsDataStore.data.first()[LyricsOptionsActivity.FONT_SIZE]
+                        ?: LyricsOptionsActivity.FONT_SIZE_MEDIUM
                 size.coerceIn(0, 2)
             } catch (e: Exception) {
                 Log.e(TAG, "读取 font_size 失败", e)
@@ -347,19 +348,13 @@ class PlayerActivity : AppCompatActivity() {
     private var lrcPreviewDialog: LrcPreviewDialog? = null
 
     /**
-     * 全屏模式下长按 LrcView 时：读取本地 .lrc 文件内容，弹出编辑预览对话框
+     * 全屏模式下长按 LrcView 时：从应用私有外部目录读取本地 .lrc 文件内容，弹出编辑预览对话框
      */
     private fun showLrcPreviewForLocalFile(audioPath: String) {
-        val lrcFile = File(audioPath).let { File(it.parent, it.nameWithoutExtension + ".lrc") }
-        if (!lrcFile.exists()) {
+        val lrcFileName = File(audioPath).nameWithoutExtension + ".lrc"
+        val content = LrcHelper.readLrcFromMusic(this, lrcFileName)
+        if (content == null) {
             Toast.makeText(this, "本地歌词文件不存在", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val content = try {
-            lrcFile.readText(Charsets.UTF_8)
-        } catch (e: Exception) {
-            Log.e(TAG, "读取本地歌词失败: ${e.message}", e)
-            Toast.makeText(this, "读取歌词文件失败", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -387,13 +382,13 @@ class PlayerActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    val audioFile = File(audioPath)
-                    val parentDir = audioFile.parent ?: throw Exception("无法获取文件目录")
-                    val baseName = audioFile.nameWithoutExtension
-                    val lrcFile = File(parentDir, "$baseName.lrc")
+                    val lrcFileName = File(audioPath).nameWithoutExtension + ".lrc"
                     // 转为简体中文以保持一致
                     val simplified = content.toSimpleCustom()
-                    lrcFile.writeText(simplified, Charsets.UTF_8)
+                    val success =
+                        LrcHelper.writeLrcToMusic(this@PlayerActivity, lrcFileName, simplified)
+                    if (!success) throw Exception("写入歌词文件失败")
+                    Log.i(TAG, "歌词保存成功: $lrcFileName")
                 }
                 Toast.makeText(this@PlayerActivity, "修改成功", Toast.LENGTH_SHORT).show()
                 // 仍在播放当前歌曲时重载 LrcView 数据
@@ -414,7 +409,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun reloadLrcView(audioPath: String) {
         lifecycleScope.launch {
             try {
-                val lrcRows = LrcHelper.loadLrcFromAudioPath(audioPath)
+                val lrcRows = LrcHelper.loadLrcFromAudioPath(this@PlayerActivity, audioPath)
                 if (!lrcRows.isNullOrEmpty()) {
                     showNoLyricsButton = false
                     binding.btnCreateLyrics.visibility = View.GONE
@@ -567,7 +562,7 @@ class PlayerActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val lrcRows = LrcHelper.loadLrcFromAudioPath(audioPath)
+                val lrcRows = LrcHelper.loadLrcFromAudioPath(this@PlayerActivity, audioPath)
                 Log.d(TAG, "loadLrcFromAudioPath 返回: ${lrcRows?.size ?: "null"} 行")
                 if (!lrcRows.isNullOrEmpty()) {
                     showNoLyricsButton = false
@@ -605,8 +600,8 @@ class PlayerActivity : AppCompatActivity() {
      * 从网络下载歌词，下载成功后刷新 LrcView
      */
     private fun fetchLrcFromNetwork(audioPath: String) {
-        LrcFetcher.fetchLrc(audioPath, object : LrcFetcher.LrcFetchCallback {
-            override fun onSuccess(lrcFile: java.io.File) {
+        LrcFetcher.fetchLrc(this@PlayerActivity, audioPath, object : LrcFetcher.LrcFetchCallback {
+            override fun onSuccess(lrcFileName: String) {
                 lifecycleScope.launch {
                     // 检查当前播放的还是不是这首歌，避免切歌后显示旧歌词
                     if (!isCurrentSong(audioPath)) {
@@ -614,7 +609,7 @@ class PlayerActivity : AppCompatActivity() {
                         return@launch
                     }
                     try {
-                        val lrcRows = LrcHelper.loadLrcFromPath(lrcFile.absolutePath)
+                        val lrcRows = LrcHelper.loadLrcFromAudioPath(this@PlayerActivity, audioPath)
                         if (!lrcRows.isNullOrEmpty()) {
                             showNoLyricsButton = false
                             binding.btnCreateLyrics.visibility = View.GONE
@@ -634,9 +629,9 @@ class PlayerActivity : AppCompatActivity() {
                 }
             }
 
-            override fun onFileExists(lrcFile: java.io.File) {
+            override fun onFileExists(lrcFileName: String) {
                 // 已在 loadAndShowLrc 中处理本地文件，此处忽略
-                Log.d(TAG, "歌词文件已存在（回调）: ${lrcFile.absolutePath}")
+                Log.d(TAG, "歌词文件已存在（回调）: $lrcFileName")
             }
 
             override fun onNoLyricsFound() {

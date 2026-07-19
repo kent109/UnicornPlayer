@@ -1,7 +1,7 @@
 package com.unicorn.player.util
 
+import android.content.Context
 import android.util.Log
-import com.unicorn.player.util.toSimpleCustom
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.unicorn.player.model.LrcSearchResult
@@ -10,19 +10,18 @@ import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import java.io.File
 import java.io.IOException
 import java.util.Collections
 
 /**
  * 歌词网络获取工具类
- * 从 lrclib.net 搜索并下载同步歌词（LRC），保存到音频文件同目录
+ * 从 lrclib.net 搜索并下载同步歌词（LRC），保存到应用私有外部目录
  *
  * 入参为音频文件路径（如 "/music/Artist - Title.flac"）：
- *  1. 检查同目录是否存在同名 .lrc 文件，存在则跳过
+ *  1. 检查应用私有外部目录下是否存在同名 .lrc 文件，存在则跳过
  *  2. 调用 https://lrclib.net/api/search?q= 搜索
  *  3. 取第一条结果的 syncedLyrics，首行插入 [00:00.00]Artist - Title
- *  4. 保存为 "Artist - Title.lrc"
+ *  4. 保存为应用私有外部目录下的 "Artist - Title.lrc"
  */
 object LrcFetcher {
 
@@ -47,13 +46,15 @@ object LrcFetcher {
 
     /**
      * 回调接口
+     *
+     * lrcFileName 歌词文件名（不含路径），如 "Artist - Title.lrc"
      */
     interface LrcFetchCallback {
         /** 成功下载并保存 */
-        fun onSuccess(lrcFile: File)
+        fun onSuccess(lrcFileName: String)
 
         /** 歌词文件已存在，无需下载 */
-        fun onFileExists(lrcFile: File)
+        fun onFileExists(lrcFileName: String)
 
         /** 未搜索到歌词 */
         fun onNoLyricsFound()
@@ -159,10 +160,11 @@ object LrcFetcher {
     /**
      * 根据音频文件路径获取歌词
      *
+     * @param context 上下文，用于访问应用私有外部目录
      * @param audioPath 音频文件完整路径，如 "/storage/music/Artist - Title.flac"
      * @param callback 结果回调（在子线程执行，勿直接操作 UI）
      */
-    fun fetchLrc(audioPath: String, callback: LrcFetchCallback) {
+    fun fetchLrc(context: Context, audioPath: String, callback: LrcFetchCallback) {
         if (!lyricsEnabled) {
             return
         }
@@ -188,28 +190,23 @@ object LrcFetcher {
                 }
             }
 
-            override fun onSuccess(lrcFile: File) = notifyOriginal { callback.onSuccess(lrcFile) }
-            override fun onFileExists(lrcFile: File) =
-                notifyOriginal { callback.onFileExists(lrcFile) }
+            override fun onSuccess(lrcFileName: String) =
+                notifyOriginal { callback.onSuccess(lrcFileName) }
+
+            override fun onFileExists(lrcFileName: String) =
+                notifyOriginal { callback.onFileExists(lrcFileName) }
 
             override fun onNoLyricsFound() = notifyOriginal { callback.onNoLyricsFound() }
             override fun onFailure(message: String) = notifyOriginal { callback.onFailure(message) }
         }
 
-        val audioFile = File(audioPath)
-        val parentDir = audioFile.parent ?: run {
-            inFlightRequests.remove(audioPath)
-            wrappedCallback.onFailure("无法获取文件目录: $audioPath")
-            return
-        }
+        val baseName = java.io.File(audioPath).nameWithoutExtension // "Artist - Title"
+        val lrcFileName = "$baseName.lrc"
 
-        val baseName = audioFile.nameWithoutExtension // "Artist - Title"
-        val lrcFile = File(parentDir, "$baseName.lrc")
-
-        // 1. 检查歌词文件是否已存在
-        if (lrcFile.exists()) {
+        // 1. 检查应用私有外部目录下歌词文件是否已存在
+        if (LrcHelper.readLrcFromMusic(context, lrcFileName) != null) {
             inFlightRequests.remove(audioPath)
-            wrappedCallback.onFileExists(lrcFile)
+            wrappedCallback.onFileExists(lrcFileName)
             return
         }
 
@@ -256,7 +253,7 @@ object LrcFetcher {
                 }
 
                 try {
-                    parseAndSaveLyrics(json, artist, title, lrcFile, wrappedCallback)
+                    parseAndSaveLyrics(context, json, artist, title, lrcFileName, wrappedCallback)
                 } catch (e: Exception) {
                     Log.e(TAG, "解析歌词失败: ${e.message}", e)
                     wrappedCallback.onFailure("解析失败: ${e.message}")
@@ -285,12 +282,15 @@ object LrcFetcher {
      * 1. 遍历所有结果，找到 trackName 与搜索 title 精确匹配（忽略大小写）的项
      * 2. 如果有多条匹配，随机选取一条
      * 3. 如果没有精确匹配，退化为取第一条有 syncedLyrics 的结果
+     *
+     * @param lrcFileName 目标歌词文件名（不含路径）
      */
     private fun parseAndSaveLyrics(
+        context: Context,
         json: String,
         artist: String,
         title: String,
-        lrcFile: File,
+        lrcFileName: String,
         callback: LrcFetchCallback
     ) {
         // lrclib 返回的是 JSON 数组
@@ -347,11 +347,15 @@ object LrcFetcher {
         val header = "[00:00.00]$artist - $title"
         val lrcContent = header + "\r\n" + cleanedLyrics
 
-        // 转为简体中文后写入文件（CRLF 换行）
+        // 转为简体中文后写入应用私有外部目录（CRLF 换行）
         val simplifiedContent = lrcContent.toSimpleCustom()
-        lrcFile.writeText(simplifiedContent, Charsets.UTF_8)
-        Log.i(TAG, "歌词保存成功: ${lrcFile.absolutePath}")
-        callback.onSuccess(lrcFile)
+        val success = LrcHelper.writeLrcToMusic(context, lrcFileName, simplifiedContent)
+        if (success) {
+            Log.i(TAG, "歌词保存成功: $lrcFileName")
+            callback.onSuccess(lrcFileName)
+        } else {
+            callback.onFailure("保存歌词文件失败")
+        }
     }
 
     /**

@@ -11,16 +11,18 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.unicorn.player.util.toSimpleCustom
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.adapter.LrcSearchResultAdapter
 import com.unicorn.player.databinding.ActivityLrcSearchBinding
 import com.unicorn.player.model.LrcSearchResult
 import com.unicorn.player.util.LrcFetcher
+import com.unicorn.player.util.LrcHelper
+import com.unicorn.player.util.toSimpleCustom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
 
 /**
  * 歌词搜索界面
@@ -189,16 +191,8 @@ class LrcSearchActivity : AppCompatActivity(),
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    val audioFile = File(audioPath)
-                    val parentDir = audioFile.parent ?: throw Exception("无法获取文件目录")
-                    val baseName = audioFile.nameWithoutExtension
-                    val lrcFile = File(parentDir, "$baseName.lrc")
-
-                    // 删除已有歌词文件
-                    if (lrcFile.exists()) {
-                        lrcFile.delete()
-                        Log.i(TAG, "已删除旧歌词: ${lrcFile.absolutePath}")
-                    }
+                    val baseName = File(audioPath).nameWithoutExtension
+                    val lrcFileName = "$baseName.lrc"
 
                     // 首行插入 "[00:00.00]Artist - Title"
                     val artist = result.artistName.ifBlank {
@@ -213,10 +207,15 @@ class LrcSearchActivity : AppCompatActivity(),
                     val header = "[00:00.00]$artist - $title"
                     val lrcContent = header + "\r\n" + cleanedLyrics
 
-                    // 转为简体中文后写入文件（CRLF 换行）
+                    // 转为简体中文后写入应用私有外部目录（CRLF 换行），同名文件会被覆盖
                     val simplifiedContent = lrcContent.toSimpleCustom()
-                    lrcFile.writeText(simplifiedContent, Charsets.UTF_8)
-                    Log.i(TAG, "歌词保存成功: ${lrcFile.absolutePath}")
+                    val success = LrcHelper.writeLrcToMusic(
+                        this@LrcSearchActivity,
+                        lrcFileName,
+                        simplifiedContent
+                    )
+                    if (!success) throw Exception("写入歌词文件失败")
+                    Log.i(TAG, "歌词保存成功: $lrcFileName")
                 }
 
                 Toast.makeText(this@LrcSearchActivity, "歌词已保存", Toast.LENGTH_SHORT).show()
