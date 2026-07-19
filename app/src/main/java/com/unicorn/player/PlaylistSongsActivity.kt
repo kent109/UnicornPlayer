@@ -114,20 +114,30 @@ class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMo
     }
 
     private fun setupAddButton() {
-        binding.btAddSongs.setOnClickListener {
-            showSelectSongsDialog()
+        binding.btAddSongs.setOnClickListener { view ->
+            // 以「添加」按钮中心作为弹窗动画起点（参考 PlayerActivity 中 LrcPreviewDialog 触发坐标计算方式）
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+            val centerX = location[0] + view.width / 2f
+            val centerY = location[1] + view.height / 2f
+            showSelectSongsDialog(centerX, centerY)
         }
     }
 
     /**
      * 弹出添加歌曲弹窗；外部传入已收集的全量歌曲与歌单内已有 songId（预勾选）
+     *
+     * @param triggerX 弹窗动画起点 X（屏幕坐标）
+     * @param triggerY 弹窗动画起点 Y（屏幕坐标）
      */
-    private fun showSelectSongsDialog() {
+    private fun showSelectSongsDialog(triggerX: Float, triggerY: Float) {
         // 收集全量歌曲与歌单内已有 songId（同步方式通过已缓存的 list）
         val allSongs = viewModel.getSortedFullSongs()
         val alreadySelectedIds = playlistSongs.map { it.id }
         SelectSongsDialog(
             context = this,
+            triggerX = triggerX,
+            triggerY = triggerY,
             playlistId = playlistId,
             playlistName = playlistName,
             allSongs = allSongs,
