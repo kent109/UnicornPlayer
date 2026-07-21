@@ -17,12 +17,13 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.MainActivity
 import com.unicorn.player.PlaylistSongsActivity
+import com.unicorn.player.R
 import com.unicorn.player.adapter.PlaylistAdapter
 import com.unicorn.player.databinding.FragmentPlaylistBinding
-import com.unicorn.player.R
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.viewmodel.PlaylistViewModel
 import com.unicorn.player.viewmodel.PlaylistViewModelFactory
+import com.unicorn.player.widget.BezierCircleHeader
 
 /**
  * 歌单标签页
@@ -229,6 +230,8 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
     }
 
     private fun setupSwipeRefresh() {
+        val bezierCircleHeader = BezierCircleHeader(context)
+        binding.smartRefreshLayout.setRefreshHeader(bezierCircleHeader)
         binding.smartRefreshLayout.apply {
             setOnRefreshListener {
                 viewModel.refreshPlaylists()

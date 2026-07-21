@@ -6,9 +6,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.unicorn.player.R
 import com.unicorn.player.adapter.SongAdapter
 import com.unicorn.player.databinding.FragmentSongsBinding
 import com.unicorn.player.model.Song
@@ -16,6 +17,7 @@ import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
+import com.unicorn.player.widget.CustomRadarHeader
 
 /**
  * 歌曲标签页 Fragment，承载歌曲列表、下拉刷新、滚动定位等功能。
@@ -182,7 +184,12 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         }
 
         viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
-            binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+            // 下拉刷新（扫描）期间不显示屏幕中央的 loading 图标
+            if (isScanning) {
+                binding.progressBar.visibility = View.GONE
+            } else {
+                binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+            }
         }
     }
 
@@ -203,8 +210,10 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
     private fun setupSmartRefreshLayout() {
         val smartRefreshLayout = binding.smartRefreshLayout
 
-        val twoLevelHeader = com.scwang.smart.refresh.header.TwoLevelHeader(requireContext())
-        smartRefreshLayout.setRefreshHeader(twoLevelHeader)
+        val radarHeader = CustomRadarHeader(requireContext())
+        radarHeader.setPrimaryColorId(R.color.background)
+        radarHeader.setAccentColorId(R.color.icon_color)
+        smartRefreshLayout.setRefreshHeader(radarHeader)
 
         smartRefreshLayout.setHeaderHeight(100f)
         smartRefreshLayout.setEnableOverScrollBounce(true)
@@ -224,11 +233,6 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
             isScanning = true
             viewModel.loadMusic(force = true)
         }
-
-        twoLevelHeader.setOnTwoLevelListener {
-            Log.d(TAG, "二级刷新触发")
-            true
-        }
     }
 
     private fun setupScrollStateListener() {
@@ -246,6 +250,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
                         binding.btnScrollToCurrent.visibility = View.GONE
                         hideRunnable.let { hideHandler.removeCallbacks(it) }
                     }
+
                     androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE -> {
                         isScrolling = false
                         if (!scrollToContentClick) {
