@@ -136,7 +136,9 @@
       "Bash(unix2dos app/src/main/java/com/unicorn/player/LrcSearchActivity.kt)",
       "Bash(unix2dos app/src/main/java/com/unicorn/player/util/LrcHelper.kt)",
       "Bash(unix2dos *)",
-      "Bash(iconv -f utf-8 -t utf-8 app/src/main/res/drawable/bg_select_songs_dialog.xml)"
+      "Bash(iconv -f utf-8 -t utf-8 app/src/main/res/drawable/bg_select_songs_dialog.xml)",
+      "Bash(awk 'BEGIN{ORS=\"\\\\r\\\\n\"} {print}' \"app/src/main/java/com/unicorn/player/ui/SelectSongsDialog.kt\")",
+      "Bash(mv /tmp/select_songs_dialog_crlf.kt \"app/src/main/java/com/unicorn/player/ui/SelectSongsDialog.kt\")"
     ]
   }
 }

@@ -15,13 +15,14 @@ import com.unicorn.player.model.Song
  * - 整行点击切换选中态（仅展示，无旋转动画 / 无 btnMore / 无音质标签）
  */
 class SelectableSongAdapter(
-    private val onSelectionChanged: () -> Unit = {}
+    initiallySelected: Collection<Long> = emptyList()
 ) : ListAdapter<Song, SelectableSongAdapter.SelectableSongHolder>(DIFF) {
 
     val selectedIds: MutableSet<Long> = linkedSetOf()
 
     init {
-        // 通知外部选中数量变化
+        // 预置初始选中态，submitList 首次绑定时直接读取，无需额外刷新
+        selectedIds.addAll(initiallySelected)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SelectableSongHolder {
@@ -33,16 +34,6 @@ class SelectableSongAdapter(
 
     override fun onBindViewHolder(holder: SelectableSongHolder, position: Int) {
         holder.bind(getItem(position))
-    }
-
-    /**
-     * 以给定 id 集合初始化勾选状态（清空之前的选择）
-     */
-    fun initSelection(ids: Collection<Long>) {
-        selectedIds.clear()
-        selectedIds.addAll(ids)
-        notifyDataSetChanged()
-        onSelectionChanged()
     }
 
     inner class SelectableSongHolder(
@@ -61,7 +52,6 @@ class SelectableSongAdapter(
                     selectedIds.add(song.id)
                 }
                 binding.checkBox.isChecked = selectedIds.contains(song.id)
-                onSelectionChanged()
             }
         }
 

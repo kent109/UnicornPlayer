@@ -10,6 +10,7 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.core.graphics.drawable.toDrawable
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.adapter.SelectableSongAdapter
 import com.unicorn.player.databinding.DialogSelectSongsBinding
 import com.unicorn.player.model.Song
@@ -45,6 +46,9 @@ class SelectSongsDialog(
     private lateinit var binding: DialogSelectSongsBinding
     private lateinit var adapter: SelectableSongAdapter
 
+    // 列表首次加载完成前暂不显示弹窗，避免弹窗闪烁
+    private var listObserver: RecyclerView.AdapterDataObserver? = null
+
     // 触摸追踪（与 LrcPreviewDialog 一致）
     private var startY = 0f
     private var startX = 0f
@@ -57,7 +61,6 @@ class SelectSongsDialog(
         // 歌单名预填
         binding.etPlaylistName.setText(playlistName)
         binding.etPlaylistName.setSelection(playlistName.length)
-        setupRecyclerView()
         dialogView = binding.root
 
         // 初始透明，避免尺寸跳变（先以默认大小显示但不可见，调整尺寸后再淡入）
@@ -97,10 +100,15 @@ class SelectSongsDialog(
         }
 
         dialog?.setOnDismissListener {
+            // 清理 AdapterDataObserver，避免内存泄漏
+            listObserver?.let { adapter.unregisterAdapterDataObserver(it) }
+            listObserver = null
             isDismissing = false
         }
 
-        dialog?.show()
+        // dialog 创建完成后才设置 RecyclerView，确保 submitList 同步触发
+        // onItemRangeInserted 时 dialog 已不为 null，dialog?.show() 才能生效
+        setupRecyclerView()
     }
 
     /**
@@ -117,12 +125,23 @@ class SelectSongsDialog(
     }
 
     private fun setupRecyclerView() {
-        adapter = SelectableSongAdapter()
-        adapter.initSelection(alreadySelectedIds)
+        adapter = SelectableSongAdapter(initiallySelected = alreadySelectedIds)
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(context)
             adapter = this@SelectSongsDialog.adapter
         }
+        // 等 AsyncListDiffer 首次把数据刷入 RecyclerView 后，再真正显示弹窗
+        val observer = object : RecyclerView.AdapterDataObserver() {
+            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
+                if (itemCount > 0) {
+                    adapter.unregisterAdapterDataObserver(this)
+                    listObserver = null
+                    dialog?.show()
+                }
+            }
+        }
+        listObserver = observer
+        adapter.registerAdapterDataObserver(observer)
         adapter.submitList(allSongs)
     }
 
@@ -150,7 +169,7 @@ class SelectSongsDialog(
             scaleY = 0.1f
             translationX = offsetX
             translationY = offsetY
-            alpha = 0f
+            alpha = 1f
             animate()
                 .scaleX(1f)
                 .scaleY(1f)
