@@ -165,9 +165,13 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
             /**
              * 页面滚动状态变化时控制 AlbumFragment 的 waveSideBar 可见性：
              * 滑动/动画过程中隐藏，静止（IDLE）后才显示，避免切换动画里侧边栏错位。
+             *
+             * 同时要求 currentItem == 2（当前在专辑页），避免停在歌手/歌单页时
+             * 相邻的专辑页 waveSideBar 被淡入（alpha→1），拖向专辑瞬间滑入视野造成闪现。
              */
             override fun onPageScrollStateChanged(state: Int) {
-                getAlbumFragment()?.setWaveSideBarVisible(state == ViewPager2.SCROLL_STATE_IDLE)
+                val show = state == ViewPager2.SCROLL_STATE_IDLE && binding.viewPager.currentItem == 2
+                getAlbumFragment()?.setWaveSideBarVisible(show)
             }
         })
         // 初始化时同步一次可见性

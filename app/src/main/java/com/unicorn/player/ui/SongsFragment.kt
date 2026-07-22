@@ -178,15 +178,17 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         viewModel.allSongs.observe(viewLifecycleOwner) { songs ->
             songAdapter.submitList(songs)
             updateSongCount(songs.size)
-            if (isScanning) {
-                onScanComplete()
-            }
         }
 
         viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
-            // 下拉刷新（扫描）期间不显示屏幕中央的 loading 图标
             if (isScanning) {
+                // 下拉刷新（扫描）期间不显示屏幕中央的 loading 图标；
+                // 扫描完成（isLoading 从 true 跳变到 false）时收尾，
+                // 而非在 allSongs 变化时触发，避免 clearHiddenSongs 先行误判扫描结束。
                 binding.progressBar.visibility = View.GONE
+                if (!isLoading) {
+                    onScanComplete()
+                }
             } else {
                 binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
             }
@@ -231,6 +233,8 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
             savedCurrentSongId = host?.musicService?.currentSong?.value?.id
             savedIsPlaying = host?.musicService?.isPlaying?.value == true
             isScanning = true
+            // 立即隐藏中间进度条，避免下拉刷新时显示
+            binding.progressBar.visibility = View.GONE
             viewModel.loadMusic(force = true)
         }
     }
