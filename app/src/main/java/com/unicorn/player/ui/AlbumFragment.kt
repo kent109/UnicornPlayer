@@ -14,13 +14,9 @@ import com.unicorn.player.MainActivity
 import com.unicorn.player.adapter.AlbumAdapter
 import com.unicorn.player.databinding.FragmentAlbumBinding
 import com.unicorn.player.model.Album
-import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
-import com.unicorn.player.util.PinyinUtil
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
-import java.text.Collator
-import java.util.Locale
 
 /**
  * 专辑标签页 Fragment，按专辑名拼音首字母分组展示专辑列表。
@@ -34,8 +30,6 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
 
     private lateinit var viewModel: MusicViewModel
     private lateinit var albumAdapter: AlbumAdapter
-
-    private val collator = Collator.getInstance(Locale.CHINA)
 
     /** 延迟恢复 ViewPager 的主线程 Handler，避免在字母选择回调里直接恢复导致手势冲突 */
     private val handler = Handler(Looper.getMainLooper())
@@ -86,8 +80,9 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
         val factory = MusicViewModelFactory(MusicRepository(requireContext()), requireContext())
         viewModel = ViewModelProvider(requireActivity(), factory)[MusicViewModel::class.java]
 
-        viewModel.allSongs.observe(viewLifecycleOwner) { songs ->
-            submitAlbums(songs)
+        // 观察 ViewModel 后台预计算好的专辑列表（已分组、已排序），主线程仅做轻量扁平化
+        viewModel.albums.observe(viewLifecycleOwner) { albums ->
+            submitAlbumItems(albums)
         }
     }
 
@@ -159,59 +154,22 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     }
 
     /**
-     * 按专辑名分组统计歌曲数量，按拼音首字母分组排序后提交。
+     * 将 ViewModel 预计算好的专辑列表扁平化为 Header + items，并记录每个首字母第一个 Header 的位置。
+     * 拼音转换与分组排序已在 ViewModel 后台完成，此处仅做 O(n) 的轻量遍历，不阻塞主线程。
      */
-    private fun submitAlbums(songs: List<Song>) {
-        // 以 lowerCase 专辑名作为分组键，保留首次出现的原始大小写用于显示
-        val displayCase = LinkedHashMap<String, String>()
-        // 每组维护：歌曲数 与 各歌手出现次数（用于取数量最多的歌手作为副标题）
-        val counts = LinkedHashMap<String, Int>()
-        val artistCounts = LinkedHashMap<String, LinkedHashMap<String, Int>>()
-
-        for (song in songs) {
-            val key = song.album.lowercase()
-            if (!displayCase.containsKey(key)) {
-                displayCase[key] = song.album
-            }
-            counts[key] = (counts[key] ?: 0) + 1
-            val groupArtists = artistCounts.getOrPut(key) { LinkedHashMap() }
-            groupArtists[song.artist] = (groupArtists[song.artist] ?: 0) + 1
-        }
-
-        val albums = counts.map { (key, count) ->
-            val topArtist = artistCounts[key]?.maxByOrNull { it.value }?.key ?: ""
-            Album(displayCase[key] ?: key, topArtist, count)
-        }
-
-        // 按拼音首字母分组：字母 A-Z 顺序，"#" 置于末尾
-        val grouped = LinkedHashMap<String, MutableList<Album>>()
-        for (album in albums) {
-            val letter = PinyinUtil.getPinyinFirstLetter(album.name)
-            grouped.getOrPut(letter) { mutableListOf() }.add(album)
-        }
-
-        // 组内按专辑名排序（中文按拼音、英文不区分大小写）
-        for ((_, list) in grouped) {
-            list.sortWith(compareBy(collator) { it.name.lowercase() })
-        }
-
-        val orderedLetters = grouped.keys.sortedWith { a, b ->
-            when {
-                a == "#" -> 1
-                b == "#" -> -1
-                else -> a.compareTo(b)
-            }
-        }
-
-        // 扁平化为 header + items 列表，并记录每个首字母第一个 Header 的位置
+    private fun submitAlbumItems(albums: List<Album>) {
         val items = mutableListOf<AlbumAdapter.AlbumListItem>()
         val indexMap = LinkedHashMap<String, Int>()
-        for (letter in orderedLetters) {
-            indexMap[letter] = items.size
-            items.add(AlbumAdapter.AlbumListItem.Header(letter))
-            grouped[letter]?.forEach { album ->
-                items.add(AlbumAdapter.AlbumListItem.Item(album))
+
+        // 列表已按首字母有序，遇到新字母即插入 Header
+        var currentLetter: String? = null
+        for (album in albums) {
+            if (album.firstLetter != currentLetter) {
+                currentLetter = album.firstLetter
+                indexMap[currentLetter] = items.size
+                items.add(AlbumAdapter.AlbumListItem.Header(currentLetter))
             }
+            items.add(AlbumAdapter.AlbumListItem.Item(album))
         }
         letterIndexMap = indexMap
 

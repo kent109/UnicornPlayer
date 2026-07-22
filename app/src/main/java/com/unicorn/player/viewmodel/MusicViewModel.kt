@@ -5,16 +5,22 @@ import androidx.core.content.edit
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.unicorn.player.model.Album
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
+import com.unicorn.player.util.PinyinUtil
 import com.unicorn.player.service.applicationDataStore
 import com.unicorn.player.service.DataStoreKeys
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.Collator
+import java.util.Locale
 
 class MusicViewModel(
     private val repository: MusicRepository,
@@ -43,6 +49,14 @@ class MusicViewModel(
     private val _sortMode = MutableLiveData(SortMode.BY_TITLE)
     val sortMode: LiveData<SortMode> = _sortMode
 
+    // 按首字母分组排序后的专辑列表，由后台协程计算后缓存，避免 Fragment 在主线程重复算拼音/排序
+    private val _albums = MutableLiveData<List<Album>>(emptyList())
+    val albums: LiveData<List<Album>> = _albums
+
+    private var albumsJob: Job? = null
+
+    private val collator = Collator.getInstance(Locale.CHINA)
+
     private var searchJob: Job? = null
 
     // Room DB 中的原始歌曲列表（未过滤），用于检测外部删除
@@ -54,7 +68,14 @@ class MusicViewModel(
     // 隐藏歌曲注册表的观察者引用，用于在 onCleared 时移除
     private var hiddenRegistryObserver: androidx.lifecycle.Observer<Set<Long>>? = null
 
+    // 监听歌曲列表变化，触发后台专辑分组计算
+    private val allSongsObserver: Observer<List<Song>> = Observer { songs ->
+        if (songs.isNotEmpty()) computeAlbums(songs)
+    }
+
     init {
+        // 使用 observeForever 因为 ViewModel 本身没有 LifecycleOwner；在 onCleared 中移除
+        _allSongs.observeForever(allSongsObserver)
         restoreSortMode()
     }
 
@@ -216,8 +237,78 @@ class MusicViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        _allSongs.removeObserver(allSongsObserver)
         hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
         hiddenRegistryObserver = null
+    }
+
+    /**
+     * 歌曲列表变化时，后台计算按首字母分组排序的专辑列表。
+     * 计算包含拼音转换与 Collator 排序，放在 Dispatchers.Default 避免阻塞主线程。
+     * 结果缓存到 [_albums]，Fragment 观察此 LiveData 直接获取现成列表。
+     */
+    private fun computeAlbums(songs: List<Song>) {
+        albumsJob?.cancel()
+        albumsJob = viewModelScope.launch {
+            val albums = withContext(Dispatchers.Default) {
+                groupAndSortAlbums(songs)
+            }
+            _albums.value = albums
+        }
+    }
+
+    /**
+     * 按专辑名分组统计歌曲数量，按拼音首字母分组排序。
+     * 原 AlbumFragment.submitAccounts 逻辑下沉到 ViewModel，主线程不再做重计算。
+     */
+    private fun groupAndSortAlbums(songs: List<Song>): List<Album> {
+        // 以 lowerCase 专辑名作为分组键，保留首次出现的原始大小写用于显示
+        val displayCase = LinkedHashMap<String, String>()
+        // 每组维护：歌曲数 与 各歌手出现次数（用于取数量最多的歌手作为副标题）
+        val counts = LinkedHashMap<String, Int>()
+        val artistCounts = LinkedHashMap<String, LinkedHashMap<String, Int>>()
+
+        for (song in songs) {
+            val key = song.album.lowercase()
+            if (!displayCase.containsKey(key)) {
+                displayCase[key] = song.album
+            }
+            counts[key] = (counts[key] ?: 0) + 1
+            val groupArtists = artistCounts.getOrPut(key) { LinkedHashMap() }
+            groupArtists[song.artist] = (groupArtists[song.artist] ?: 0) + 1
+        }
+
+        val albums = counts.map { (key, count) ->
+            val topArtist = artistCounts[key]?.maxByOrNull { it.value }?.key ?: ""
+            val letter = PinyinUtil.getPinyinFirstLetter(displayCase[key] ?: key)
+            Album(displayCase[key] ?: key, topArtist, count, letter)
+        }
+
+        // 按首字母分组：字母 A-Z 顺序，"#" 置于末尾
+        val grouped = LinkedHashMap<String, MutableList<Album>>()
+        for (album in albums) {
+            grouped.getOrPut(album.firstLetter) { mutableListOf() }.add(album)
+        }
+
+        // 组内按专辑名排序（中文按拼音、英文不区分大小写）
+        for ((_, list) in grouped) {
+            list.sortWith(compareBy(collator) { it.name.lowercase() })
+        }
+
+        val orderedLetters = grouped.keys.sortedWith { a, b ->
+            when {
+                a == "#" -> 1
+                b == "#" -> -1
+                else -> a.compareTo(b)
+            }
+        }
+
+        // 扁平化为按首字母排序的专辑列表
+        val result = mutableListOf<Album>()
+        for (letter in orderedLetters) {
+            grouped[letter]?.let { result.addAll(it) }
+        }
+        return result
     }
 
     private fun sortSongsInternal(songs: List<Song>, mode: SortMode): List<Song> = when (mode) {
