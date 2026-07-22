@@ -75,12 +75,24 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         super.onStart()
         // 首次可见时触发懒加载；切回 tab 时 hasLoadedOnce 守卫会阻止重查
         viewModel.loadPlaylists()
+        // 注册歌单刷新监听器（从其他页面添加歌曲到歌单后触发刷新）
+        PlaylistRefresher.addListener(refreshListener)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        PlaylistRefresher.removeListener(refreshListener)
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         binding.recyclerView.adapter = null
         _binding = null
+    }
+
+    /** 歌单刷新监听器（其他页面添加歌曲到歌单后通知刷新） */
+    private val refreshListener: () -> Unit = {
+        viewModel.refreshPlaylists()
     }
 
     /**

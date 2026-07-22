@@ -14,9 +14,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.google.android.material.tabs.TabLayoutMediator
 import com.unicorn.player.databinding.ActivityMainBinding
+import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
@@ -24,6 +30,8 @@ import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.AlbumFragment
 import com.unicorn.player.ui.ArtistFragment
 import com.unicorn.player.ui.MainPagerAdapter
+import com.unicorn.player.ui.PlaylistRefresher
+import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongsFragment
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
@@ -121,6 +129,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
         // 初始化歌曲信息帮助类
         songInfoHelper = SongInfoHelper(this)
+        setupAddToPlaylistListener()
         songInfoHelper.onDeleteListener = object : SongInfoHelper.OnDeleteListener {
             override fun onDelete(song: Song) {
                 // 若删除的是当前播放歌曲，移除该歌曲（停止播放、清空底部播放栏、移除通知）
@@ -299,9 +308,15 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     }
 
     /**
-     * 将排序后的完整列表同步到 MusicService，确保播放顺序与 UI 一致
+     * 将排序后的完整列表同步到 MusicService，确保播放顺序与 UI 一致。
+     *
+     * 注意：当正在播放歌单（f3$xxx）时，此方法不能覆盖歌单的歌曲列表，
+     * 否则会将播放列表退化为全部歌曲。歌单列表由 syncPlaylistSongList 管理。
      */
     private fun updateServiceSongList() {
+        // 正在播放歌单时，不覆盖歌单的歌曲列表
+        if (musicService?.isPlayingPlaylist() == true) return
+
         val sortedSongs = viewModel.getSortedFullSongs()
         if (sortedSongs.isEmpty()) return
 
@@ -739,6 +754,103 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
     // 由 SongsFragment 转发的更多操作事件
     override fun onMoreClick(song: Song, position: Int) {
-        songInfoHelper.showSongInfoDialog(song, showDeleteOption = true)
+        // 先异步查询歌单，再决定是否显示"添加到歌单"选项
+        lifecycleScope.launch {
+            val playlists = withContext(Dispatchers.IO) {
+                MusicRepository(this@MainActivity).getAllPlaylists().firstOrNull()
+            } ?: emptyList()
+            songInfoHelper.showSongInfoDialog(
+                song,
+                showDeleteOption = true,
+                showAddToPlaylist = playlists.isNotEmpty()
+            )
+        }
+    }
+
+    /**
+     * 添加到歌单回调
+     */
+    private fun setupAddToPlaylistListener() {
+        songInfoHelper.onAddToPlaylistListener = object : SongInfoHelper.OnAddToPlaylistListener {
+            override fun onAddToPlaylist(song: Song) {
+                showSelectPlaylistDialog(song)
+            }
+        }
+    }
+
+    /**
+     * 显示歌单选择弹窗
+     */
+    private fun showSelectPlaylistDialog(song: Song) {
+        lifecycleScope.launch {
+            val repository = MusicRepository(this@MainActivity)
+            val playlists = withContext(Dispatchers.IO) {
+                repository.getAllPlaylists().firstOrNull()
+            } ?: emptyList()
+            if (playlists.isEmpty()) {
+                Toast.makeText(this@MainActivity, "暂无歌单", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            // 查询每个歌单的歌曲数量，用于弹窗显示
+            val songCounts = withContext(Dispatchers.IO) {
+                val counts = mutableMapOf<Long, Int>()
+                playlists.forEach { playlist ->
+                    val songs = repository.getPlaylistSongs(playlist.id).firstOrNull()
+                    counts[playlist.id] = songs?.size ?: 0
+                }
+                counts
+            }
+            // 以屏幕中心作为弹窗动画起点
+            val metrics = resources.displayMetrics
+            val centerX = metrics.widthPixels / 2f
+            val centerY = metrics.heightPixels / 2f
+            SelectPlaylistDialog(
+                context = this@MainActivity,
+                triggerX = centerX,
+                triggerY = centerY,
+                allPlaylists = playlists,
+                songCounts = songCounts,
+                onConfirm = { chosenPlaylistIds ->
+                    addSongToPlaylists(song, chosenPlaylistIds, playlists, repository)
+                }
+            ).show()
+        }
+    }
+
+    /**
+     * 将歌曲添加到选中的歌单（持久化到数据库）
+     */
+    private fun addSongToPlaylists(
+        song: Song,
+        playlistIds: List<Long>,
+        playlists: List<Playlist>,
+        repository: MusicRepository
+    ) {
+        if (playlistIds.isEmpty()) return
+        lifecycleScope.launch {
+            // 先写入数据库
+            withContext(Dispatchers.IO) {
+                playlistIds.forEach { playlistId ->
+                    repository.addSongsToPlaylist(playlistId, listOf(song))
+                }
+            }
+            Toast.makeText(
+                this@MainActivity,
+                "已添加到 ${playlistIds.size} 个歌单",
+                Toast.LENGTH_SHORT
+            ).show()
+            // 通知 PlaylistFragment 刷新歌单列表（更新歌曲数量）
+            PlaylistRefresher.notifyPlaylistsChanged()
+            // 若当前正在播放其中某个歌单，同步更新 MusicService 的歌曲列表
+            withContext(Dispatchers.IO) {
+                playlistIds.forEach { playlistId ->
+                    val playlist = playlists.find { it.id == playlistId }
+                    if (playlist != null) {
+                        val songs = repository.getPlaylistSongs(playlist.id).firstOrNull() ?: emptyList()
+                        musicService?.syncPlaylistSongList(playlist.name, songs)
+                    }
+                }
+            }
+        }
     }
 }

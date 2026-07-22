@@ -7,20 +7,29 @@ import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
 import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.adapter.SongAdapter
 import com.unicorn.player.adapter.SongAdapter.OnSongClickListener
 import com.unicorn.player.adapter.SongAdapter.OnSongMoreClickListener
 import com.unicorn.player.databinding.ActivityAlbumSongsBinding
+import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.service.PlaySource
+import com.unicorn.player.ui.PlaylistRefresher
+import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 专辑歌曲列表 Activity
@@ -84,6 +93,7 @@ class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreC
         albumName = intent.getStringExtra(EXTRA_ALBUM_NAME) ?: ""
 
         songInfoHelper = SongInfoHelper(this)
+        setupAddToPlaylistListener()
 
         // 设置 TitleBar
         binding.titleBar.setTitle(albumName)
@@ -282,6 +292,102 @@ class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreC
     }
 
     override fun onMoreClick(song: Song, position: Int) {
-        songInfoHelper.showSongInfoDialog(song, showDeleteOption = false)
+        // 先异步查询歌单，再决定是否显示"添加到歌单"选项
+        lifecycleScope.launch {
+            val playlists = withContext(Dispatchers.IO) {
+                MusicRepository(this@AlbumSongsActivity).getAllPlaylists().firstOrNull()
+            } ?: emptyList()
+            songInfoHelper.showSongInfoDialog(
+                song,
+                showDeleteOption = false,
+                showAddToPlaylist = playlists.isNotEmpty()
+            )
+        }
+    }
+
+    /**
+     * 添加到歌单回调
+     */
+    private fun setupAddToPlaylistListener() {
+        songInfoHelper.onAddToPlaylistListener = object : SongInfoHelper.OnAddToPlaylistListener {
+            override fun onAddToPlaylist(song: Song) {
+                showSelectPlaylistDialog(song)
+            }
+        }
+    }
+
+    /**
+     * 显示歌单选择弹窗
+     */
+    private fun showSelectPlaylistDialog(song: Song) {
+        lifecycleScope.launch {
+            val repository = MusicRepository(this@AlbumSongsActivity)
+            val playlists = withContext(Dispatchers.IO) {
+                repository.getAllPlaylists().firstOrNull()
+            } ?: emptyList()
+            if (playlists.isEmpty()) {
+                Toast.makeText(this@AlbumSongsActivity, "暂无歌单", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            // 查询每个歌单的歌曲数量，用于弹窗显示
+            val songCounts = withContext(Dispatchers.IO) {
+                val counts = mutableMapOf<Long, Int>()
+                playlists.forEach { playlist ->
+                    val songs = repository.getPlaylistSongs(playlist.id).firstOrNull()
+                    counts[playlist.id] = songs?.size ?: 0
+                }
+                counts
+            }
+            val metrics = resources.displayMetrics
+            val centerX = metrics.widthPixels / 2f
+            val centerY = metrics.heightPixels / 2f
+            SelectPlaylistDialog(
+                context = this@AlbumSongsActivity,
+                triggerX = centerX,
+                triggerY = centerY,
+                allPlaylists = playlists,
+                songCounts = songCounts,
+                onConfirm = { chosenPlaylistIds ->
+                    addSongToPlaylists(song, chosenPlaylistIds, playlists, repository)
+                }
+            ).show()
+        }
+    }
+
+    /**
+     * 将歌曲添加到选中的歌单（持久化到数据库）
+     */
+    private fun addSongToPlaylists(
+        song: Song,
+        playlistIds: List<Long>,
+        playlists: List<Playlist>,
+        repository: MusicRepository
+    ) {
+        if (playlistIds.isEmpty()) return
+        lifecycleScope.launch {
+            // 先写入数据库
+            withContext(Dispatchers.IO) {
+                playlistIds.forEach { playlistId ->
+                    repository.addSongsToPlaylist(playlistId, listOf(song))
+                }
+            }
+            Toast.makeText(
+                this@AlbumSongsActivity,
+                "已添加到 ${playlistIds.size} 个歌单",
+                Toast.LENGTH_SHORT
+            ).show()
+            // 通知 PlaylistFragment 刷新歌单列表（更新歌曲数量）
+            PlaylistRefresher.notifyPlaylistsChanged()
+            // 若当前正在播放其中某个歌单，同步更新 MusicService 的歌曲列表
+            withContext(Dispatchers.IO) {
+                playlistIds.forEach { playlistId ->
+                    val playlist = playlists.find { it.id == playlistId }
+                    if (playlist != null) {
+                        val songs = repository.getPlaylistSongs(playlist.id).firstOrNull() ?: emptyList()
+                        musicService?.syncPlaylistSongList(playlist.name, songs)
+                    }
+                }
+            }
+        }
     }
 }

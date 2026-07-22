@@ -1,0 +1,308 @@
+package com.unicorn.player.ui
+
+import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.content.Context
+import android.graphics.Color
+import android.view.GestureDetector
+import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.View
+import androidx.core.graphics.drawable.toDrawable
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.unicorn.player.adapter.SelectablePlaylistAdapter
+import com.unicorn.player.databinding.DialogSelectPlaylistsBinding
+import com.unicorn.player.model.Playlist
+import kotlin.math.abs
+import kotlin.math.hypot
+
+/**
+ * 添加到歌单的弹窗（参考 SelectSongsDialog 实现）
+ *
+ * - 顶部：标题
+ * - 中间：全部歌单列表，右侧 CheckBox
+ * - 底部：取消 / 确定 按钮
+ *
+ * 确定 → 回调 [onConfirm]（勾选的 playlistId 列表）
+ *
+ * 显示/关闭动画、上下滑动关闭、触摸手势等全部与 SelectSongsDialog 一致：
+ * 初始 alpha=0 + 透明背景，显示时从触发点缩放淡入，关闭时缩回触发点淡出。
+ */
+class SelectPlaylistDialog(
+    private val context: Context,
+    private val triggerX: Float,
+    private val triggerY: Float,
+    private val allPlaylists: List<Playlist>,
+    private val songCounts: Map<Long, Int> = emptyMap(),
+    private val onConfirm: (chosenPlaylistIds: List<Long>) -> Unit
+) {
+
+    private var dialog: AlertDialog? = null
+    private var isDismissing = false
+    private lateinit var dialogView: View
+    private lateinit var binding: DialogSelectPlaylistsBinding
+    private lateinit var adapter: SelectablePlaylistAdapter
+
+    // 列表首次加载完成前暂不显示弹窗，避免弹窗闪烁
+    private var listObserver: RecyclerView.AdapterDataObserver? = null
+
+    // 触摸追踪（与 SelectSongsDialog 一致）
+    private var startY = 0f
+    private var startX = 0f
+    private var isDragging = false
+    private val dismissThreshold = 200f
+
+    fun show() {
+        // 构建内容视图
+        binding = DialogSelectPlaylistsBinding.inflate(LayoutInflater.from(context))
+        dialogView = binding.root
+
+        // 初始透明，避免尺寸跳变
+        dialogView.alpha = 0f
+
+        // 设置按钮点击监听
+        setupButtonListeners()
+
+        // 设置触摸监听（上下滑动关闭）
+        setupTouchListener()
+
+        // 创建 AlertDialog（无标题、无按钮）
+        val builder = AlertDialog.Builder(context)
+        builder.setView(dialogView)
+        builder.setCancelable(true)
+
+        dialog = builder.create()
+
+        // 预先设置透明背景，避免默认背景闪烁
+        dialog?.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
+
+        // 弹窗显示动画 + 设置窗口大小（必须在 show 之后设置才生效）
+        dialog?.setOnShowListener {
+            val metrics = context.resources.displayMetrics
+            // 动态把根布局 minHeight 设为屏幕 60%：保证窗口高度稳定
+            dialogView.minimumHeight = (metrics.heightPixels * 0.6f).toInt()
+
+            dialog?.window?.apply {
+                setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
+                // 宽度 90%，高度 60%
+                setLayout(
+                    (metrics.widthPixels * 0.9f).toInt(),
+                    (metrics.heightPixels * 0.6f).toInt()
+                )
+            }
+            playShowAnimation()
+        }
+
+        dialog?.setOnDismissListener {
+            // 清理 AdapterDataObserver，避免内存泄漏
+            listObserver?.let { adapter.unregisterAdapterDataObserver(it) }
+            listObserver = null
+            isDismissing = false
+        }
+
+        // dialog 创建完成后才设置 RecyclerView，确保 submitList 同步触发
+        // onItemRangeInserted 时 dialog 已不为 null，dialog?.show() 才能生效
+        setupRecyclerView()
+    }
+
+    /**
+     * 设置按钮点击监听
+     */
+    private fun setupButtonListeners() {
+        binding.btnCancel.setOnClickListener {
+            dismiss()
+        }
+
+        binding.btnConfirm.setOnClickListener {
+            confirm()
+        }
+    }
+
+    private fun setupRecyclerView() {
+        adapter = SelectablePlaylistAdapter(initialCounts = songCounts)
+        binding.recyclerView.apply {
+            layoutManager = LinearLayoutManager(context)
+            adapter = this@SelectPlaylistDialog.adapter
+        }
+        // 等 AsyncListDiffer 首次把数据刷入 RecyclerView 后，再真正显示弹窗
+        val observer = object : RecyclerView.AdapterDataObserver() {
+            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
+                if (itemCount > 0) {
+                    adapter.unregisterAdapterDataObserver(this)
+                    listObserver = null
+                    dialog?.show()
+                }
+            }
+        }
+        listObserver = observer
+        adapter.registerAdapterDataObserver(observer)
+        adapter.submitList(allPlaylists)
+    }
+
+    private fun confirm() {
+        val chosenIds = adapter.selectedIds.toList()
+        onConfirm(chosenIds)
+        dismiss()
+    }
+
+    /**
+     * 显示动画：从触发位置放大到中心
+     */
+    private fun playShowAnimation() {
+        val metrics = context.resources.displayMetrics
+        val centerX = metrics.widthPixels / 2f
+        val centerY = metrics.heightPixels / 2f
+
+        val offsetX = triggerX - centerX
+        val offsetY = triggerY - centerY
+
+        dialogView.apply {
+            scaleX = 0.1f
+            scaleY = 0.1f
+            translationX = offsetX
+            translationY = offsetY
+            alpha = 1f
+            animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationX(0f)
+                .translationY(0f)
+                .alpha(1f)
+                .setDuration(250)
+                .setListener(null)
+                .start()
+        }
+    }
+
+    /**
+     * 关闭动画
+     */
+    private fun dismissWithAnimation() {
+        if (isDismissing) return
+        isDismissing = true
+
+        val metrics = context.resources.displayMetrics
+        val centerX = metrics.widthPixels / 2f
+        val centerY = metrics.heightPixels / 2f
+        val offsetX = triggerX - centerX
+        val offsetY = triggerY - centerY
+
+        dialogView.animate()
+            .scaleX(0.1f)
+            .scaleY(0.1f)
+            .translationX(offsetX)
+            .translationY(offsetY)
+            .alpha(0f)
+            .setDuration(200)
+            .setListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    dialog?.dismiss()
+                }
+            })
+            .start()
+    }
+
+    /**
+     * 回弹到原始位置
+     */
+    private fun resetDialogPosition() {
+        dialogView.animate()
+            .translationY(0f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(200)
+            .start()
+    }
+
+    /**
+     * 设置触摸监听：上下滑动关闭
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupTouchListener() {
+        val gestureListener = object : GestureDetector.SimpleOnGestureListener() {
+            override fun onScroll(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                distanceX: Float,
+                distanceY: Float
+            ): Boolean {
+                if (isDismissing) return false
+
+                val recyclerView = binding.recyclerView
+                val canScrollUp = recyclerView.canScrollVertically(-1)
+                val canScrollDown = recyclerView.canScrollVertically(1)
+
+                val deltaY = e2.y - (e1?.y ?: e2.y)
+                val shouldIntercept = (deltaY > 0 && !canScrollUp) || (deltaY < 0 && !canScrollDown)
+
+                if (shouldIntercept) {
+                    isDragging = true
+                    val offset =
+                        hypot((e2.x - startX).toDouble(), (e2.y - startY).toDouble()).toFloat()
+                    val progress = (offset / dismissThreshold).coerceIn(0f, 1f)
+                    dialogView.translationY += -distanceY * 0.5f
+                    dialogView.scaleX = 1f - progress * 0.15f
+                    dialogView.scaleY = 1f - progress * 0.15f
+                    return true
+                }
+                return false
+            }
+
+            override fun onDown(e: MotionEvent): Boolean {
+                startX = e.x
+                startY = e.y
+                isDragging = false
+                return true
+            }
+
+            override fun onFling(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                velocityX: Float,
+                velocityY: Float
+            ): Boolean {
+                if (isDismissing) return false
+                if (abs(velocityY) > 800) {
+                    dismissWithAnimation()
+                    return true
+                }
+                return false
+            }
+        }
+
+        val gestureDetector = GestureDetector(context, gestureListener)
+
+        dialogView.setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
+            when (event.actionMasked) {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (isDragging && !isDismissing) {
+                        val offset = hypot(
+                            (event.x - startX).toDouble(),
+                            (event.y - startY).toDouble()
+                        ).toFloat()
+                        if (offset > dismissThreshold) {
+                            dismissWithAnimation()
+                        } else {
+                            resetDialogPosition()
+                        }
+                    }
+                    isDragging = false
+                }
+            }
+            true
+        }
+    }
+
+    /**
+     * 关闭对话框（带缩放 + 淡出动画）
+     */
+    fun dismiss() {
+        if (!isDismissing) {
+            dismissWithAnimation()
+        }
+    }
+
+    fun isShowing(): Boolean = dialog?.isShowing == true
+}

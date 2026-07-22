@@ -265,12 +265,25 @@ class MusicService : Service() {
     @Volatile
     private var playSourceTag: String = PlaySource.SONGS
 
+    // 手动同步（syncPlaylistSongList）的时间戳，用于防止 loadSongListFromDatabase 覆盖正确的列表
+    @Volatile
+    private var lastManualSyncTime: Long = 0L
+
     /**
      * 由播放入口调用，标记本次播放的作用域来源。
      * 「仅更新列表」的内部路径（updateServiceSongList、resetSongListFromDatabase 等）不应调用此方法。
      */
     fun setPlaySource(tag: String) {
         playSourceTag = tag
+    }
+
+    /**
+     * 判断当前是否正在播放歌单（playSourceTag 以 f3 开头）。
+     * 用于 MainActivity.updateServiceSongList 判断是否需要跳过覆盖歌曲列表。
+     */
+    fun isPlayingPlaylist(): Boolean {
+        val (sourceType, _) = PlaySource.parse(playSourceTag)
+        return sourceType == PlaySource.PLAYLIST
     }
 
     enum class PlayMode {
@@ -822,6 +835,39 @@ class MusicService : Service() {
 
     // 获取当前播放模式
     fun getPlayMode(): PlayMode = playMode
+
+    /**
+     * 若当前正在播放指定歌单，则用提供的歌曲列表同步更新播放列表。
+     * 在歌曲被添加到歌单后调用，确保播放列表与歌单内容一致。
+     *
+     * 直接接收歌曲列表而非重新查询数据库，避免异步时序问题导致列表退化为全部歌曲。
+     *
+     * @param playlistName 歌单名称
+     * @param songs 歌单的最新歌曲列表
+     */
+    fun syncPlaylistSongList(playlistName: String, songs: List<Song>) {
+        val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
+        if (sourceType == PlaySource.PLAYLIST && sourceName.equals(playlistName, ignoreCase = true)) {
+            if (songs.isEmpty()) return
+            val currentSong = _currentSong.value
+            val currentIndex = if (currentSong != null) {
+                songs.indexOfFirst { it.id == currentSong.id }.takeIf { it >= 0 } ?: 0
+            } else {
+                0
+            }
+            // setSongList 内部使用 setValue，必须在主线程调用
+            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                setSongList(songs, currentIndex)
+            } else {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    setSongList(songs, currentIndex)
+                }
+            }
+            // 标记手动同步时间戳，防止 loadSongListFromDatabase 覆盖正确的列表
+            lastManualSyncTime = System.currentTimeMillis()
+            Log.d(TAG, "syncPlaylistSongList: updated playlist '$playlistName' with ${songs.size} songs")
+        }
+    }
 
     fun playNext() {
         if (songList.isEmpty()) {
@@ -1518,6 +1564,8 @@ class MusicService : Service() {
      * 退化规则：来源作用域为空（f1/f2 下已无歌曲 / f3 歌单已不存在）→ 退化到全部歌曲（f0）。
      */
     private fun loadSongListFromDatabase(sourceType: String, sourceName: String = "", songId: Long = 0L) {
+        // 记录 DB 查询开始时间，用于与手动同步时间戳比较
+        val dbQueryStartTime = lastManualSyncTime
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val database = MusicDatabase.getDatabase(this@MusicService)
@@ -1558,6 +1606,15 @@ class MusicService : Service() {
                     val startIndex = if (currentIndexInList > 0) currentIndexInList else 0
 
                     withContext(Dispatchers.Main) {
+                        // 如果在此期间发生了手动同步（syncPlaylistSongList），则跳过 DB 加载结果，
+                        // 避免覆盖正确的歌单歌曲列表（防止退化为全部歌曲）。
+                        if (lastManualSyncTime != dbQueryStartTime) {
+                            Log.d(
+                                TAG,
+                                "loadSongListFromDatabase: skipped, manual sync occurred during DB query (source=$sourceType, name=$sourceName)"
+                            )
+                            return@withContext
+                        }
                         // 始终装填列表：与 UI 使用相同的来源过滤 + SortMode 排序，
                         // 确保 service 的 songList 与对应页面完全一致。
                         // setCurrentSong 负责把 currentIndex 修正到 currentSong 的真实位置。

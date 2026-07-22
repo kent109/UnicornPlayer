@@ -28,8 +28,13 @@ class SongInfoHelper(private val context: Context) {
     /**
      * 显示歌曲信息的 BottomSheetDialog
      * @param showDeleteOption 是否显示"删除"选项。歌手/专辑等聚合视图传 false
+     * @param showAddToPlaylist 是否显示"添加到歌单"选项。当前存在歌单时传 true
      */
-    fun showSongInfoDialog(song: Song, showDeleteOption: Boolean = true) {
+    fun showSongInfoDialog(
+        song: Song,
+        showDeleteOption: Boolean = true,
+        showAddToPlaylist: Boolean = false
+    ) {
         val bottomSheetDialog = BottomSheetDialog(context, R.style.BottomSheetDialogTheme)
         val dialogBinding = DialogSongInfoBinding.inflate(LayoutInflater.from(context))
         bottomSheetDialog.setContentView(dialogBinding.root)
@@ -63,6 +68,18 @@ class SongInfoHelper(private val context: Context) {
             itemBinding.tvValue.text = value
             itemBinding.root.background = null
             dialogBinding.infoContainer.addView(itemBinding.root)
+        }
+
+        // 添加到歌单（在"文件路径"后面，"分享本地文件"前面，仅当存在歌单时显示）
+        if (showAddToPlaylist) {
+            addClickableItem(
+                dialogBinding.infoContainer,
+                "添加到歌单",
+                null
+            ) {
+                bottomSheetDialog.dismiss()
+                onAddToPlaylistListener?.onAddToPlaylist(song)
+            }
         }
 
         // 添加可点击的操作项（分享本地文件使用默认颜色）
@@ -253,4 +270,13 @@ class SongInfoHelper(private val context: Context) {
     }
 
     var onDeleteListener: OnDeleteListener? = null
+
+    /**
+     * 添加到歌单回调接口
+     */
+    interface OnAddToPlaylistListener {
+        fun onAddToPlaylist(song: Song)
+    }
+
+    var onAddToPlaylistListener: OnAddToPlaylistListener? = null
 }
