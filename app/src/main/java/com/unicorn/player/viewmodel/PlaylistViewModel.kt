@@ -42,6 +42,31 @@ class PlaylistViewModel(
     /** 是否已首次加载过（控制懒加载） */
     private var hasLoadedOnce = false
 
+    /** 隐藏歌曲注册表的观察者引用，用于在 onCleared 时移除 */
+    private var hiddenRegistryObserver: androidx.lifecycle.Observer<Set<Long>>? = null
+
+    init {
+        observeHiddenRegistry()
+    }
+
+    /**
+     * 观察共享注册表的隐藏 ID 变化。当其他 ViewModel 实例隐藏/恢复歌曲时，
+     * 当前实例也会收到通知并重新计算歌单歌曲数量，实现即时同步。
+     */
+    private fun observeHiddenRegistry() {
+        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
+        hiddenRegistryObserver = androidx.lifecycle.Observer { _ ->
+            refreshPlaylistsInternal()
+        }
+        HiddenSongRegistry.hiddenSongIds.observeForever(hiddenRegistryObserver!!)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
+        hiddenRegistryObserver = null
+    }
+
     /**
      * 首次可见时由 Fragment 调用。
      *
@@ -69,11 +94,15 @@ class PlaylistViewModel(
             try {
                 // 收集歌单列表：getAllPlaylists 是持续 Flow，仅取最新一次即停止
                 val playlistList = repository.getAllPlaylists().first()
-                // 对每个歌单取一次快照数量（first() 单次取值后即取消订阅）
+                // 当前隐藏的 ID 集合，用于计算时过滤
+                val hiddenIds = HiddenSongRegistry.currentIds()
+                // 对每个歌单取一次快照数量（first() 单次取值后即取消订阅），过滤隐藏歌曲
                 val infos = playlistList.map { pl ->
                     try {
                         val songs = repository.getPlaylistSongs(pl.id).first()
-                        pl.toInfo(songs.size)
+                        val visibleCount = if (hiddenIds.isEmpty()) songs.size
+                        else songs.count { it.id !in hiddenIds }
+                        pl.toInfo(visibleCount)
                     } catch (e: Exception) {
                         pl.toInfo(0)
                     }

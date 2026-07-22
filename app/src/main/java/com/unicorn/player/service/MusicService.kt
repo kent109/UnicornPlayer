@@ -27,6 +27,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -64,6 +65,9 @@ object DataStoreKeys {
 
     // 播放来源标签：f0 / f1$歌手名 / f2$专辑名 / f3$歌单名；默认 f0（全部歌曲）
     val PLAY_SOURCE_TAG = stringPreferencesKey("play_source_tag")
+
+    // 用户从列表中隐藏的歌曲 ID 集合（从列表中删除的歌曲），下拉刷新时清除
+    val HIDDEN_SONG_IDS = stringSetPreferencesKey("hidden_song_ids")
 }
 
 /**
@@ -771,6 +775,43 @@ class MusicService : Service() {
             // 保存播放状态
             savePlaybackState()
         }
+    }
+
+    /**
+     * 移除当前播放歌曲（歌曲被删除时调用）：
+     * 停止播放、清空当前歌曲、从 songList 移除、移除通知、保存空状态。
+     * 底部播放栏会因 currentSong 观察者收到 null 而自动清空。
+     */
+    fun removeCurrentSong() {
+        // 停止播放
+        try {
+            if (isMediaPlayerPlaying()) {
+                mediaPlayer.pause()
+            }
+        } catch (_: IllegalStateException) {
+            // MediaPlayer 可能已释放或处于错误状态，忽略
+        }
+        _isPlaying.value = false
+
+        // 从 songList 中移除当前歌曲
+        val currentId = _currentSong.value?.id
+        if (currentId != null) {
+            songList.removeAll { it.id == currentId }
+        }
+        currentIndex = 0
+
+        // 清空当前歌曲
+        _currentSong.value = null
+        _currentPosition.value = 0
+
+        // 移除通知
+        stopForeground(STOP_FOREGROUND_REMOVE)
+
+        // 保存空状态（清除 DataStore 中的播放状态）
+        savePlaybackState()
+
+        // 更新 MediaSession 状态
+        updateMediaSessionPlaybackState()
     }
 
     fun setPlayMode(mode: PlayMode) {

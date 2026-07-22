@@ -76,7 +76,11 @@ class BottomPlayerController(
         service.isPlaying.observe(activity, isPlayingObserver!!)
 
         currentSongObserver = Observer { song ->
-            song?.let { updateSongInfo(it) }
+            if (song == null) {
+                clearSongInfo()
+            } else {
+                updateSongInfo(song)
+            }
         }
         service.currentSong.observe(activity, currentSongObserver!!)
     }
@@ -99,7 +103,29 @@ class BottomPlayerController(
         binding.playButton.setImageResource(
             if (service.isPlaying.value == true) R.drawable.ic_pause else R.drawable.ic_play
         )
-        service.currentSong.value?.let { updateSongInfo(it) }
+        val song = service.currentSong.value
+        if (song == null) {
+            clearSongInfo()
+        } else {
+            updateSongInfo(song)
+        }
+    }
+
+    /**
+     * 清空底部播放栏的歌曲信息（标题、艺术家、专辑封面恢复默认），
+     * 当当前播放歌曲被移除时调用。
+     */
+    fun clearSongInfo() {
+        if (activity.isDestroyed || activity.isFinishing) return
+
+        binding.songTitle.text = ""
+        binding.artistName.text = ""
+        // 关闭跑马灯
+        binding.songTitle.post {
+            binding.songTitle.isSelected = false
+        }
+        // 专辑封面恢复默认图标
+        binding.albumArt.setImageResource(R.drawable.ic_music_note)
     }
 
     /**

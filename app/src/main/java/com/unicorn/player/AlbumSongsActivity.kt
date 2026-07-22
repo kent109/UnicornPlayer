@@ -282,6 +282,6 @@ class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreC
     }
 
     override fun onMoreClick(song: Song, position: Int) {
-        songInfoHelper.showSongInfoDialog(song)
+        songInfoHelper.showSongInfoDialog(song, showDeleteOption = false)
     }
 }

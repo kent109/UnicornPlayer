@@ -112,9 +112,12 @@ class MusicRepository(private val context: Context) {
             songDao.deleteSongsByIds(songsToDelete)
         }
 
-        // 5. 插入新歌曲（使用 REPLACE 策略，已存在的会更新）
+        // 5. 插入新歌曲（使用 IGNORE 策略，跳过已存在的）
+        // 注意：不能用 REPLACE，因为 SQLite 的 REPLACE = DELETE + INSERT，
+        // 会触发 playlist_songs 的 ForeignKey.CASCADE 误删已有歌单关联。
+        // 已存在的歌曲无需更新（元数据不变），只需插入新增的即可。
         if (newSongs.isNotEmpty()) {
-            songDao.insertSongs(newSongs)
+            songDao.insertSongsIgnoreExisting(newSongs)
         }
 
         newSongs

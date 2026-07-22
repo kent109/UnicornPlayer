@@ -27,8 +27,9 @@ class SongInfoHelper(private val context: Context) {
 
     /**
      * 显示歌曲信息的 BottomSheetDialog
+     * @param showDeleteOption 是否显示"删除"选项。歌手/专辑等聚合视图传 false
      */
-    fun showSongInfoDialog(song: Song) {
+    fun showSongInfoDialog(song: Song, showDeleteOption: Boolean = true) {
         val bottomSheetDialog = BottomSheetDialog(context, R.style.BottomSheetDialogTheme)
         val dialogBinding = DialogSongInfoBinding.inflate(LayoutInflater.from(context))
         bottomSheetDialog.setContentView(dialogBinding.root)
@@ -73,14 +74,16 @@ class SongInfoHelper(private val context: Context) {
             shareLocalFile(song)
         }
 
-        // 删除使用红色
-        addClickableItem(
-            dialogBinding.infoContainer,
-            "删除",
-            android.R.color.holo_red_light
-        ) {
-            bottomSheetDialog.dismiss()
-            showDeleteConfirmDialog(song)
+        // 删除使用红色（仅在 showDeleteOption 为 true 时显示）
+        if (showDeleteOption) {
+            addClickableItem(
+                dialogBinding.infoContainer,
+                "删除",
+                android.R.color.holo_red_light
+            ) {
+                bottomSheetDialog.dismiss()
+                showDeleteConfirmDialog(song)
+            }
         }
 
         // 设置窗口动画

@@ -123,12 +123,14 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         songInfoHelper = SongInfoHelper(this)
         songInfoHelper.onDeleteListener = object : SongInfoHelper.OnDeleteListener {
             override fun onDelete(song: Song) {
-                // 从完整列表中删除歌曲
-                viewModel.fullSongs.value?.let { songs ->
-                    val updatedSongs = songs.filter { it.id != song.id }
-                    // 通知 ViewModel 更新列表
-                    viewModel.updateSongs(updatedSongs)
+                // 若删除的是当前播放歌曲，移除该歌曲（停止播放、清空底部播放栏、移除通知）
+                if (musicService?.currentSong?.value?.id == song.id) {
+                    musicService?.removeCurrentSong()
                 }
+                // 持久化隐藏 ID + 更新列表
+                viewModel.hideSong(song.id)
+                // 同步服务播放列表
+                updateServiceSongList()
             }
         }
 
@@ -733,6 +735,6 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
     // 由 SongsFragment 转发的更多操作事件
     override fun onMoreClick(song: Song, position: Int) {
-        songInfoHelper.showSongInfoDialog(song)
+        songInfoHelper.showSongInfoDialog(song, showDeleteOption = true)
     }
 }

@@ -25,6 +25,12 @@ interface SongDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertSongs(songs: List<Song>): LongArray
 
+    /**
+     * 仅插入不存在的新歌曲（IGNORE 策略），避免 REPLACE 触发 DELETE CASCADE 误删 playlist_songs 关联
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insertSongsIgnoreExisting(songs: List<Song>): LongArray
+
     @Delete
     fun deleteSong(song: Song): Int
 
