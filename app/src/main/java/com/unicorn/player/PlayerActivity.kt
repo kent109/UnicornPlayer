@@ -14,6 +14,7 @@ import android.view.animation.AnimationUtils
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.toColorInt
@@ -25,6 +26,7 @@ import com.unicorn.player.util.DisplayUtil
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
+import com.unicorn.player.util.LyricsBackupManager
 import com.unicorn.player.util.toSimpleCustom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -134,6 +136,42 @@ class PlayerActivity : AppCompatActivity() {
 
     // 标记当前歌曲是否搜索/加载不到歌词（本地+网络均无结果），用于显示"新建歌词"按钮
     private var showNoLyricsButton = false
+
+    // ===== SAF 歌词备份 =====
+    // 待备份的歌词内容（授权完成后写入）
+    private var pendingBackupContent: String? = null
+
+    // 待备份的文件名
+    private var pendingBackupFileName: String? = null
+
+    // SAF 目录选择器启动器：用户授权后持久化树 URI → 确认/创建备份目录 → 执行备份
+    private val openDocumentTreeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+            if (treeUri != null) {
+                LyricsBackupManager.saveTreeUri(this, treeUri)
+                // 授权完成，先确认 Documents/Unicorn/Lyrics 目录存在（不存在则创建）
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val dirReady = LyricsBackupManager.ensureBackupDirExists(this@PlayerActivity)
+                    withContext(Dispatchers.Main) {
+                        if (dirReady) {
+                            executePendingBackup()
+                        } else {
+                            pendingBackupContent = null
+                            pendingBackupFileName = null
+                            Toast.makeText(
+                                this@PlayerActivity,
+                                "备份目录创建失败",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+            } else {
+                // 用户取消选择，清理待备份数据
+                pendingBackupContent = null
+                pendingBackupFileName = null
+            }
+        }
 
     // 普通行颜色与高亮行颜色，进入/退出全屏时切换
     private var normalRowColor: Int = 0
@@ -371,7 +409,8 @@ class PlayerActivity : AppCompatActivity() {
             centerY,
             onContentUpdated = { updatedContent ->
                 saveLocalLrcAndReload(audioPath, updatedContent)
-            }
+            },
+            onBackup = { content -> backupLyrics(content) }
         ).also { it.show() }
     }
 
@@ -401,6 +440,94 @@ class PlayerActivity : AppCompatActivity() {
                     .show()
             }
         }
+    }
+
+    /**
+     * 歌词备份入口（SAF 实现）：
+     * 1. 检查是否拥有 Documents 目录的 SAF 树 URI 权限——有则直接写入
+     *    Documents/Unicorn/Lyrics/ 目录（自动创建子目录）
+     * 2. 无权限则缓存待备份数据，启动 SAF 选择器定位到 Documents 目录引导用户授权
+     *
+     * 使用 SAF 树 URI + DocumentFile API 在授权目录内逐级操作。
+     * 树 URI 授予的读写权限覆盖整个子树，无需系统级权限。
+     *
+     * @param content 要备份的歌词文本内容
+     */
+    private fun backupLyrics(content: String) {
+        try {
+            val song = musicService?.currentSong?.value
+            if (song == null) {
+                Toast.makeText(this, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val fileName = "${song.artist} - ${song.title}.lrc"
+
+            // 1. 先检查是否有保存的 tree URI（没有则无法创建目录，直接授权）
+            if (!LyricsBackupManager.hasSavedTreeUri(this)) {
+                Log.d(TAG, "backupLyrics: 无保存的 tree URI，启动目录选择器")
+                Toast.makeText(this, "请选择 Documents 目录以授权备份", Toast.LENGTH_LONG).show()
+                pendingBackupContent = content
+                pendingBackupFileName = fileName
+                openDocumentTreeLauncher.launch(LyricsBackupManager.getInitialUri())
+                return
+            }
+
+            // 2. 有 tree URI，在 IO 协程中检查/创建目录
+            lifecycleScope.launch(Dispatchers.IO) {
+                val dirReady = LyricsBackupManager.ensureBackupDirExists(this@PlayerActivity)
+                if (!dirReady) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@PlayerActivity, "备份目录创建失败", Toast.LENGTH_SHORT)
+                            .show()
+                    }
+                    return@launch
+                }
+                // 3. 目录就绪，再检查权限是否仍有效
+                if (!LyricsBackupManager.isTreePermissionValid(this@PlayerActivity)) {
+                    withContext(Dispatchers.Main) {
+                        pendingBackupContent = content
+                        pendingBackupFileName = fileName
+                        openDocumentTreeLauncher.launch(LyricsBackupManager.getInitialUri())
+                    }
+                    return@launch
+                }
+                // 4. 目录就绪且权限有效，执行写入
+                withContext(Dispatchers.Main) {
+                    performBackup(fileName, content)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "backupLyrics 异常: ${e.javaClass.name}: ${e.message}", e)
+            Toast.makeText(this, "备份失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 执行实际的备份写入操作（在协程内完成 IO）。
+     * 目录已在 SAF 回调中确认存在，此处直接写入。
+     */
+    private fun performBackup(fileName: String, content: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val success = LyricsBackupManager.writeLrcFile(this@PlayerActivity, fileName, content)
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@PlayerActivity,
+                    if (success) "备份成功" else "备份失败",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * 用户授权 SAF 目录后，执行之前缓存的待备份写入。
+     */
+    private fun executePendingBackup() {
+        val content = pendingBackupContent ?: return
+        val fileName = pendingBackupFileName ?: return
+        pendingBackupContent = null
+        pendingBackupFileName = null
+        performBackup(fileName, content)
     }
 
     /**

@@ -109,6 +109,9 @@ dependencies {
 
     implementation 'com.github.bifan-wei:LrcView:V1.4'
 
+    // DocumentFile - SAF 目录树访问（歌词备份到 Download/Unicorn/Lyrics）
+    implementation 'androidx.documentfile:documentfile:1.0.0'
+
     // OkHttp - 网络请求
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 

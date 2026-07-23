@@ -140,7 +140,9 @@
       "Bash(awk 'BEGIN{ORS=\"\\\\r\\\\n\"} {print}' \"app/src/main/java/com/unicorn/player/ui/SelectSongsDialog.kt\")",
       "Bash(mv /tmp/select_songs_dialog_crlf.kt \"app/src/main/java/com/unicorn/player/ui/SelectSongsDialog.kt\")",
       "Bash(gradle app:compileDebugKotlin --stacktrace)",
-      "Bash(gradle app:kaptDebugKotlin --stacktrace)"
+      "Bash(gradle app:kaptDebugKotlin --stacktrace)",
+      "Bash(n\\\\\" -replace \\\\\")",
+      "Bash(powershell -Command \"\\(Get-Content -Path 'app/src/main/java/com/unicorn/player/util/LyricsBackupManager.kt' -Raw\\) -replace \\\\\"`r`n\\\\\",\\\\\"`n\\\\\" -replace \\\\\"`n\\\\\",\\\\\"`r`n\\\\\" | Set-Content -Path 'app/src/main/java/com/unicorn/player/util/LyricsBackupManager.kt' -NoNewline\")"
     ]
   }
 }
