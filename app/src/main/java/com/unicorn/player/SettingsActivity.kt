@@ -35,10 +35,10 @@ class SettingsActivity : AppCompatActivity() {
         val inflater = LayoutInflater.from(this)
 
         // 分组1：播放设置
-        addSettingGroup(
-            container = container,
-            inflater = inflater,
-            items = listOf(
+        val playItems = mutableListOf<SettingItem>()
+        // 均衡器仅在调试版本显示
+        if (BuildConfig.DEBUG) {
+            playItems.add(
                 SettingItem(
                     key = "equalizer",
                     title = "均衡器",
@@ -48,18 +48,25 @@ class SettingsActivity : AppCompatActivity() {
                     onClick = {
                         Toast.makeText(this, "均衡器功能开发中", Toast.LENGTH_SHORT).show()
                     }
-                ),
-                SettingItem(
-                    key = "lyrics",
-                    title = "歌词显示",
-                    hasChevron = true,
-                    isFirst = false,
-                    isLast = false,
-                    onClick = {
-                        startActivity(Intent(this, LyricsOptionsActivity::class.java))
-                    }
                 )
             )
+        }
+        playItems.add(
+            SettingItem(
+                key = "lyrics",
+                title = "歌词显示",
+                hasChevron = true,
+                isFirst = !BuildConfig.DEBUG,
+                isLast = true,
+                onClick = {
+                    startActivity(Intent(this, LyricsOptionsActivity::class.java))
+                }
+            )
+        )
+        addSettingGroup(
+            container = container,
+            inflater = inflater,
+            items = playItems
         )
 
         // 分组2：关于

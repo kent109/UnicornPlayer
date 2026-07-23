@@ -179,7 +179,8 @@ class LrcSearchActivity : AppCompatActivity(),
             onContentUpdated = { updatedContent ->
                 // 更新列表 item 的 syncedLyrics
                 updateResultContent(result, updatedContent)
-            }
+            },
+            showBackupButton = false
         ).also { it.show() }
     }
 

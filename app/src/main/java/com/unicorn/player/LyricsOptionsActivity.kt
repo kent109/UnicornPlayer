@@ -130,7 +130,7 @@ class LyricsOptionsActivity : AppCompatActivity() {
                     summary = "全屏播放页长按歌词进入搜索",
                     hasChevron = false,
                     isFirst = false,
-                    isLast = true,
+                    isLast = false,
                     type = SettingItemType.NORMAL
                 ),
                 SettingItem(

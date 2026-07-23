@@ -26,7 +26,8 @@ class LrcPreviewDialog(
     private val triggerY: Float,
     private val onContentUpdated: ((String) -> Unit)? = null,
     private val startInEditMode: Boolean = false,
-    private val onBackup: ((String) -> Unit)? = null
+    private val onBackup: ((String) -> Unit)? = null,
+    private val showBackupButton: Boolean = true
 ) {
 
     private var dialog: AlertDialog? = null
@@ -106,6 +107,9 @@ class LrcPreviewDialog(
      */
     private fun setupButtonListeners() {
         // 备份按钮 - 将当前歌词内容写入外部存储（始终可见，不参与编辑模式切换）
+        if (!showBackupButton) {
+            binding.btnBackup.visibility = View.GONE
+        }
         binding.btnBackup.setOnClickListener {
             val content = binding.etLrcContent.text?.toString() ?: ""
             onBackup?.invoke(content)
