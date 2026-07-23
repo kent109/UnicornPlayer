@@ -132,6 +132,15 @@ class LyricsOptionsActivity : AppCompatActivity() {
                     isFirst = false,
                     isLast = true,
                     type = SettingItemType.NORMAL
+                ),
+                SettingItem(
+                    key = "search_lyrics",
+                    title = "备份歌词",
+                    summary = "/storage/emulated/0/Documents/Unicorn/Lyrics",
+                    hasChevron = false,
+                    isFirst = false,
+                    isLast = true,
+                    type = SettingItemType.NORMAL
                 )
             )
         )

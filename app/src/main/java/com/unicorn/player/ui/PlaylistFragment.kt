@@ -262,9 +262,12 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
             if (playlists.isEmpty()) {
                 binding.ivNoData.visibility = View.VISIBLE
                 binding.recyclerView.visibility = View.GONE
+                // 无数据时禁止下拉刷新
+                binding.smartRefreshLayout.setEnableRefresh(false)
             } else {
                 binding.ivNoData.visibility = View.GONE
                 binding.recyclerView.visibility = View.VISIBLE
+                binding.smartRefreshLayout.setEnableRefresh(true)
             }
         }
 
