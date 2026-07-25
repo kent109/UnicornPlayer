@@ -36,21 +36,18 @@ class SettingsActivity : AppCompatActivity() {
 
         // 分组1：播放设置
         val playItems = mutableListOf<SettingItem>()
-        // 均衡器仅在调试版本显示
-        if (BuildConfig.DEBUG) {
-            playItems.add(
-                SettingItem(
-                    key = "equalizer",
-                    title = "均衡器",
-                    hasChevron = true,
-                    isFirst = true,
-                    isLast = false,
-                    onClick = {
-                        Toast.makeText(this, "均衡器功能开发中", Toast.LENGTH_SHORT).show()
-                    }
-                )
+        playItems.add(
+            SettingItem(
+                key = "equalizer",
+                title = "均衡器",
+                hasChevron = true,
+                isFirst = true,
+                isLast = false,
+                onClick = {
+                    Toast.makeText(this, "功能开发中，敬请期待", Toast.LENGTH_SHORT).show()
+                }
             )
-        }
+        )
         playItems.add(
             SettingItem(
                 key = "lyrics",
