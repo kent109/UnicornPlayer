@@ -88,6 +88,7 @@ class SongInfoHelper(private val context: Context) {
             "分享本地文件",
             R.color.quality_sq
         ) {
+            bottomSheetDialog.dismiss()
             shareLocalFile(song)
         }
 
