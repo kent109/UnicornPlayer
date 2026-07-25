@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.PopupWindow
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
@@ -18,6 +19,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.unicorn.player.databinding.ActivityLyricsOptionsBinding
 import com.unicorn.player.util.LrcFetcher
+import com.unicorn.player.util.LyricsSaveManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -77,6 +79,22 @@ class LyricsOptionsActivity : AppCompatActivity() {
     // 字体大小弹窗
     private var fontPopup: android.widget.PopupWindow? = null
 
+    // 防止开关恢复时递归触发 listener
+    private var isRestoringSwitch = false
+
+    // SAF 目录选择器启动器：用户授权后持久化树 URI
+    private val openDocumentTreeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+            if (treeUri != null) {
+                LyricsSaveManager.saveTreeUri(this, treeUri)
+                // 授权成功，重新设置开关为打开（此时已有权限，不会再次触发 SAF）
+                setSwitchChecked("lyrics_enable", true)
+            } else {
+                // 用户取消选择，恢复开关为关闭
+                setSwitchChecked("lyrics_enable", false)
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLyricsOptionsBinding.inflate(layoutInflater)
@@ -135,7 +153,7 @@ class LyricsOptionsActivity : AppCompatActivity() {
                 ),
                 SettingItem(
                     key = "search_lyrics",
-                    title = "备份歌词",
+                    title = "歌词目录",
                     summary = "/storage/emulated/0/Documents/Unicorn/Lyrics",
                     hasChevron = false,
                     isFirst = false,
@@ -249,6 +267,8 @@ class LyricsOptionsActivity : AppCompatActivity() {
                 }
             }
             switchButton.isChecked = enabled
+            // 设置 tag 以便后续通过 findViewWithTag 定位
+            switchButton.tag = "${item.key}_switch"
             // 同步到对应的运行时状态（避免 Activity 重建后 object 状态丢失）
             if (item.key == "lyrics_enable") {
                 LrcFetcher.lyricsEnabled = enabled
@@ -257,7 +277,23 @@ class LyricsOptionsActivity : AppCompatActivity() {
             // 【方案 C】监听开关变化：即时同步运行时状态 + 即时异步写入 DataStore，
             // 移除 pendingSwitchStates 中间层 —— 解决 runBlocking 在 onPause 中可被中断的问题。
             switchButton.setOnCheckedChangeListener { _, isChecked ->
-                if (item.key == "lyrics_enable") LrcFetcher.lyricsEnabled = isChecked
+                if (item.key == "lyrics_enable") {
+                    if (isChecked) {
+                        // 打开前检查 SAF 权限——无权限则恢复开关并启动选择器
+                        if (!LyricsSaveManager.hasSavedTreeUri(this@LyricsOptionsActivity) ||
+                            !LyricsSaveManager.isTreePermissionValid(this@LyricsOptionsActivity)
+                        ) {
+                            if (!isRestoringSwitch) {
+                                isRestoringSwitch = true
+                                switchButton.isChecked = false
+                                isRestoringSwitch = false
+                                openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
+                            }
+                            return@setOnCheckedChangeListener
+                        }
+                    }
+                    LrcFetcher.lyricsEnabled = isChecked
+                }
                 lifecycleScope.launch {
                     try {
                         val k = switchKeyMap[item.key] ?: return@launch
@@ -424,6 +460,17 @@ class LyricsOptionsActivity : AppCompatActivity() {
         updateFontSizeSummary(size)
         fontPopup?.dismiss()
         fontPopup = null
+    }
+
+    /**
+     * 通过 tag 找到指定 key 对应的开关并设置其状态（防递归触发 listener）
+     */
+    private fun setSwitchChecked(key: String, checked: Boolean) {
+        isRestoringSwitch = true
+        binding.settingsContainer
+            .findViewWithTag<SwitchMaterial>("${key}_switch")
+            ?.isChecked = checked
+        isRestoringSwitch = false
     }
 
     /**

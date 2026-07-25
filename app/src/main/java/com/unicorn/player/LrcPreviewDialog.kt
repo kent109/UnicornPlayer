@@ -26,8 +26,8 @@ class LrcPreviewDialog(
     private val triggerY: Float,
     private val onContentUpdated: ((String) -> Unit)? = null,
     private val startInEditMode: Boolean = false,
-    private val onBackup: ((String) -> Unit)? = null,
-    private val showBackupButton: Boolean = true
+    private val onSave: ((String) -> Unit)? = null,
+    private val showSaveButton: Boolean = true
 ) {
 
     private var dialog: AlertDialog? = null
@@ -106,23 +106,14 @@ class LrcPreviewDialog(
      * 设置按钮点击监听
      */
     private fun setupButtonListeners() {
-        // 备份按钮 - 将当前歌词内容写入外部存储（始终可见，不参与编辑模式切换）
-        if (!showBackupButton) {
-            binding.btnBackup.visibility = View.GONE
-        }
-        binding.btnBackup.setOnClickListener {
-            val content = binding.etLrcContent.text?.toString() ?: ""
-            onBackup?.invoke(content)
-            // 备份后关闭弹窗
-            dismiss()
-        }
-
         // 编辑按钮 - 进入编辑模式
         binding.btnEdit.setOnClickListener {
             enterEditMode()
         }
 
-        // 保存按钮 - 判断是否修改后关闭弹窗
+        // 保存按钮 - 保存并关闭弹窗
+        // 初始可见性由 showSaveButton 控制；若初始隐藏，进入编辑模式时会自动显示
+        binding.btnSave.visibility = if (showSaveButton) View.VISIBLE else View.GONE
         binding.btnSave.setOnClickListener {
             saveAndDismiss()
         }
@@ -168,6 +159,9 @@ class LrcPreviewDialog(
         if (currentText != originalContent) {
             onContentUpdated?.invoke(currentText)
         }
+
+        // 触发保存回调（如写入外部存储）
+        onSave?.invoke(currentText)
 
         // 关闭弹窗
         dismiss()

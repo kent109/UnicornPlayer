@@ -79,16 +79,16 @@ object LogWriter {
      */
     private fun rotateLogFile(oldFile: File) {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val backupName = "error_log_$timestamp.txt"
-        val backupFile = File(oldFile.parentFile, backupName)
-        oldFile.renameTo(backupFile)
+        val saveName = "error_log_$timestamp.txt"
+        val saveFile = File(oldFile.parentFile, saveName)
+        oldFile.renameTo(saveFile)
 
-        // 只保留最近 5 个备份文件
-        val backupFiles = oldFile.parentFile?.listFiles { _, name ->
+        // 只保留最近 5 个保存文件
+        val saveFiles = oldFile.parentFile?.listFiles { _, name ->
             name.startsWith("error_log_") && name.endsWith(".txt")
         }?.sortedByDescending { it.lastModified() }
 
-        backupFiles?.drop(5)?.forEach { it.delete() }
+        saveFiles?.drop(5)?.forEach { it.delete() }
     }
 
     /**

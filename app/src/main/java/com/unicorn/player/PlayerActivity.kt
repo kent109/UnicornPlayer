@@ -26,8 +26,8 @@ import com.unicorn.player.util.DisplayUtil
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
-import com.unicorn.player.util.LyricsBackupManager
-import com.unicorn.player.util.toSimpleCustom
+import com.unicorn.player.util.LyricsSaveManager
+import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -137,39 +137,39 @@ class PlayerActivity : AppCompatActivity() {
     // 标记当前歌曲是否搜索/加载不到歌词（本地+网络均无结果），用于显示"新建歌词"按钮
     private var showNoLyricsButton = false
 
-    // ===== SAF 歌词备份 =====
-    // 待备份的歌词内容（授权完成后写入）
-    private var pendingBackupContent: String? = null
+    // ===== SAF 歌词保存 =====
+    // 待保存的歌词内容（授权完成后写入）
+    private var pendingSaveContent: String? = null
 
-    // 待备份的文件名
-    private var pendingBackupFileName: String? = null
+    // 待保存的文件名
+    private var pendingSaveFileName: String? = null
 
-    // SAF 目录选择器启动器：用户授权后持久化树 URI → 确认/创建备份目录 → 执行备份
+    // SAF 目录选择器启动器：用户授权后持久化树 URI → 确认/创建保存目录 → 执行保存
     private val openDocumentTreeLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
             if (treeUri != null) {
-                LyricsBackupManager.saveTreeUri(this, treeUri)
+                LyricsSaveManager.saveTreeUri(this, treeUri)
                 // 授权完成，先确认 Documents/Unicorn/Lyrics 目录存在（不存在则创建）
                 lifecycleScope.launch(Dispatchers.IO) {
-                    val dirReady = LyricsBackupManager.ensureBackupDirExists(this@PlayerActivity)
+                    val dirReady = LyricsSaveManager.ensureSaveDirExists(this@PlayerActivity)
                     withContext(Dispatchers.Main) {
                         if (dirReady) {
-                            executePendingBackup()
+                            executePendingSave()
                         } else {
-                            pendingBackupContent = null
-                            pendingBackupFileName = null
+                            pendingSaveContent = null
+                            pendingSaveFileName = null
                             Toast.makeText(
                                 this@PlayerActivity,
-                                "备份目录创建失败",
+                                "保存目录创建失败",
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
                     }
                 }
             } else {
-                // 用户取消选择，清理待备份数据
-                pendingBackupContent = null
-                pendingBackupFileName = null
+                // 用户取消选择，清理待保存数据
+                pendingSaveContent = null
+                pendingSaveFileName = null
             }
         }
 
@@ -327,7 +327,7 @@ class PlayerActivity : AppCompatActivity() {
         // 应用字号设置（从 DataStore 读取字体大小偏好）
         applyFontSize()
 
-        // "新建歌词"按钮：弹出歌词编辑对话框（空白编辑模式），保存后写入本地 .lrc 文件并重载 LrcView
+        // "新建歌词"按钮：弹出歌词编辑对话框（空白编辑模式），保存后通过 SAF 写入 Documents/Unicorn/Lyrics
         binding.btnCreateLyrics.setOnClickListener {
             val song = musicService?.currentSong?.value
             if (song == null) {
@@ -345,10 +345,9 @@ class PlayerActivity : AppCompatActivity() {
                 "",
                 centerX,
                 centerY,
-                onContentUpdated = { updatedContent ->
-                    saveLocalLrcAndReload(song.path, updatedContent)
-                },
-                startInEditMode = true
+                startInEditMode = true,
+                onSave = { content -> saveLyrics(content) },
+                showSaveButton = false
             ).also { it.show() }
         }
 
@@ -386,11 +385,11 @@ class PlayerActivity : AppCompatActivity() {
     private var lrcPreviewDialog: LrcPreviewDialog? = null
 
     /**
-     * 全屏模式下长按 LrcView 时：从应用私有外部目录读取本地 .lrc 文件内容，弹出编辑预览对话框
+     * 全屏模式下长按 LrcView 时：从 Documents/Unicorn/Lyrics 读取 .lrc 文件内容，弹出编辑预览对话框
      */
     private fun showLrcPreviewForLocalFile(audioPath: String) {
         val lrcFileName = File(audioPath).nameWithoutExtension + ".lrc"
-        val content = LrcHelper.readLrcFromMusic(this, lrcFileName)
+        val content = LyricsSaveManager.readLrcFile(this, lrcFileName)
         if (content == null) {
             Toast.makeText(this, "本地歌词文件不存在", Toast.LENGTH_SHORT).show()
             return
@@ -407,53 +406,23 @@ class PlayerActivity : AppCompatActivity() {
             content,
             centerX,
             centerY,
-            onContentUpdated = { updatedContent ->
-                saveLocalLrcAndReload(audioPath, updatedContent)
-            },
-            onBackup = { content -> backupLyrics(content) }
+            onSave = { content -> saveLyrics(content) },
+            showSaveButton = false
         ).also { it.show() }
     }
 
     /**
-     * 保存编辑后的歌词到本地文件，Toast 提示成功，并重新加载 LrcView
-     */
-    private fun saveLocalLrcAndReload(audioPath: String, content: String) {
-        lifecycleScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    val lrcFileName = File(audioPath).nameWithoutExtension + ".lrc"
-                    // 转为简体中文以保持一致
-                    val simplified = content.toSimpleCustom()
-                    val success =
-                        LrcHelper.writeLrcToMusic(this@PlayerActivity, lrcFileName, simplified)
-                    if (!success) throw Exception("写入歌词文件失败")
-                    Log.i(TAG, "歌词保存成功: $lrcFileName")
-                }
-                Toast.makeText(this@PlayerActivity, "修改成功", Toast.LENGTH_SHORT).show()
-                // 仍在播放当前歌曲时重载 LrcView 数据
-                if (isCurrentSong(audioPath)) {
-                    reloadLrcView(audioPath)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "保存本地歌词失败: ${e.message}", e)
-                Toast.makeText(this@PlayerActivity, "保存失败: ${e.message}", Toast.LENGTH_SHORT)
-                    .show()
-            }
-        }
-    }
-
-    /**
-     * 歌词备份入口（SAF 实现）：
+     * 歌词保存入口（SAF 实现）：
      * 1. 检查是否拥有 Documents 目录的 SAF 树 URI 权限——有则直接写入
      *    Documents/Unicorn/Lyrics/ 目录（自动创建子目录）
-     * 2. 无权限则缓存待备份数据，启动 SAF 选择器定位到 Documents 目录引导用户授权
+     * 2. 无权限则缓存待保存数据，启动 SAF 选择器定位到 Documents 目录引导用户授权
      *
      * 使用 SAF 树 URI + DocumentFile API 在授权目录内逐级操作。
      * 树 URI 授予的读写权限覆盖整个子树，无需系统级权限。
      *
-     * @param content 要备份的歌词文本内容
+     * @param content 要保存的歌词文本内容
      */
-    private fun backupLyrics(content: String) {
+    private fun saveLyrics(content: String) {
         try {
             val song = musicService?.currentSong?.value
             if (song == null) {
@@ -463,80 +432,88 @@ class PlayerActivity : AppCompatActivity() {
             val fileName = "${song.artist} - ${song.title}.lrc"
 
             // 1. 先检查是否有保存的 tree URI（没有则无法创建目录，直接授权）
-            if (!LyricsBackupManager.hasSavedTreeUri(this)) {
-                Log.d(TAG, "backupLyrics: 无保存的 tree URI，启动目录选择器")
-                Toast.makeText(this, "请选择 Documents 目录以授权备份", Toast.LENGTH_LONG).show()
-                pendingBackupContent = content
-                pendingBackupFileName = fileName
-                openDocumentTreeLauncher.launch(LyricsBackupManager.getInitialUri())
+            if (!LyricsSaveManager.hasSavedTreeUri(this)) {
+                Log.d(TAG, "saveLyrics: 无保存的 tree URI，启动目录选择器")
+                Toast.makeText(this, "请选择 Documents 目录以授权保存", Toast.LENGTH_LONG).show()
+                pendingSaveContent = content
+                pendingSaveFileName = fileName
+                openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
                 return
             }
 
             // 2. 有 tree URI，在 IO 协程中检查/创建目录
             lifecycleScope.launch(Dispatchers.IO) {
-                val dirReady = LyricsBackupManager.ensureBackupDirExists(this@PlayerActivity)
+                val dirReady = LyricsSaveManager.ensureSaveDirExists(this@PlayerActivity)
                 if (!dirReady) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@PlayerActivity, "备份目录创建失败", Toast.LENGTH_SHORT)
+                        Toast.makeText(this@PlayerActivity, "保存目录创建失败", Toast.LENGTH_SHORT)
                             .show()
                     }
                     return@launch
                 }
                 // 3. 目录就绪，再检查权限是否仍有效
-                if (!LyricsBackupManager.isTreePermissionValid(this@PlayerActivity)) {
+                if (!LyricsSaveManager.isTreePermissionValid(this@PlayerActivity)) {
                     withContext(Dispatchers.Main) {
-                        pendingBackupContent = content
-                        pendingBackupFileName = fileName
-                        openDocumentTreeLauncher.launch(LyricsBackupManager.getInitialUri())
+                        pendingSaveContent = content
+                        pendingSaveFileName = fileName
+                        openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
                     }
                     return@launch
                 }
                 // 4. 目录就绪且权限有效，执行写入
                 withContext(Dispatchers.Main) {
-                    performBackup(fileName, content)
+                    performSave(fileName, content)
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "backupLyrics 异常: ${e.javaClass.name}: ${e.message}", e)
-            Toast.makeText(this, "备份失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Log.e(TAG, "saveLyrics 异常: ${e.javaClass.name}: ${e.message}", e)
+            Toast.makeText(this, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
     /**
-     * 执行实际的备份写入操作（在协程内完成 IO）。
+     * 执行实际的保存写入操作（在协程内完成 IO）。
      * 目录已在 SAF 回调中确认存在，此处直接写入。
+     * 保存成功后自动刷新 LrcView 显示。
      */
-    private fun performBackup(fileName: String, content: String) {
+    private fun performSave(fileName: String, content: String) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val success = LyricsBackupManager.writeLrcFile(this@PlayerActivity, fileName, content)
+            val success = LyricsSaveManager.writeLrcFile(this@PlayerActivity, fileName, content)
             withContext(Dispatchers.Main) {
                 Toast.makeText(
                     this@PlayerActivity,
-                    if (success) "备份成功" else "备份失败",
+                    if (success) "保存成功" else "保存失败",
                     Toast.LENGTH_SHORT
                 ).show()
+                // 保存成功后刷新 LrcView 显示
+                if (success) {
+                    val audioPath = musicService?.currentSong?.value?.path
+                    if (audioPath != null) {
+                        reloadLrcView(audioPath)
+                    }
+                }
             }
         }
     }
 
     /**
-     * 用户授权 SAF 目录后，执行之前缓存的待备份写入。
+     * 用户授权 SAF 目录后，执行之前缓存的待保存写入。
      */
-    private fun executePendingBackup() {
-        val content = pendingBackupContent ?: return
-        val fileName = pendingBackupFileName ?: return
-        pendingBackupContent = null
-        pendingBackupFileName = null
-        performBackup(fileName, content)
+    private fun executePendingSave() {
+        val content = pendingSaveContent ?: return
+        val fileName = pendingSaveFileName ?: return
+        pendingSaveContent = null
+        pendingSaveFileName = null
+        performSave(fileName, content)
     }
 
     /**
-     * 重新加载 LrcView 数据（解析本地 .lrc 文件并刷新视图）
+     * 重新加载 LrcView 数据（从 Documents/Unicorn/Lyrics 解析 .lrc 文件并刷新视图）
      */
     private fun reloadLrcView(audioPath: String) {
         lifecycleScope.launch {
             try {
-                val lrcRows = LrcHelper.loadLrcFromAudioPath(this@PlayerActivity, audioPath)
+                val lrcRows = loadLrcFromDocuments(audioPath)
                 if (!lrcRows.isNullOrEmpty()) {
                     showNoLyricsButton = false
                     binding.btnCreateLyrics.visibility = View.GONE
@@ -669,7 +646,44 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * 加载并显示歌词，无歌词时自动从网络下载，下载成功后刷新 LrcView
+     * 检查是否拥有有效的 SAF 树 URI 权限
+     */
+    private fun hasValidSafPermission(): Boolean {
+        return LyricsSaveManager.hasSavedTreeUri(this) &&
+                LyricsSaveManager.isTreePermissionValid(this)
+    }
+
+    /**
+     * 从 Documents/Unicorn/Lyrics 加载歌词
+     */
+    private suspend fun loadLrcFromDocuments(audioPath: String): List<LrcRow>? {
+        return withContext(Dispatchers.IO) {
+            val fileName = File(audioPath).nameWithoutExtension + ".lrc"
+            val content = LyricsSaveManager.readLrcFile(this@PlayerActivity, fileName)
+                ?: return@withContext null
+            LrcHelper.parseLrcContent(this@PlayerActivity, content)
+        }
+    }
+
+    /**
+     * 关闭歌词功能并同步开关状态
+     */
+    private fun disableLyrics() {
+        showNoLyricsButton = false
+        binding.btnCreateLyrics.visibility = View.GONE
+        binding.lrcView.setLrcData(emptyList())
+        binding.lrcView.visibility = View.GONE
+        LrcFetcher.lyricsEnabled = false
+        lifecycleScope.launch {
+            applicationContext.lyricsDataStore.edit {
+                it[LyricsOptionsActivity.LYRICS_ENABLED] = false
+            }
+        }
+    }
+
+    /**
+     * 加载并显示歌词，优先级：Documents/Unicorn/Lyrics > 网络下载。
+     * 无 SAF 权限时不显示歌词、不下载，并关闭歌词开关。
      */
     private fun loadAndShowLrc(audioPath: String) {
         Log.d(TAG, "loadAndShowLrc: path=$audioPath")
@@ -689,22 +703,28 @@ class PlayerActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val lrcRows = LrcHelper.loadLrcFromAudioPath(this@PlayerActivity, audioPath)
-                Log.d(TAG, "loadLrcFromAudioPath 返回: ${lrcRows?.size ?: "null"} 行")
-                if (!lrcRows.isNullOrEmpty()) {
+                // 1. SAF 权限前置检查——无权限则关闭歌词开关，不显示不下载
+                if (!hasValidSafPermission()) {
+                    Log.d(TAG, "无 SAF 权限，关闭歌词功能")
+                    disableLyrics()
+                    return@launch
+                }
+                // 2. Documents 优先
+                val docsRows = loadLrcFromDocuments(audioPath)
+                Log.d(TAG, "loadLrcFromDocuments 返回: ${docsRows?.size ?: "null"} 行")
+                if (!docsRows.isNullOrEmpty()) {
                     showNoLyricsButton = false
                     binding.btnCreateLyrics.visibility = View.GONE
-                    binding.lrcView.setLrcData(applyTimeLabelToRows(lrcRows))
+                    binding.lrcView.setLrcData(applyTimeLabelToRows(docsRows))
                     binding.lrcView.visibility = View.VISIBLE
-                    Log.d(TAG, "本地歌词加载成功: ${lrcRows.size} 行")
-                } else {
-                    // 本地无歌词，立即清空 LrcView，避免显示上一首的歌词
-                    binding.lrcView.setLrcData(emptyList())
-                    binding.lrcView.visibility = View.GONE
-                    // 尝试从网络下载
-                    Log.d(TAG, "本地无歌词，尝试网络下载")
-                    fetchLrcFromNetwork(audioPath)
+                    Log.d(TAG, "Documents 歌词加载成功: ${docsRows.size} 行")
+                    return@launch
                 }
+                // 3. 网络兜底
+                binding.lrcView.setLrcData(emptyList())
+                binding.lrcView.visibility = View.GONE
+                Log.d(TAG, "Documents 无歌词，尝试网络下载")
+                fetchLrcFromNetwork(audioPath)
             } catch (e: Exception) {
                 binding.lrcView.visibility = View.GONE
                 Log.e(TAG, "加载歌词失败", e)

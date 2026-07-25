@@ -120,12 +120,12 @@ object LrcHelper {
     // ===================== 解析 =====================
 
     /**
-     * 解析 LRC 文本内容。
+     * 解析 LRC 文本内容（公共方法，接受字符串输入）。
      *
      * 注意：LrcDataBuilder 要求传入 File，因此将内容写入缓存临时文件后再解析，
      * 解析完成即删除。
      */
-    private fun parseLrcContent(context: Context, content: String): List<LrcRow>? {
+    fun parseLrcContent(context: Context, content: String): List<LrcRow>? {
         val tmpFile = File.createTempFile("lrc_parse", ".lrc", context.cacheDir)
         return try {
             tmpFile.writeText(content, Charsets.UTF_8)

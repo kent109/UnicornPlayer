@@ -11,9 +11,9 @@ import androidx.documentfile.provider.DocumentFile
 import java.nio.charset.Charset
 
 /**
- * 歌词备份工具类（SAF 实现）
+ * 歌词保存工具类（SAF 实现）
  *
- * 备份目录：Documents/Unicorn/Lyrics/
+ * 保存目录：Documents/Unicorn/Lyrics/
  * 使用 SAF 树 URI 授权。用户通过系统文件选择器授权 Documents 目录后，
  * 通过 DocumentFile API 在树内逐级创建子目录和文件。
  *
@@ -21,11 +21,11 @@ import java.nio.charset.Charset
  * - 必须通过 DocumentFile 在树内操作，不能直接拼接文档 URI，
  * - 否则 ExternalStorageProvider 会要求系统级 MANAGE_DOCUMENTS 权限，导致 SecurityException。
  */
-object LyricsBackupManager {
+object LyricsSaveManager {
 
     private const val UNICORN_DIR = "Unicorn"
     private const val LYRICS_DIR = "Lyrics"
-    private const val PREFS_NAME = "lyrics_backup_prefs"
+    private const val PREFS_NAME = "lyrics_save_prefs"
     private const val KEY_TREE_URI = "tree_uri"
 
     /**
@@ -44,14 +44,14 @@ object LyricsBackupManager {
     fun saveTreeUri(context: Context, treeUri: Uri) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             ?.edit { putString(KEY_TREE_URI, treeUri.toString()) }
-            ?: LogWriter.writeError("LyricsBackup", "getSharedPreferences 返回 null", null)
+            ?: LogWriter.writeError("LyricsSave", "getSharedPreferences 返回 null", null)
         try {
             context.contentResolver.takePersistableUriPermission(
                 treeUri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
         } catch (e: Throwable) {
-            LogWriter.writeError("LyricsBackup", "获取持久权限失败: ${e.message}", e)
+            LogWriter.writeError("LyricsSave", "获取持久权限失败: ${e.message}", e)
         }
     }
 
@@ -96,7 +96,7 @@ object LyricsBackupManager {
      *
      * @return 目录存在且可用返回 true，创建失败返回 false
      */
-    fun ensureBackupDirExists(context: Context): Boolean {
+    fun ensureSaveDirExists(context: Context): Boolean {
         return try {
             val treeUri = getSavedTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
@@ -106,11 +106,49 @@ object LyricsBackupManager {
             // 在 Unicorn 内查找/创建 Lyrics 子目录
             val lyrics = unicorn.findFile(LYRICS_DIR)
                 ?: unicorn.createDirectory(LYRICS_DIR) ?: return false
-            Log.d("LyricsBackup", "lyrics.isDirectory=${lyrics.isDirectory}")
+            Log.d("LyricsSave", "lyrics.isDirectory=${lyrics.isDirectory}")
             lyrics.isDirectory
         } catch (e: Throwable) {
-            Log.e("LyricsBackup", "创建备份目录失败: ${e.message}")
-            LogWriter.writeError("LyricsBackup", "创建备份目录失败: ${e.message}", e)
+            Log.e("LyricsSave", "创建保存目录失败: ${e.message}")
+            LogWriter.writeError("LyricsSave", "创建保存目录失败: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * 从 Documents/Unicorn/Lyrics/ 读取歌词内容。
+     *
+     * @param fileName 文件名，如 "Artist - Title.lrc"
+     * @return 文件内容；不存在或读取失败返回 null
+     */
+    fun readLrcFile(context: Context, fileName: String): String? {
+        return try {
+            val treeUri = getSavedTreeUri(context) ?: return null
+            val root = DocumentFile.fromTreeUri(context, treeUri) ?: return null
+            val unicorn = root.findFile(UNICORN_DIR) ?: return null
+            val dir = unicorn.findFile(LYRICS_DIR) ?: return null
+            val file = dir.findFile(fileName) ?: return null
+            context.contentResolver.openInputStream(file.uri)?.use { input ->
+                input.readBytes().toString(Charset.forName("UTF-8"))
+            }
+        } catch (e: Throwable) {
+            LogWriter.writeError("LyricsSave", "读取保存失败: ${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * 检查 Documents/Unicorn/Lyrics/ 中是否存在指定歌词文件。
+     */
+    fun lrcFileExists(context: Context, fileName: String): Boolean {
+        return try {
+            val treeUri = getSavedTreeUri(context) ?: return false
+            val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
+            val unicorn = root.findFile(UNICORN_DIR) ?: return false
+            val dir = unicorn.findFile(LYRICS_DIR) ?: return false
+            dir.findFile(fileName) != null
+        } catch (e: Throwable) {
+            e.printStackTrace()
             false
         }
     }
@@ -141,7 +179,7 @@ object LyricsBackupManager {
             } ?: return false
             true
         } catch (e: Throwable) {
-            LogWriter.writeError("LyricsBackup", "写入备份失败: ${e.message}", e)
+            LogWriter.writeError("LyricsSave", "写入保存失败: ${e.message}", e)
             false
         }
     }

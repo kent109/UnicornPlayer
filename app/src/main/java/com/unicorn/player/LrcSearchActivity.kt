@@ -180,7 +180,7 @@ class LrcSearchActivity : AppCompatActivity(),
                 // 更新列表 item 的 syncedLyrics
                 updateResultContent(result, updatedContent)
             },
-            showBackupButton = false
+            showSaveButton = false
         ).also { it.show() }
     }
 
