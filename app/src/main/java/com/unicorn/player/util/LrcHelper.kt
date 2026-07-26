@@ -58,7 +58,11 @@ object LrcHelper {
      *
      * @param fileName 显示名，如 "Artist - Title.lrc"
      * @param lrcContent 歌词文本内容
+     *
+     * @deprecated 请使用 {@link LyricsSaveManager#writeLrcFile} 写入 Documents/Unicorn/Lyrics/（SAF）。
+     *             应用私有外部目录存储已废弃，仅作为向后兼容保留。
      */
+    @Deprecated("Use LyricsSaveManager.writeLrcFile instead")
     fun writeLrcToMusic(context: Context, fileName: String, lrcContent: String): Boolean {
         return try {
             val file = getLrcFile(context, fileName)
@@ -75,7 +79,11 @@ object LrcHelper {
      *
      * @param fileName 显示名，如 "Artist - Title.lrc"
      * @return 文件内容；未找到或读取失败返回 null
+     *
+     * @deprecated 请使用 {@link LyricsSaveManager#readLrcFile} 从 Documents/Unicorn/Lyrics/（SAF）读取。
+     *             应用私有外部目录存储已废弃，仅作为向后兼容保留。
      */
+    @Deprecated("Use LyricsSaveManager.readLrcFile instead")
     fun readLrcFromMusic(context: Context, fileName: String): String? {
         val file = getLrcFile(context, fileName)
         return try {
@@ -91,7 +99,11 @@ object LrcHelper {
      * 删除指定文件名的歌词文件
      *
      * @return 是否成功删除到至少一个文件
+     *
+     * @deprecated 请使用 {@link LyricsSaveManager} 的 Documents/Unicorn/Lyrics/（SAF）操作替代。
+     *             应用私有外部目录存储已废弃，仅作为向后兼容保留。
      */
+    @Deprecated("Use LyricsSaveManager instead")
     fun deleteLrcFromMusic(context: Context, fileName: String): Boolean {
         val file = getLrcFile(context, fileName)
         return file.exists() && file.delete()
@@ -105,11 +117,15 @@ object LrcHelper {
      *
      * @param audioPath 音频文件完整路径，如 "/storage/music/Artist - Title.flac"
      * @return 歌词行列表；未找到返回 null
+     *
+     * @deprecated 请使用 {@link LyricsSaveManager#readLrcFile} 从 Documents/Unicorn/Lyrics/（SAF）读取，
+     *             配合 {@link #parseLrcContent} 解析。应用私有外部目录存储已废弃，仅作为向后兼容保留。
      */
+    @Deprecated("Use LyricsSaveManager.readLrcFile + parseLrcContent instead")
     fun loadLrcFromAudioPath(context: Context, audioPath: String): List<LrcRow>? {
         if (audioPath.isBlank()) return null
 
-        val fileName = File(audioPath).nameWithoutExtension + ".lrc"
+        val fileName = File(audioPath).nameWithoutExtension.toSimpleCustom() + ".lrc"
         val content = readLrcFromMusic(context, fileName) ?: run {
             Log.i(TAG, "歌词文件不存在: $fileName")
             return null

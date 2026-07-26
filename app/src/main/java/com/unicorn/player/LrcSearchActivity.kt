@@ -7,6 +7,7 @@ import android.util.TypedValue
 import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -16,7 +17,7 @@ import com.unicorn.player.adapter.LrcSearchResultAdapter
 import com.unicorn.player.databinding.ActivityLrcSearchBinding
 import com.unicorn.player.model.LrcSearchResult
 import com.unicorn.player.util.LrcFetcher
-import com.unicorn.player.util.LrcHelper
+import com.unicorn.player.util.LyricsSaveManager
 import com.unicorn.player.util.toSimpleCustom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -37,6 +38,42 @@ class LrcSearchActivity : AppCompatActivity(),
 
     /** 当前播放歌曲的音频文件路径，用于确定 .lrc 保存位置 */
     private var audioPath: String = ""
+
+    // ===== SAF 歌词保存 =====
+    // 待保存的歌词内容（授权完成后写入）
+    private var pendingSaveContent: String? = null
+
+    // 待保存的文件名
+    private var pendingSaveFileName: String? = null
+
+    // SAF 目录选择器启动器：用户授权后持久化树 URI → 确认/创建保存目录 → 执行保存
+    private val openDocumentTreeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+            if (treeUri != null) {
+                LyricsSaveManager.saveTreeUri(this, treeUri)
+                // 授权完成，先确认 Documents/Unicorn/Lyrics 目录存在（不存在则创建）
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val dirReady = LyricsSaveManager.ensureSaveDirExists(this@LrcSearchActivity)
+                    withContext(Dispatchers.Main) {
+                        if (dirReady) {
+                            executePendingSave()
+                        } else {
+                            pendingSaveContent = null
+                            pendingSaveFileName = null
+                            Toast.makeText(
+                                this@LrcSearchActivity,
+                                "保存目录创建失败",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+            } else {
+                // 用户取消选择，清理待保存数据
+                pendingSaveContent = null
+                pendingSaveFileName = null
+            }
+        }
 
     companion object {
         const val TAG = "LrcSearchActivity"
@@ -185,48 +222,76 @@ class LrcSearchActivity : AppCompatActivity(),
     }
 
     /**
-     * 保存选中的歌词到本地
-     * 先删除当前本地歌词（如有），再写入新内容
+     * 保存选中的歌词到 Documents/Unicorn/Lyrics/（SAF）
+     * 无 SAF 权限时引导用户授权，授权完成后自动继续保存
      */
     private fun saveSelectedLyrics(result: LrcSearchResult) {
-        lifecycleScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    val baseName = File(audioPath).nameWithoutExtension
-                    val lrcFileName = "$baseName.lrc"
+        val baseName = File(audioPath).nameWithoutExtension.toSimpleCustom()
+        val lrcFileName = "$baseName.lrc"
 
-                    // 首行插入 "[00:00.00]Artist - Title"
-                    val artist = result.artistName.ifBlank {
-                        baseName.substringBefore(" - ").trim()
-                    }
-                    val title = result.trackName.ifBlank {
-                        baseName.substringAfter(" - ", baseName).trim()
-                    }
-                    // 清理 <数字:数字.数字> 标签
-                    val cleanedLyrics = LrcFetcher.cleanTimestampTags(result.syncedLyrics)
+        // 首行插入 "[00:00.00]Artist - Title"
+        val artist = result.artistName.ifBlank {
+            baseName.substringBefore(" - ").trim()
+        }
+        val title = result.trackName.ifBlank {
+            baseName.substringAfter(" - ", baseName).trim()
+        }
+        // 清理 <数字:数字.数字> 标签
+        val cleanedLyrics = LrcFetcher.cleanTimestampTags(result.syncedLyrics)
 
-                    val header = "[00:00.00]$artist - $title"
-                    val lrcContent = header + "\r\n" + cleanedLyrics
+        val header = "[00:00.00]$artist - $title"
+        val lrcContent = header + "\r\n" + cleanedLyrics
 
-                    // 转为简体中文后写入应用私有外部目录（CRLF 换行），同名文件会被覆盖
-                    val simplifiedContent = lrcContent.toSimpleCustom()
-                    val success = LrcHelper.writeLrcToMusic(
-                        this@LrcSearchActivity,
-                        lrcFileName,
-                        simplifiedContent
-                    )
-                    if (!success) throw Exception("写入歌词文件失败")
-                    Log.i(TAG, "歌词保存成功: $lrcFileName")
+        // 转为简体中文（CRLF 换行）
+        val simplifiedContent = lrcContent.toSimpleCustom()
+
+        // 检查 SAF 权限：有则直接保存，无则缓存数据并引导授权
+        if (LyricsSaveManager.hasSavedTreeUri(this) &&
+            LyricsSaveManager.isTreePermissionValid(this)
+        ) {
+            performSave(lrcFileName, simplifiedContent)
+        } else {
+            pendingSaveContent = simplifiedContent
+            pendingSaveFileName = lrcFileName
+            Toast.makeText(this, "请选择 Documents 目录以授权保存", Toast.LENGTH_LONG).show()
+            openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
+        }
+    }
+
+    /**
+     * 执行实际的保存写入操作（SAF Documents/Unicorn/Lyrics/）
+     */
+    private fun performSave(fileName: String, content: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val dirReady = LyricsSaveManager.ensureSaveDirExists(this@LrcSearchActivity)
+            if (!dirReady) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@LrcSearchActivity, "保存目录创建失败", Toast.LENGTH_SHORT)
+                        .show()
                 }
-
-                Toast.makeText(this@LrcSearchActivity, "歌词已保存", Toast.LENGTH_SHORT).show()
-                finish()
-            } catch (e: Exception) {
-                Log.e(TAG, "保存歌词失败: ${e.message}", e)
-                Toast.makeText(this@LrcSearchActivity, "保存失败: ${e.message}", Toast.LENGTH_SHORT)
-                    .show()
+                return@launch
+            }
+            val success = LyricsSaveManager.writeLrcFile(this@LrcSearchActivity, fileName, content)
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    Toast.makeText(this@LrcSearchActivity, "歌词已保存", Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    Toast.makeText(this@LrcSearchActivity, "保存失败", Toast.LENGTH_SHORT).show()
+                }
             }
         }
+    }
+
+    /**
+     * 用户授权 SAF 目录后，执行之前缓存的待保存写入
+     */
+    private fun executePendingSave() {
+        val content = pendingSaveContent ?: return
+        val fileName = pendingSaveFileName ?: return
+        pendingSaveContent = null
+        pendingSaveFileName = null
+        performSave(fileName, content)
     }
 
     /**

@@ -18,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.toColorInt
+import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.lifecycleScope
 import com.hw.lrcviewlib.LrcRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
@@ -27,7 +28,7 @@ import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
 import com.unicorn.player.util.LyricsSaveManager
-import androidx.datastore.preferences.core.edit
+import com.unicorn.player.util.toSimpleCustom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -388,7 +389,7 @@ class PlayerActivity : AppCompatActivity() {
      * 全屏模式下长按 LrcView 时：从 Documents/Unicorn/Lyrics 读取 .lrc 文件内容，弹出编辑预览对话框
      */
     private fun showLrcPreviewForLocalFile(audioPath: String) {
-        val lrcFileName = File(audioPath).nameWithoutExtension + ".lrc"
+        val lrcFileName = File(audioPath).nameWithoutExtension.toSimpleCustom() + ".lrc"
         val content = LyricsSaveManager.readLrcFile(this, lrcFileName)
         if (content == null) {
             Toast.makeText(this, "本地歌词文件不存在", Toast.LENGTH_SHORT).show()
@@ -429,7 +430,9 @@ class PlayerActivity : AppCompatActivity() {
                 Toast.makeText(this, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
                 return
             }
-            val fileName = "${song.artist} - ${song.title}.lrc"
+            // 使用音频文件名（不含扩展名）作为歌词文件名，与搜索、加载保持一致
+            // 例如音频文件为 "a - b.mp3"，则保存为 "a - b.lrc"
+            val fileName = File(song.path).nameWithoutExtension.toSimpleCustom() + ".lrc"
 
             // 1. 先检查是否有保存的 tree URI（没有则无法创建目录，直接授权）
             if (!LyricsSaveManager.hasSavedTreeUri(this)) {
@@ -658,7 +661,7 @@ class PlayerActivity : AppCompatActivity() {
      */
     private suspend fun loadLrcFromDocuments(audioPath: String): List<LrcRow>? {
         return withContext(Dispatchers.IO) {
-            val fileName = File(audioPath).nameWithoutExtension + ".lrc"
+            val fileName = File(audioPath).nameWithoutExtension.toSimpleCustom() + ".lrc"
             val content = LyricsSaveManager.readLrcFile(this@PlayerActivity, fileName)
                 ?: return@withContext null
             LrcHelper.parseLrcContent(this@PlayerActivity, content)
@@ -756,7 +759,7 @@ class PlayerActivity : AppCompatActivity() {
                         return@launch
                     }
                     try {
-                        val lrcRows = LrcHelper.loadLrcFromAudioPath(this@PlayerActivity, audioPath)
+                        val lrcRows = loadLrcFromDocuments(audioPath)
                         if (!lrcRows.isNullOrEmpty()) {
                             showNoLyricsButton = false
                             binding.btnCreateLyrics.visibility = View.GONE
