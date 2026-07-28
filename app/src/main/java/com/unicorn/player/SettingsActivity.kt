@@ -82,16 +82,12 @@ class SettingsActivity : AppCompatActivity() {
                 ),
                 SettingItem(
                     key = "about",
-                    title = "关于Unicorn",
+                    title = "用户协议",
                     hasChevron = true,
                     isFirst = false,
                     isLast = true,
                     onClick = {
-                        Toast.makeText(
-                            this,
-                            "UnicornPlayer v${getVersionName()}",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        startActivity(Intent(this, AboutActivity::class.java))
                     }
                 )
             )

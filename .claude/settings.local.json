@@ -143,7 +143,12 @@
       "Bash(gradle app:kaptDebugKotlin --stacktrace)",
       "Bash(n\\\\\" -replace \\\\\")",
       "Bash(powershell -Command \"\\(Get-Content -Path 'app/src/main/java/com/unicorn/player/util/LyricsBackupManager.kt' -Raw\\) -replace \\\\\"`r`n\\\\\",\\\\\"`n\\\\\" -replace \\\\\"`n\\\\\",\\\\\"`r`n\\\\\" | Set-Content -Path 'app/src/main/java/com/unicorn/player/util/LyricsBackupManager.kt' -NoNewline\")",
-      "Bash(gradle app:assembleRelease *)"
+      "Bash(gradle app:assembleRelease *)",
+      "Bash(xxd app/src/main/java/com/unicorn/player/AboutActivity.kt)",
+      "Bash(xxd app/src/main/res/layout/activity_about.xml)",
+      "Bash(xxd app/src/main/res/raw/about.md)",
+      "Bash(sed -i 's/\\\\r$//' app/src/main/java/com/unicorn/player/AboutActivity.kt)",
+      "Bash(sed -i 's/$/\\\\r/' app/src/main/java/com/unicorn/player/AboutActivity.kt)"
     ]
   }
 }

@@ -102,7 +102,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     private fun setupWaveSideBar() {
         binding.waveSideBar.setIndexItems(
             "↑", "☆", "A", "B", "C", "D", "E", "F", "G", "H", "I",
-            "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "#"
+            "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "#", "↓"
         )
         binding.waveSideBar.setOnSelectIndexItemListener { letter ->
             // 手指正在 WaveSideBar 上检索字母（每次字母变化都会回调），此时禁用 ViewPager

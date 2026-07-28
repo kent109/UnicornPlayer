@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Unicorn</string>
+    <string name="app_name">随行</string>
     <string name="search_hint">搜索音乐...</string>
     <string name="play">播放</string>
     <string name="pause">暂停</string>
