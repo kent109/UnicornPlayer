@@ -148,7 +148,12 @@
       "Bash(xxd app/src/main/res/layout/activity_about.xml)",
       "Bash(xxd app/src/main/res/raw/about.md)",
       "Bash(sed -i 's/\\\\r$//' app/src/main/java/com/unicorn/player/AboutActivity.kt)",
-      "Bash(sed -i 's/$/\\\\r/' app/src/main/java/com/unicorn/player/AboutActivity.kt)"
+      "Bash(sed -i 's/$/\\\\r/' app/src/main/java/com/unicorn/player/AboutActivity.kt)",
+      "Bash(unzip -l classes.jar)",
+      "Bash(unzip -p classes.jar com/hw/lrcviewlib/LrcView.class)",
+      "Bash(unzip -p classes.jar com/hw/lrcviewlib/LrcViewSetting.class)",
+      "Bash(grep -E \"^[\\\\x20-\\\\x7e\\\\x{4e00}-\\\\x{9fff}]{3,}$\".)",
+      "Bash(unzip -o classes.jar -d /tmp/lrc_jar)"
     ]
   }
 }

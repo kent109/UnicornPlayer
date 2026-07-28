@@ -325,6 +325,9 @@ class PlayerActivity : AppCompatActivity() {
         binding.lrcView.lrcSetting.setTriangleWidth(DisplayUtil.dp2px(this, 10f))
         binding.lrcView.post { binding.lrcView.commitLrcSettings() }
 
+        // 隐藏"加载歌词中"提示
+        lrcView.setNoDataMessage("")
+
         // 应用字号设置（从 DataStore 读取字体大小偏好）
         applyFontSize()
 
