@@ -2,6 +2,7 @@ package com.unicorn.player
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.Window
@@ -106,6 +107,21 @@ class SongInfoHelper(private val context: Context) {
 
         // 设置窗口动画
         bottomSheetDialog.show()
+
+        // 用 GradientDrawable 替代 MaterialShapeDrawable，防止拖拽时圆角被动画化为 0
+        val designBottomSheet = bottomSheetDialog.findViewById<android.view.ViewGroup>(com.google.android.material.R.id.design_bottom_sheet)
+        designBottomSheet?.post {
+            val cornerRadius = 40f * designBottomSheet.resources.displayMetrics.density
+            val drawable = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(designBottomSheet.context.getColor(R.color.surface))
+                cornerRadii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f, 0f, 0f)
+            }
+            designBottomSheet.background = drawable
+            designBottomSheet.clipToOutline = true
+            designBottomSheet.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+        }
+
         val window: Window? = bottomSheetDialog.window
         window?.let {
             val layoutParams = it.attributes

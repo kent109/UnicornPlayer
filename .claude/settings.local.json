@@ -153,7 +153,10 @@
       "Bash(unzip -p classes.jar com/hw/lrcviewlib/LrcView.class)",
       "Bash(unzip -p classes.jar com/hw/lrcviewlib/LrcViewSetting.class)",
       "Bash(grep -E \"^[\\\\x20-\\\\x7e\\\\x{4e00}-\\\\x{9fff}]{3,}$\".)",
-      "Bash(unzip -o classes.jar -d /tmp/lrc_jar)"
+      "Bash(unzip -o classes.jar -d /tmp/lrc_jar)",
+      "Bash(del *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(xxd \"D:/workspace/android_studio/UnicornPlayer/app/src/main/res/drawable/bottom_sheet_background.xml\")"
     ]
   }
 }
