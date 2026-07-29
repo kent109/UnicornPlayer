@@ -1,11 +1,14 @@
 package com.unicorn.player.widget;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.AccelerateInterpolator;
@@ -34,6 +37,7 @@ public class BezierCircleHeader extends SimpleComponent implements RefreshHeader
     protected Paint mBackPaint;
     protected Paint mFrontPaint;
     protected Paint mOuterPaint;
+    protected Paint mRocketPaint;
     protected int mHeight;
     protected float mWaveHeight;
     protected float mHeadHeight;
@@ -53,6 +57,15 @@ public class BezierCircleHeader extends SimpleComponent implements RefreshHeader
     protected static final int TARGET_DEGREE = 270;
     protected boolean mWavePulling = false;
     protected RefreshKernel mKernel;
+
+    // 向上火箭（ic_rocket）：拉动时逐渐显示，松手时向上飞走
+    protected Drawable mRocketDrawable;
+    protected float mRocketProgress;        // 0~1，拉动时火箭显示进度
+    protected float mRocketFlyProgress;     // 0~1，松手上飞动画进度
+    protected float mRocketPreReleaseProgress; // 松手前火箭的进度（用于上飞起始透明度）
+    protected boolean mRocketReleased;      // 松手后不再响应 onMoving 的火箭更新
+    protected boolean mRocketVisible;       // 火箭是否可见（飞走后隐藏）
+    protected ValueAnimator mRocketFlyAnimator;
 
     public BezierCircleHeader(Context context) {
         this(context, null);
@@ -76,6 +89,7 @@ public class BezierCircleHeader extends SimpleComponent implements RefreshHeader
         mOuterPaint.setStyle(Paint.Style.STROKE);
         mOuterPaint.setStrokeWidth(SmartUtil.dp2px(2f));
         mPath = new Path();
+        mRocketDrawable = getResources().getDrawable(R.drawable.ic_rocket, context.getTheme());
     }
 
     @Override
@@ -102,6 +116,7 @@ public class BezierCircleHeader extends SimpleComponent implements RefreshHeader
         }
 
         drawWave(canvas, viewWidth, viewHeight);
+        drawRocket(canvas, viewWidth, viewHeight);
         drawSpringUp(canvas, viewWidth);
         drawBoll(canvas, viewWidth);
         drawOuter(canvas, viewWidth);
@@ -126,6 +141,45 @@ public class BezierCircleHeader extends SimpleComponent implements RefreshHeader
         } else {
             canvas.drawRect(0, 0, viewWidth, baseHeight, mBackPaint);
         }
+    }
+
+    /**
+     * 绘制向上的火箭（ic_rocket 图片）：
+     * - 拉动阶段：火箭随下拉距离逐渐显示并放大
+     * - 松手阶段：火箭向上飞走并渐隐
+     */
+    protected void drawRocket(Canvas canvas, int viewWidth, int viewHeight) {
+        if (!mRocketVisible) return;
+        if (mRocketProgress <= 0 && mRocketFlyProgress <= 0) return;
+        if (mRocketDrawable == null) return;
+
+        float cx = viewWidth / 2f;
+        float cy = mHeadHeight * 0.35f;
+        float baseSize = mHeadHeight * 0.28f;
+
+        float alpha, scale, yOffset;
+
+        if (mRocketFlyProgress > 0) {
+            // 松手上飞阶段
+            alpha = mRocketPreReleaseProgress * (1 - mRocketFlyProgress);
+            scale = 1.0f + mRocketFlyProgress * 0.4f;
+            yOffset = -mRocketFlyProgress * mHeadHeight * 0.6f;
+        } else {
+            // 拉动阶段
+            alpha = mRocketProgress;
+            scale = 0.3f + mRocketProgress * 0.7f;
+            yOffset = 0;
+        }
+
+        if (alpha <= 0) return;
+
+        int size = Math.round(baseSize * scale);
+        int left = Math.round(cx - size / 2f);
+        int top = Math.round(cy + yOffset - size / 2f);
+
+        mRocketDrawable.setAlpha(Math.min(255, (int) (alpha * 255)));
+        mRocketDrawable.setBounds(left, top, left + size, top + size);
+        mRocketDrawable.draw(canvas);
     }
 
     protected void drawSpringUp(Canvas canvas, int viewWidth) {
@@ -238,6 +292,15 @@ public class BezierCircleHeader extends SimpleComponent implements RefreshHeader
             mHeadHeight = height;
             mWaveHeight = Math.max(offset - height, 0) * .8f;
         }
+        // 火箭随下拉距离逐渐显示，最高拉到 1.0；松手后清零，防止上飞动画结束后残留
+        if (!mRocketReleased) {
+            mRocketProgress = Math.min(percent, 1.0f);
+            if (isDragging && percent > 0) {
+                mRocketVisible = true;
+            }
+        } else {
+            mRocketProgress = 0;
+        }
         this.invalidate();
     }
 
@@ -246,6 +309,11 @@ public class BezierCircleHeader extends SimpleComponent implements RefreshHeader
         mWavePulling = false;
         mHeadHeight = height;
         mBollRadius = height / 6f;
+        mRocketReleased = true;
+
+        // 启动火箭上飞动画
+        startRocketFlyAnimation();
+
         DecelerateInterpolator interpolator = new DecelerateInterpolator();
         final float reboundHeight = Math.min(mWaveHeight * 0.8f, mHeadHeight / 2);
         ValueAnimator waveAnimator = ValueAnimator.ofFloat(mWaveHeight, 0, -reboundHeight, 0, -(reboundHeight * 0.4f), 0);
@@ -304,10 +372,50 @@ public class BezierCircleHeader extends SimpleComponent implements RefreshHeader
         waveAnimator.start();
     }
 
+    /**
+     * 启动火箭上飞动画：火箭向上位移、放大、渐隐
+     */
+    protected void startRocketFlyAnimation() {
+        mRocketPreReleaseProgress = mRocketProgress;
+        if (mRocketFlyAnimator != null) {
+            mRocketFlyAnimator.cancel();
+        }
+        mRocketFlyAnimator = ValueAnimator.ofFloat(0, 1);
+        mRocketFlyAnimator.setDuration(350);
+        mRocketFlyAnimator.setInterpolator(new AccelerateInterpolator());
+        mRocketFlyAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(@NonNull ValueAnimator animation) {
+                mRocketFlyProgress = (float) animation.getAnimatedValue();
+                final View thisView = BezierCircleHeader.this;
+                thisView.invalidate();
+            }
+        });
+        mRocketFlyAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                mRocketProgress = 0;
+                mRocketFlyProgress = 0;
+                mRocketPreReleaseProgress = 0;
+                mRocketVisible = false;
+                mRocketFlyAnimator = null;
+            }
+        });
+        mRocketFlyAnimator.start();
+    }
+
     @Override
     public int onFinish(@NonNull RefreshLayout layout, boolean success) {
         mShowBoll = false;
         mShowOuter = false;
+        mRocketProgress = 0;
+        mRocketFlyProgress = 0;
+        mRocketPreReleaseProgress = 0;
+        mRocketReleased = false;
+        if (mRocketFlyAnimator != null) {
+            mRocketFlyAnimator.cancel();
+            mRocketFlyAnimator = null;
+        }
         final int DURATION_FINISH = 800; //动画时长
         ValueAnimator animator = ValueAnimator.ofFloat(0, 1);
         animator.addUpdateListener(animation -> {
@@ -334,7 +442,11 @@ public class BezierCircleHeader extends SimpleComponent implements RefreshHeader
             if (colors.length > 1) {
                 mFrontPaint.setColor(colors[1]);
                 mOuterPaint.setColor(colors[1]);
+                if (mRocketDrawable != null) {
+                    mRocketDrawable.setTint(colors[1]);
+                }
             }
         }
     }
 }
+

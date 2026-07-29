@@ -14,7 +14,7 @@ public class CustomRadarHeader extends BezierRadarHeader {
 
     public CustomRadarHeader(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mDotRadius = SmartUtil.dp2px(6);
+        mDotRadius = SmartUtil.dp2px(4);
         mRadarRadius = SmartUtil.dp2px(12);
     }
 
@@ -32,7 +32,8 @@ public class CustomRadarHeader extends BezierRadarHeader {
                 float alpha = 255 * (1 - (2 * (Math.abs(index) / num)));//y4 = m * ( 1 - 2 * abs(y3) / n); 横向 alpha 差
                 mPaint.setAlpha((int) (mDotAlpha * alpha * (1d - 1d / Math.pow((x / 800d + 1d), 15))));//y5 = y4 * (1-1/((x/800+1)^15));竖直 alpha 差
                 float radius = mDotRadius * (1 - 1 / ((x / 16 + 1)));//y6 = mDotRadius*(1-1/(x/16+1));半径
-                canvas.drawCircle((float) width / 2 + width - radius / 2 + wide * index, high / 2, radius, mPaint);
+                float cx = (float) width / 2 + width - radius / 2 + wide * 0.5f * index;
+                canvas.drawCircle(cx, high / 2, radius, mPaint);
             }
             mPaint.setAlpha(255);
         }
