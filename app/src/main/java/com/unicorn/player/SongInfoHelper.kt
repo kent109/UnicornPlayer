@@ -111,6 +111,12 @@ class SongInfoHelper(private val context: Context) {
         // 用 GradientDrawable 替代 MaterialShapeDrawable，防止拖拽时圆角被动画化为 0
         val designBottomSheet = bottomSheetDialog.findViewById<android.view.ViewGroup>(com.google.android.material.R.id.design_bottom_sheet)
         designBottomSheet?.post {
+            // 设置完全展开，下滑时跳过折叠状态直接消失
+            val behavior = com.google.android.material.bottomsheet.BottomSheetBehavior.from(designBottomSheet)
+            behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+            behavior.isHideable = true
+            behavior.skipCollapsed = true
+
             val cornerRadius = 40f * designBottomSheet.resources.displayMetrics.density
             val drawable = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
