@@ -78,11 +78,23 @@ class SettingsActivity : AppCompatActivity() {
                     hasChevron = false,
                     isFirst = true,
                     isLast = false,
-                    onClick = null
+                    onClick = {
+                        Toast.makeText(this, "已是最新版本", Toast.LENGTH_SHORT).show()
+                    }
+                ),
+                SettingItem(
+                    key = "manual",
+                    title = "使用手册",
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = false,
+                    onClick = {
+                        startActivity(Intent(this, ManualActivity::class.java))
+                    }
                 ),
                 SettingItem(
                     key = "about",
-                    title = "用户协议",
+                    title = "协议隐私",
                     hasChevron = true,
                     isFirst = false,
                     isLast = true,
