@@ -9,7 +9,11 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import androidx.lifecycle.lifecycleScope
 import com.unicorn.player.databinding.ActivitySettingsBinding
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 设置页面Activity
@@ -18,6 +22,9 @@ import com.unicorn.player.databinding.ActivitySettingsBinding
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
+
+    /** 是否正在检查更新，防止连续点击 */
+    private var isCheckingUpdate = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,7 +86,7 @@ class SettingsActivity : AppCompatActivity() {
                     isFirst = true,
                     isLast = false,
                     onClick = {
-                        Toast.makeText(this, "已是最新版本", Toast.LENGTH_SHORT).show()
+                        checkForUpdate()
                     }
                 ),
                 SettingItem(
@@ -196,6 +203,37 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         return view
+    }
+
+    /**
+     * 检查更新（模拟耗时3秒）
+     */
+    private fun checkForUpdate() {
+        // 防止连续点击
+        if (isCheckingUpdate) return
+        isCheckingUpdate = true
+
+        // 显示加载对话框
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setView(R.layout.dialog_loading)
+            .setCancelable(false)
+            .create()
+        dialog.show()
+        // 去除对话框默认背景，使圆角生效
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        // 设置弹窗宽度为屏幕宽度的40%
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.75).toInt(),
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+
+        lifecycleScope.launch {
+            // 模拟耗时3秒检查新版本
+            delay(3000L.milliseconds)
+            dialog.dismiss()
+            Toast.makeText(this@SettingsActivity, "已是最新版本", Toast.LENGTH_SHORT).show()
+            isCheckingUpdate = false
+        }
     }
 
     /**
