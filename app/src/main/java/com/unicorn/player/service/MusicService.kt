@@ -827,6 +827,42 @@ class MusicService : Service() {
         updateMediaSessionPlaybackState()
     }
 
+    /**
+     * 清空播放列表并停止播放（扫描无歌曲时调用）。
+     * 仅清空内存中的 songList，不清除 DataStore 持久化的播放状态。
+     * 底部播放栏会因 currentSong 观察者收到 null 而自动清空。
+     */
+    fun clearSongListAndStop() {
+        // 停止播放
+        try {
+            if (isMediaPlayerPlaying()) {
+                mediaPlayer.stop()
+            }
+            mediaPlayer.reset()
+        } catch (_: IllegalStateException) {
+            // MediaPlayer 可能已释放或处于错误状态，忽略
+        }
+        _isPlaying.value = false
+
+        // 清空内存中的歌曲列表
+        songList.clear()
+        _songList.value = emptyList()
+        currentIndex = 0
+
+        // 清空当前歌曲（触发底部播放栏重置）
+        _currentSong.value = null
+        _currentPosition.value = 0
+
+        // 移除通知
+        stopForeground(STOP_FOREGROUND_REMOVE)
+
+        // 保存空状态
+        savePlaybackState()
+
+        // 更新 MediaSession 状态
+        updateMediaSessionPlaybackState()
+    }
+
     fun setPlayMode(mode: PlayMode) {
         playMode = mode
         _playModeLiveData.postValue(mode)

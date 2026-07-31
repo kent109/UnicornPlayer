@@ -60,6 +60,12 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
 
         viewModel.allSongs.observe(viewLifecycleOwner) { songs ->
             submitArtists(songs)
+            // 空列表时显示空数据提示
+            if (songs.isNullOrEmpty()) {
+                binding.emptyView.visibility = View.VISIBLE
+            } else {
+                binding.emptyView.visibility = View.GONE
+            }
         }
     }
 

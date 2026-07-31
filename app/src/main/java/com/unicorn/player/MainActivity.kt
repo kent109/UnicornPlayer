@@ -179,7 +179,11 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
              * 相邻的专辑页 waveSideBar 被淡入（alpha→1），拖向专辑瞬间滑入视野造成闪现。
              */
             override fun onPageScrollStateChanged(state: Int) {
-                val show = state == ViewPager2.SCROLL_STATE_IDLE && binding.viewPager.currentItem == 2
+                // 仅在静止且当前为专辑页、且有专辑数据时才显示 waveSideBar
+                val hasAlbums = !viewModel.albums.value.isNullOrEmpty()
+                val show = state == ViewPager2.SCROLL_STATE_IDLE
+                    && binding.viewPager.currentItem == 2
+                    && hasAlbums
                 getAlbumFragment()?.setWaveSideBarVisible(show)
             }
         })
@@ -764,6 +768,15 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
                 showDeleteOption = true,
                 showAddToPlaylist = playlists.isNotEmpty()
             )
+        }
+    }
+
+    /**
+     * 扫描完成回调：扫描结果为空时清空播放列表、停止播放、重置底部播放条
+     */
+    override fun onScanCompleted(empty: Boolean) {
+        if (empty) {
+            musicService?.clearSongListAndStop()
         }
     }
 

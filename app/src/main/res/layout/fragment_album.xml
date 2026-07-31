@@ -42,7 +42,28 @@
 
     </com.scwang.smart.refresh.layout.SmartRefreshLayout>
 
-    <!-- 右侧字母导航栏，用于按分组首字母快速定位 -->
+    <!-- 空数据提示 -->
+    <LinearLayout
+        android:id="@+id/emptyView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:layout_width="180dp"
+            android:layout_height="108dp"
+            android:src="@drawable/ic_no_data3"
+            tools:ignore="ContentDescription" />
+
+    </LinearLayout>
+
+    <!-- 右侧字母导航栏，用于按分组首字母快速定位，默认隐藏，有数据时由代码显示 -->
     <com.nanchen.wavesidebar.WaveSideBarView
         android:id="@+id/waveSideBar"
         android:layout_width="0dp"
@@ -51,6 +72,7 @@
         android:layout_marginBottom="8dp"
         android:paddingStart="12dp"
         android:paddingEnd="12dp"
+        android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

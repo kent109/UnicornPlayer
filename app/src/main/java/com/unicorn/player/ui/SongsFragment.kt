@@ -60,6 +60,10 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         val musicService: MusicService?
         fun onSongClick(song: Song, position: Int)
         fun onMoreClick(song: Song, position: Int)
+        /**
+         * 扫描完成回调，empty=true 表示扫描结果为空
+         */
+        fun onScanCompleted(empty: Boolean) {}
     }
 
     override fun onAttach(context: android.content.Context) {
@@ -178,14 +182,19 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         viewModel.allSongs.observe(viewLifecycleOwner) { songs ->
             songAdapter.submitList(songs)
             updateSongCount(songs.size)
+            // 空列表时显示空数据提示
+            if (songs.isNullOrEmpty()) {
+                binding.emptyView.visibility = View.VISIBLE
+            } else {
+                binding.emptyView.visibility = View.GONE
+            }
         }
 
         viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
             if (isScanning) {
-                // 下拉刷新（扫描）期间不显示屏幕中央的 loading 图标；
+                // 扫描期间由 startScan/下拉刷新控制 progressBar 显示；
                 // 扫描完成（isLoading 从 true 跳变到 false）时收尾，
                 // 而非在 allSongs 变化时触发，避免 clearHiddenSongs 先行误判扫描结束。
-                binding.progressBar.visibility = View.GONE
                 if (!isLoading) {
                     onScanComplete()
                 }
@@ -203,6 +212,22 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
             adapter = songAdapter
             songAdapter.setRecyclerView(this@apply)
         }
+        // "立即扫描"按钮点击
+        binding.tvScan.setOnClickListener { startScan() }
+    }
+
+    /**
+     * 点击"立即扫描"按钮开始扫描，显示 loading 状态
+     */
+    private fun startScan() {
+        if (isScanning) return
+        savedCurrentSongId = host?.musicService?.currentSong?.value?.id
+        savedIsPlaying = host?.musicService?.isPlaying?.value == true
+        isScanning = true
+        // 隐藏空数据提示，显示 loading
+        binding.emptyView.visibility = View.GONE
+        binding.progressBar.visibility = View.VISIBLE
+        viewModel.loadMusic(force = true)
     }
 
     private fun updateSongCount(count: Int) {
@@ -329,7 +354,15 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         }
 
         binding.smartRefreshLayout.finishRefresh(500)
+        binding.progressBar.visibility = View.GONE
         Log.d(TAG, "扫描完成，列表已更新")
+
+        // 扫描结果为空时展示无数据界面，并通知宿主 Activity
+        val songs = viewModel.allSongs.value
+        if (songs.isNullOrEmpty()) {
+            binding.emptyView.visibility = View.VISIBLE
+            host?.onScanCompleted(empty = true)
+        }
     }
 
     /**

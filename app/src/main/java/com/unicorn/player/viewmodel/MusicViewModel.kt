@@ -73,8 +73,9 @@ class MusicViewModel(
     private var hiddenRegistryObserver: androidx.lifecycle.Observer<Set<Long>>? = null
 
     // 监听歌曲列表变化，触发后台专辑分组计算
+    // 歌曲列表为空时也需要 computeAlbums，确保 _albums 同步为空（否则 waveSideBar 仍显示）
     private val allSongsObserver: Observer<List<Song>> = Observer { songs ->
-        if (songs.isNotEmpty()) computeAlbums(songs)
+        computeAlbums(songs)
     }
 
     init {

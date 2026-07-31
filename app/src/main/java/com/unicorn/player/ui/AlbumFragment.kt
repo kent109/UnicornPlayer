@@ -67,6 +67,13 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
         setupRecyclerView()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 切换回此 Fragment 时同步 waveSideBar 可见性，避免无数据时仍显示
+        val albums = viewModel.albums.value
+        setWaveSideBarVisible(!albums.isNullOrEmpty())
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         // 必须移除待执行的回调，否则 Handler 持有旧 Fragment 引用，造成内存泄漏
@@ -83,6 +90,14 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
         // 观察 ViewModel 后台预计算好的专辑列表（已分组、已排序），主线程仅做轻量扁平化
         viewModel.albums.observe(viewLifecycleOwner) { albums ->
             submitAlbumItems(albums)
+            // 空列表时显示空数据提示，隐藏侧边栏；有数据时恢复侧边栏
+            if (albums.isNullOrEmpty()) {
+                binding.emptyView.visibility = View.VISIBLE
+                setWaveSideBarVisible(false)
+            } else {
+                binding.emptyView.visibility = View.GONE
+                setWaveSideBarVisible(true)
+            }
         }
     }
 
@@ -200,7 +215,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     }
 
     fun setWaveSideBarVisible(visible: Boolean) {
-        val sideBar = binding?.waveSideBar ?: return
+        val sideBar = binding.waveSideBar
         // 取消进行中的动画，避免显隐快速切换时互相覆盖
         sideBar.animate().cancel()
         if (visible) {

@@ -1142,7 +1142,16 @@ class PlayerActivity : AppCompatActivity() {
                 setPadding(50, 50, 50, 50)
                 setTextColor("#666666".toColorInt())
             }
-            binding.root.addView(emptyTextView)
+            val params = ConstraintLayout.LayoutParams(
+                ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                ConstraintLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+                bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
+                startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+                endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+            }
+            binding.root.addView(emptyTextView, params)
         }
         emptyTextView?.visibility = View.VISIBLE
     }
