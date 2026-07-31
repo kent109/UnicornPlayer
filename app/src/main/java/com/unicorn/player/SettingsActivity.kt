@@ -61,9 +61,21 @@ class SettingsActivity : AppCompatActivity() {
                 title = "歌词显示",
                 hasChevron = true,
                 isFirst = !BuildConfig.DEBUG,
-                isLast = true,
+                isLast = false,
                 onClick = {
                     startActivity(Intent(this, LyricsOptionsActivity::class.java))
+                }
+            )
+        )
+        playItems.add(
+            SettingItem(
+                key = "scan_filter",
+                title = "扫描过滤",
+                hasChevron = true,
+                isFirst = false,
+                isLast = true,
+                onClick = {
+                    startActivity(Intent(this, ScanFilterActivity::class.java))
                 }
             )
         )

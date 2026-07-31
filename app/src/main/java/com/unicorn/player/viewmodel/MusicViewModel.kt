@@ -8,9 +8,12 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.unicorn.player.ScanFilterActivity
 import com.unicorn.player.model.Album
+import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
+import com.unicorn.player.scanFiltersDataStore
 import com.unicorn.player.util.PinyinUtil
 import com.unicorn.player.service.applicationDataStore
 import com.unicorn.player.service.DataStoreKeys
@@ -18,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.text.Collator
 import java.util.Locale
@@ -335,7 +339,16 @@ class MusicViewModel(
             }
             _isLoading.postValue(true)
             try {
-                repository.scanMusicFiles()
+                val config = runBlocking {
+                    val prefs = context.scanFiltersDataStore.data.first()
+                    ScanFilterConfig(
+                        skipShortAudio = prefs[ScanFilterActivity.SKIP_SHORT_AUDIO] ?: false,
+                        skipSmallFiles = prefs[ScanFilterActivity.SKIP_SMALL_FILES] ?: false,
+                        excludedDirs = prefs[ScanFilterActivity.EXCLUDED_DIRS] ?: emptySet(),
+                        includedDirs = prefs[ScanFilterActivity.INCLUDED_DIRS] ?: emptySet()
+                    )
+                }
+                repository.scanMusicFiles(config)
             } catch (e: Exception) {
                 e.printStackTrace()
             } finally {

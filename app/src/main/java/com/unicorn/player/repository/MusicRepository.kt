@@ -8,6 +8,7 @@ import androidx.core.net.toUri
 import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.PlaylistSong
+import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -21,7 +22,7 @@ class MusicRepository(private val context: Context) {
     private val songDao = database.songDao()
     private val playlistDao = database.playlistDao()
 
-    suspend fun scanMusicFiles(): List<Song> = withContext(Dispatchers.IO) {
+    suspend fun scanMusicFiles(config: ScanFilterConfig = ScanFilterConfig()): List<Song> = withContext(Dispatchers.IO) {
         val newSongs = mutableListOf<Song>()
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -71,6 +72,9 @@ class MusicRepository(private val context: Context) {
                 if (!file.exists() || file.length() / 1024 < 1024) {
                     continue
                 }
+
+                // 应用扫描过滤配置
+                if (config.shouldSkip(duration, file)) continue
 
                 val albumArtUri = ContentUris.withAppendedId(
                     "content://media/external/audio/albumart".toUri(),
