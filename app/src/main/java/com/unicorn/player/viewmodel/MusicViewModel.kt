@@ -328,10 +328,11 @@ class MusicViewModel(
      * @param force 是否强制扫描。默认 false：仅在数据库无歌曲时才真正扫描（避免重启应用时重复全表扫描）；
      *              true 表示用户显式触发（下拉刷新、文件变更通知），无论是否已有歌曲都扫描。
      */
-    fun loadMusic(force: Boolean = false) {
+    fun loadMusic(force: Boolean = false, onScanned: ((Int) -> Unit)? = null) {
         viewModelScope.launch {
             // 重启自动扫描时，若数据库已有歌曲则跳过，避免每次启动都全表扫描 MediaStore
             if (!force && repository.hasSongsInDb()) {
+                onScanned?.invoke(0)
                 return@launch
             }
             // 下拉刷新（force=true）时清除隐藏集合，恢复完整列表
@@ -339,7 +340,7 @@ class MusicViewModel(
                 clearHiddenSongs()
             }
             _isLoading.postValue(true)
-            try {
+            val count = try {
                 val config = runBlocking {
                     val prefs = context.scanFiltersDataStore.data.first()
                     ScanFilterConfig(
@@ -349,12 +350,14 @@ class MusicViewModel(
                         includedDirs = prefs[ScanFilterActivity.INCLUDED_DIRS] ?: emptySet()
                     )
                 }
-                repository.scanMusicFiles(config)
+                repository.scanMusicFiles(config).size
             } catch (e: Exception) {
                 e.printStackTrace()
+                -1
             } finally {
                 _isLoading.postValue(false)
             }
+            onScanned?.invoke(count)
         }
     }
 

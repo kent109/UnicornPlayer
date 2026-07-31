@@ -40,6 +40,8 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
 
     // 扫描相关状态
     private var isScanning = false
+    /** 标记正在等待扫描结果：allSongs 观察者检测到空列表时，触发停止播放逻辑 */
+    private var awaitingScanEmptyCheck = false
     private var savedCurrentSongId: Long? = null
     private var savedIsPlaying = false
 
@@ -182,11 +184,16 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         viewModel.allSongs.observe(viewLifecycleOwner) { songs ->
             songAdapter.submitList(songs)
             updateSongCount(songs.size)
-            // 空列表时显示空数据提示
+            // 空列表时显示空数据提示、禁止下拉刷新；非空时恢复下拉刷新
             if (songs.isNullOrEmpty()) {
                 binding.emptyView.visibility = View.VISIBLE
+                binding.recyclerView.visibility = View.GONE
+                binding.smartRefreshLayout.setEnableRefresh(false)
+                binding.btnScrollToCurrent.visibility = View.GONE
             } else {
                 binding.emptyView.visibility = View.GONE
+                binding.recyclerView.visibility = View.VISIBLE
+                binding.smartRefreshLayout.setEnableRefresh(true)
             }
         }
 
@@ -224,10 +231,21 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         savedCurrentSongId = host?.musicService?.currentSong?.value?.id
         savedIsPlaying = host?.musicService?.isPlaying?.value == true
         isScanning = true
+        awaitingScanEmptyCheck = true
         // 隐藏空数据提示，显示 loading
         binding.emptyView.visibility = View.GONE
         binding.progressBar.visibility = View.VISIBLE
-        viewModel.loadMusic(force = true)
+        viewModel.loadMusic(force = true) { count ->
+            if (count == 0 && awaitingScanEmptyCheck) {
+                awaitingScanEmptyCheck = false
+                host?.onScanCompleted(empty = true)
+                // 数据库本来就是空时 Room Flow 不会重发，需手动恢复 emptyView
+                binding.emptyView.visibility = View.VISIBLE
+                binding.recyclerView.visibility = View.GONE
+                binding.smartRefreshLayout.setEnableRefresh(false)
+                binding.btnScrollToCurrent.visibility = View.GONE
+            }
+        }
     }
 
     private fun updateSongCount(count: Int) {
@@ -258,9 +276,15 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
             savedCurrentSongId = host?.musicService?.currentSong?.value?.id
             savedIsPlaying = host?.musicService?.isPlaying?.value == true
             isScanning = true
+            awaitingScanEmptyCheck = true
             // 立即隐藏中间进度条，避免下拉刷新时显示
             binding.progressBar.visibility = View.GONE
-            viewModel.loadMusic(force = true)
+            viewModel.loadMusic(force = true) { count ->
+                if (count == 0 && awaitingScanEmptyCheck) {
+                    awaitingScanEmptyCheck = false
+                    host?.onScanCompleted(empty = true)
+                }
+            }
         }
     }
 
@@ -355,14 +379,9 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
 
         binding.smartRefreshLayout.finishRefresh(500)
         binding.progressBar.visibility = View.GONE
+        // 扫描结果为空时的停止播放逻辑已移至 loadMusic 回调中，
+        // 直接根据 scanMusicFiles 返回的数量判断，避免与 Room Flow 竞态。
         Log.d(TAG, "扫描完成，列表已更新")
-
-        // 扫描结果为空时展示无数据界面，并通知宿主 Activity
-        val songs = viewModel.allSongs.value
-        if (songs.isNullOrEmpty()) {
-            binding.emptyView.visibility = View.VISIBLE
-            host?.onScanCompleted(empty = true)
-        }
     }
 
     /**

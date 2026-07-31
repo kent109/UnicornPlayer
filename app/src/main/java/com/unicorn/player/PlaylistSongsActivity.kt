@@ -7,6 +7,7 @@ import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
 import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
@@ -115,6 +116,11 @@ class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMo
 
     private fun setupAddButton() {
         binding.btAddSongs.setOnClickListener { view ->
+            // 无歌曲数据时提示用户，不弹出选择框
+            if (viewModel.getSortedFullSongs().isEmpty()) {
+                Toast.makeText(this@PlaylistSongsActivity, "暂无歌曲可添加", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             // 以「添加」按钮中心作为弹窗动画起点（参考 PlayerActivity 中 LrcPreviewDialog 触发坐标计算方式）
             val location = IntArray(2)
             view.getLocationOnScreen(location)

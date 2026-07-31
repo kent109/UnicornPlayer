@@ -1416,13 +1416,14 @@ class MusicService : Service() {
                         // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
                         preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
                     } else {
-                        // 清除保存的状态
+                        // 清除保存的状态（包括上次播放进度、播放入口标签）
                         preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
                         preferences.remove(DataStoreKeys.SONG_TITLE)
                         preferences.remove(DataStoreKeys.SONG_ARTIST)
                         preferences.remove(DataStoreKeys.SONG_PATH)
                         preferences.remove(DataStoreKeys.CURRENT_POSITION)
                         preferences.remove(DataStoreKeys.IS_PLAYING)
+                        preferences.remove(DataStoreKeys.PLAY_SOURCE_TAG)
                     }
                 }
             } catch (e: Exception) {

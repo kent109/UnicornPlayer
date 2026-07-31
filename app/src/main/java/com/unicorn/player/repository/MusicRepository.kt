@@ -127,6 +127,15 @@ class MusicRepository(private val context: Context) {
         newSongs
     }
 
+    /**
+     * 清除所有歌曲及歌单-歌曲关联记录，保留歌单定义和应用配置。
+     * DELETE FROM songs 会通过 ForeignKey.CASCADE 自动删除 playlist_songs 关联；
+     * playlists 表（歌单定义）、DataStore（播放状态/歌词设置）、SharedPreferences（排序模式）不受影响。
+     */
+    suspend fun deleteAllSongsAndPlaylistAssociations() = withContext(Dispatchers.IO) {
+        songDao.deleteAllSongs()
+    }
+
     fun getAllSongs() = songDao.getAllSongs()
 
     /**

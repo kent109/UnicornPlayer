@@ -772,11 +772,16 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     }
 
     /**
-     * 扫描完成回调：扫描结果为空时清空播放列表、停止播放、重置底部播放条
+     * 扫描完成回调：扫描结果为空时清空播放列表、停止播放、重置底部播放条，
+     * 并删除数据库中所有歌曲及歌单-歌曲关联记录（保留歌单定义、DataStore 播放状态、SharedPreferences 排序模式等应用配置）。
      */
     override fun onScanCompleted(empty: Boolean) {
         if (empty) {
             musicService?.clearSongListAndStop()
+            // 异步清除数据库歌曲记录，不阻塞 UI
+            lifecycleScope.launch {
+                MusicRepository(this@MainActivity).deleteAllSongsAndPlaylistAssociations()
+            }
         }
     }
 
