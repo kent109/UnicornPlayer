@@ -103,7 +103,7 @@ class SettingsActivity : AppCompatActivity() {
                 ),
                 SettingItem(
                     key = "manual",
-                    title = "使用手册",
+                    title = "使用指南",
                     hasChevron = true,
                     isFirst = false,
                     isLast = false,
@@ -113,7 +113,7 @@ class SettingsActivity : AppCompatActivity() {
                 ),
                 SettingItem(
                     key = "about",
-                    title = "协议隐私",
+                    title = "隐私协议",
                     hasChevron = true,
                     isFirst = false,
                     isLast = true,

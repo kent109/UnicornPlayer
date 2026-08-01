@@ -156,7 +156,8 @@
       "Bash(unzip -o classes.jar -d /tmp/lrc_jar)",
       "Bash(del *)",
       "Bash(echo \"exit:$?\")",
-      "Bash(xxd \"D:/workspace/android_studio/UnicornPlayer/app/src/main/res/drawable/bottom_sheet_background.xml\")"
+      "Bash(xxd \"D:/workspace/android_studio/UnicornPlayer/app/src/main/res/drawable/bottom_sheet_background.xml\")",
+      "Bash(xxd app/src/main/res/raw/manual.md)"
     ]
   }
 }

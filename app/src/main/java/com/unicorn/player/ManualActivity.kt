@@ -6,7 +6,7 @@ import com.unicorn.player.databinding.ActivityManualBinding
 import io.noties.markwon.Markwon
 
 /**
- * 使用手册页面
+ * 使用指南页面
  * 展示应用使用说明
  */
 class ManualActivity : AppCompatActivity() {
@@ -25,13 +25,13 @@ class ManualActivity : AppCompatActivity() {
     }
 
     /**
-     * 获取使用手册 Markdown 文本
+     * 获取使用指南 Markdown 文本
      */
     private fun getManualContent(): String {
         return try {
             resources.openRawResource(R.raw.manual).bufferedReader().use { it.readText() }
         } catch (e: Exception) {
-            "加载使用手册失败：${e.message}"
+            "加载使用指南失败：${e.message}"
         }
     }
 }
