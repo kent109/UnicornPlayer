@@ -233,9 +233,9 @@ class SettingsActivity : AppCompatActivity() {
         dialog.show()
         // 去除对话框默认背景，使圆角生效
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        // 设置弹窗宽度为屏幕宽度的40%
+        // 设置弹窗宽度为屏幕宽度的80%
         dialog.window?.setLayout(
-            (resources.displayMetrics.widthPixels * 0.75).toInt(),
+            (resources.displayMetrics.widthPixels * 0.8).toInt(),
             LinearLayout.LayoutParams.WRAP_CONTENT
         )
 

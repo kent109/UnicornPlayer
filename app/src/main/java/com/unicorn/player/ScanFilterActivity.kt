@@ -3,6 +3,9 @@ package com.unicorn.player
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -124,6 +127,7 @@ class ScanFilterActivity : AppCompatActivity() {
                 SettingItem(
                     key = "excluded_dirs",
                     title = getDirsTitle("excluded_dirs", "不扫描的目录"),
+                    summary = "选择的目录不扫描",
                     hasChevron = true,
                     isFirst = false,
                     isLast = false,
@@ -133,6 +137,7 @@ class ScanFilterActivity : AppCompatActivity() {
                 SettingItem(
                     key = "included_dirs",
                     title = getDirsTitle("included_dirs", "指定扫描目录"),
+                    summary = "不指定时全部扫描",
                     hasChevron = true,
                     isFirst = false,
                     isLast = true,
@@ -145,8 +150,10 @@ class ScanFilterActivity : AppCompatActivity() {
 
     /**
      * 获取目录设置项标题（含已选数量）
+     * count=0 时不显示括号和数量
+     * excludedDirs 用红色括号数量，includedDirs 用绿色括号数量
      */
-    private fun getDirsTitle(key: String, baseTitle: String): String {
+    private fun getDirsTitle(key: String, baseTitle: String): CharSequence {
         val count = runBlocking {
             try {
                 val prefs = applicationContext.scanFiltersDataStore.data.first()
@@ -156,7 +163,25 @@ class ScanFilterActivity : AppCompatActivity() {
                 0
             }
         }
-        return "$baseTitle($count)"
+        if (count == 0) return baseTitle
+
+        val text = "$baseTitle ($count)"
+        val span = SpannableString(text)
+        val color = if (key == "excluded_dirs") {
+            getColor(R.color.red_500)
+        } else {
+            getColor(R.color.green_500)
+        }
+        // 给括号+数量部分上色
+        val start = baseTitle.length
+        val end = text.length
+        span.setSpan(
+            ForegroundColorSpan(color),
+            start,
+            end,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        return span
     }
 
     /**
@@ -330,7 +355,7 @@ class ScanFilterActivity : AppCompatActivity() {
      */
     data class SettingItem(
         val key: String,
-        val title: String,
+        val title: CharSequence,
         val summary: String? = null,
         val hasChevron: Boolean = false,
         val isFirst: Boolean = false,

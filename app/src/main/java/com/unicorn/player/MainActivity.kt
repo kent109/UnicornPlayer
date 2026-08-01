@@ -582,6 +582,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     private fun resetSongListAndPlayNext() {
         // 使用 fullSongs（完整列表）确保播放顺序一致
         viewModel.fullSongs.value?.let { songs ->
+            // 列表为空时不调用 playNext()，避免 playNext() 再次触发 requestSongList 形成无限循环
+            if (songs.isEmpty()) return@let
             val currentSong = musicService?.currentSong?.value
             val currentIndex = if (currentSong != null) {
                 songs.indexOfFirst { it.id == currentSong.id }.takeIf { it != -1 } ?: 0

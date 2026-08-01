@@ -177,14 +177,32 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         isPlayingObserver = null
     }
 
+    // 标记 ViewModel 已完成首次数据加载，此前不操作 emptyView 以防止启动闪现
+    private var hasLoaded = false
+
     private fun setupViewModel() {
         val factory = MusicViewModelFactory(MusicRepository(requireContext()), requireContext())
         viewModel = ViewModelProvider(requireActivity(), factory)[MusicViewModel::class.java]
 
+        // 监听加载完成状态，加载完成后才允许 emptyView 显示
+        viewModel.hasLoaded.observe(viewLifecycleOwner) { loaded ->
+            hasLoaded = loaded
+            if (!loaded) return@observe
+            // 加载完成后根据当前列表是否为空，设置一次 emptyView 状态
+            val songs = viewModel.allSongs.value
+            if (songs.isNullOrEmpty()) {
+                binding.emptyView.visibility = View.VISIBLE
+                binding.recyclerView.visibility = View.GONE
+                binding.smartRefreshLayout.setEnableRefresh(false)
+                binding.btnScrollToCurrent.visibility = View.GONE
+            }
+        }
+
         viewModel.allSongs.observe(viewLifecycleOwner) { songs ->
             songAdapter.submitList(songs)
             updateSongCount(songs.size)
-            // 空列表时显示空数据提示、禁止下拉刷新；非空时恢复下拉刷新
+            // 数据加载完成后，才根据列表是否为空切换 emptyView，避免启动时闪现
+            if (!hasLoaded) return@observe
             if (songs.isNullOrEmpty()) {
                 binding.emptyView.visibility = View.VISIBLE
                 binding.recyclerView.visibility = View.GONE

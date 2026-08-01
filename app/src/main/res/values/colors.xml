@@ -62,4 +62,8 @@
     <color name="lrc_highlight_row">#6750A4</color>          <!-- 高亮行颜色 -->
     <color name="lrc_time_text">#79747E</color>              <!-- 时间文字颜色 -->
     <color name="lrc_try_select_row">#556750A4</color>       <!-- 尝试选中行颜色 -->
+
+    <!-- 扫描过滤目录数量颜色 -->
+    <color name="red_500">#F44336</color>
+    <color name="green_500">#4CAF50</color>
 </resources>

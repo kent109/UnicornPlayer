@@ -34,6 +34,10 @@ class MusicViewModel(
     private val _allSongs = MutableLiveData<List<Song>>(emptyList())
     val allSongs: LiveData<List<Song>> = _allSongs
 
+    // 标记 Room Flow 是否已发射过首个值，防止启动时初始空列表导致 emptyView 闪现
+    private val _hasLoaded = MutableLiveData(false)
+    val hasLoaded: LiveData<Boolean> = _hasLoaded
+
     // 完整的歌曲列表（不随搜索变化）
     private val _fullSongs = MutableLiveData<List<Song>>(emptyList())
     val fullSongs: LiveData<List<Song>> = _fullSongs
@@ -209,6 +213,8 @@ class MusicViewModel(
         }
     }
 
+    private var songsCollected = false
+
     private fun collectSongs() {
         if (!hiddenIdsReady) return
         viewModelScope.launch {
@@ -219,6 +225,11 @@ class MusicViewModel(
                 val sorted = applyHiddenAndSort(songs)
                 _allSongs.postValue(sorted)
                 _fullSongs.postValue(sorted)
+                // 首次发射后标记已加载，避免启动时 emptyView 闪现
+                if (!songsCollected) {
+                    songsCollected = true
+                    _hasLoaded.postValue(true)
+                }
             }
         }
     }

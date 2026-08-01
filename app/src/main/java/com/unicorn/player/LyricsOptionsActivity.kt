@@ -144,15 +144,6 @@ class LyricsOptionsActivity : AppCompatActivity() {
                 ),
                 SettingItem(
                     key = "search_lyrics",
-                    title = "搜索歌词",
-                    summary = "全屏播放页长按歌词进入搜索",
-                    hasChevron = false,
-                    isFirst = false,
-                    isLast = false,
-                    type = SettingItemType.NORMAL
-                ),
-                SettingItem(
-                    key = "search_lyrics",
                     title = "歌词目录",
                     summary = "/storage/emulated/0/Documents/Unicorn/Lyrics",
                     hasChevron = false,

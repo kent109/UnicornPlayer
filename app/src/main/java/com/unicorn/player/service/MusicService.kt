@@ -367,7 +367,8 @@ class MusicService : Service() {
         }
 
         // 服务被系统重启时（START_STICKY），不恢复到旧进度
-        // 以 MusicService 当前进度为准，避免跳转到过时的位置
+        // 以 MusicService 当前进度为准，避免跳转到过时的位置；
+        // 无播放进度时不自动恢复歌曲到底部播放条
         loadPlaybackState(restorePosition = false)
         mediaSession.isActive = true
 
@@ -883,7 +884,11 @@ class MusicService : Service() {
      */
     fun syncPlaylistSongList(playlistName: String, songs: List<Song>) {
         val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
-        if (sourceType == PlaySource.PLAYLIST && sourceName.equals(playlistName, ignoreCase = true)) {
+        if (sourceType == PlaySource.PLAYLIST && sourceName.equals(
+                playlistName,
+                ignoreCase = true
+            )
+        ) {
             if (songs.isEmpty()) return
             val currentSong = _currentSong.value
             val currentIndex = if (currentSong != null) {
@@ -901,7 +906,10 @@ class MusicService : Service() {
             }
             // 标记手动同步时间戳，防止 loadSongListFromDatabase 覆盖正确的列表
             lastManualSyncTime = System.currentTimeMillis()
-            Log.d(TAG, "syncPlaylistSongList: updated playlist '$playlistName' with ${songs.size} songs")
+            Log.d(
+                TAG,
+                "syncPlaylistSongList: updated playlist '$playlistName' with ${songs.size} songs"
+            )
         }
     }
 
@@ -1438,7 +1446,6 @@ class MusicService : Service() {
             Log.i(TAG, "loadPlaybackState: already loaded, skip")
             return
         }
-        isPlaybackStateLoaded = true
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -1474,6 +1481,15 @@ class MusicService : Service() {
                     return@launch
                 }
                 val currentPosition = preferences[DataStoreKeys.CURRENT_POSITION] ?: 0
+
+                // 无播放进度时不自动恢复歌曲到底部播放条（避免扫描后无进度却自动加载）
+                if (currentPosition == 0) {
+                    return@launch
+                }
+                Log.d(
+                    TAG,
+                    "loadPlaybackState: will restore songId=$songId, title=$songTitle, position=$currentPosition"
+                )
                 val isPlaying = preferences[DataStoreKeys.IS_PLAYING] ?: 0
                 // 恢复播放模式
                 val savedPlayModeOrdinal = preferences[DataStoreKeys.PLAY_MODE] ?: 0
@@ -1508,6 +1524,8 @@ class MusicService : Service() {
                         path = songPath
                     )
                     setCurrentSong(restoredSong)
+                    // 仅在真正加载了歌曲后才标记为已加载，避免无进度时跳过后续合法恢复
+                    isPlaybackStateLoaded = true
 
                     // 准备媒体播放器但不立即播放
                     try {
@@ -1600,7 +1618,11 @@ class MusicService : Service() {
      *
      * 退化规则：来源作用域为空（f1/f2 下已无歌曲 / f3 歌单已不存在）→ 退化到全部歌曲（f0）。
      */
-    private fun loadSongListFromDatabase(sourceType: String, sourceName: String = "", songId: Long = 0L) {
+    private fun loadSongListFromDatabase(
+        sourceType: String,
+        sourceName: String = "",
+        songId: Long = 0L
+    ) {
         // 记录 DB 查询开始时间，用于与手动同步时间戳比较
         val dbQueryStartTime = lastManualSyncTime
         CoroutineScope(Dispatchers.IO).launch {
@@ -1616,8 +1638,10 @@ class MusicService : Service() {
                     val scoped = when (sourceType) {
                         PlaySource.ARTIST ->
                             songsFromDb.filter { it.artist.equals(sourceName, ignoreCase = true) }
+
                         PlaySource.ALBUM ->
                             songsFromDb.filter { it.album.equals(sourceName, ignoreCase = true) }
+
                         PlaySource.PLAYLIST -> {
                             // 按歌单名反查歌单，再取其歌曲列表
                             val playlist = database.playlistDao().getAllPlaylists().first()
@@ -1625,6 +1649,7 @@ class MusicService : Service() {
                             playlist?.let { database.playlistDao().getPlaylistSongs(it.id).first() }
                                 ?: songsFromDb   // 歌单已不存在 → 退化全部歌曲
                         }
+
                         else -> songsFromDb
                     }
 

@@ -113,16 +113,20 @@ class DirectoryPickerActivity : AppCompatActivity() {
             val dir = items[position]
             holder.tvTitle.text = dir.name
             holder.tvSummary.text = dir.absolutePath
-            holder.checkBox.isChecked = selectedPaths.contains(dir.absolutePath)
 
+            // 先移除监听器，避免 setChecked 触发回调污染 selectedPaths
+            holder.checkBox.setOnCheckedChangeListener(null)
+            holder.checkBox.isChecked = selectedPaths.contains(dir.absolutePath)
+            holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
+                val pos = holder.bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@setOnCheckedChangeListener
+                val path = items[pos].absolutePath
+                if (isChecked) selectedPaths.add(path) else selectedPaths.remove(path)
+            }
+
+            // 点击 item 只切换复选框状态，由复选框监听器同步数据，无需刷新整个 item
             holder.itemView.setOnClickListener {
-                val path = dir.absolutePath
-                if (selectedPaths.contains(path)) {
-                    selectedPaths.remove(path)
-                } else {
-                    selectedPaths.add(path)
-                }
-                notifyItemChanged(holder.bindingAdapterPosition)
+                holder.checkBox.isChecked = !holder.checkBox.isChecked
             }
         }
 
