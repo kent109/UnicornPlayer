@@ -2,4 +2,5 @@
 <paths>
     <external-path name="external_files" path="." />
     <root-path name="root" path="." />
+    <external-files-path name="app_external_files" path="." />
 </paths>
