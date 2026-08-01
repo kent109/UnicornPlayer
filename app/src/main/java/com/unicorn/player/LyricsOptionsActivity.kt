@@ -69,7 +69,7 @@ class LyricsOptionsActivity : AppCompatActivity() {
 
         // SWITCH 类型设置项的 key → 默认值 映射
         val switchDefaultMap = mapOf(
-            "lyrics_enable" to true,
+            "lyrics_enable" to false,
             "time_label" to false
         )
     }

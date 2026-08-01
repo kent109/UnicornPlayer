@@ -60,7 +60,7 @@ class SettingsActivity : AppCompatActivity() {
                 key = "lyrics",
                 title = "歌词显示",
                 hasChevron = true,
-                isFirst = !BuildConfig.DEBUG,
+                isFirst = false,
                 isLast = false,
                 onClick = {
                     startActivity(Intent(this, LyricsOptionsActivity::class.java))
