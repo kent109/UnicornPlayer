@@ -42,7 +42,6 @@ class UpdateHelper(private val activity: AppCompatActivity) {
         fun onCheckFailed(message: String)
     }
 
-    private var isCheckingUpdate = false
     private var loadingDialog: AlertDialog? = null
     private var updateDialog: AlertDialog? = null
     private var downloadCall: Call? = null
@@ -52,7 +51,7 @@ class UpdateHelper(private val activity: AppCompatActivity) {
     // 统一弹窗视图引用
     private var versionInfoGroup: View? = null
     private var progressGroup: View? = null
-    private var progressBar: android.widget.ProgressBar? = null
+    private var progressBar: com.unicorn.player.widget.IndeterminateProgressBar? = null
     private var tvProgress: TextView? = null
     private var btnUpdate: com.google.android.material.button.MaterialButton? = null
     private var btnCancel: com.google.android.material.button.MaterialButton? = null
@@ -60,6 +59,12 @@ class UpdateHelper(private val activity: AppCompatActivity) {
 
     // 上次更新的进度百分比，用于节流（仅在百分比变化时更新 UI）
     private var lastProgress = -1
+
+    // 当前实例对应的检查任务 ID（用于全局队列管理）
+    private var checkTaskId: String? = null
+
+    // 标记当前是否处于不确定下载模式（服务器未返回 Content-Length）
+    private var isIndeterminateMode = false
 
     companion object {
         private const val TAG = "UpdateHelper"
@@ -75,6 +80,41 @@ class UpdateHelper(private val activity: AppCompatActivity) {
 
         private val client = OkHttpClient()
         private val gson = Gson()
+
+        /**
+         * 全局检查任务队列（所有静默检查和手动检查统一加入队列）
+         * 每个任务用唯一 ID 标识，任务完成后自行移除
+         * 当某个任务准备弹窗时，如果队列中不止自己，则跳过弹窗，让最后一个任务弹窗
+         */
+        private val checkTaskQueue = mutableListOf<String>()
+
+        /**
+         * 注册一个检查任务到全局队列，返回任务 ID
+         */
+        @Synchronized
+        fun registerCheckTask(): String {
+            val taskId = "check_${System.currentTimeMillis()}_${(Math.random() * 10000).toInt()}"
+            checkTaskQueue.add(taskId)
+            Log.d(TAG, "注册检查任务: $taskId, 当前队列大小: ${checkTaskQueue.size}")
+            return taskId
+        }
+
+        /**
+         * 从全局队列移除一个检查任务
+         */
+        @Synchronized
+        fun unregisterCheckTask(taskId: String) {
+            checkTaskQueue.remove(taskId)
+            Log.d(TAG, "移除检查任务: $taskId, 当前队列大小: ${checkTaskQueue.size}")
+        }
+
+        /**
+         * 判断当前任务是否是队列中最后一个任务（只有最后一个任务才能弹窗）
+         */
+        @Synchronized
+        fun isLastTask(taskId: String): Boolean {
+            return checkTaskQueue.size == 1 && checkTaskQueue.first() == taskId
+        }
 
         /**
          * 获取 SharedPreferences 实例
@@ -142,17 +182,22 @@ class UpdateHelper(private val activity: AppCompatActivity) {
         downloadCall?.cancel()
         loadingDialog?.dismiss()
         updateDialog?.dismiss()
+        // 从全局队列移除当前任务
+        checkTaskId?.let { unregisterCheckTask(it) }
+        checkTaskId = null
     }
 
     // ==================== 版本检查入口 ====================
 
     /**
-     * 检查更新（防止连续点击）
+     * 检查更新
+     * 所有检查任务（静默/手动）统一注册到全局队列，只有队列中最后一个任务才能弹窗
      * @param silent 静默模式时不显示 loading 弹窗（用于启动时自动检查）
      */
     fun checkForUpdate(callback: UpdateCallback? = null, silent: Boolean = false) {
-        if (isCheckingUpdate) return
-        isCheckingUpdate = true
+        // 注册到全局队列
+        val taskId = registerCheckTask()
+        checkTaskId = taskId
 
         if (!silent) {
             showLoadingDialog()
@@ -165,13 +210,17 @@ class UpdateHelper(private val activity: AppCompatActivity) {
             .header("User-Agent", "UnicornPlayer/1.0")
             .build()
 
-        client.newCall(request).enqueue(object : Callback {
+        val call = client.newCall(request)
+        call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (call.isCanceled()) return
+                if (call.isCanceled()) {
+                    unregisterCheckTask(taskId)
+                    return
+                }
                 Log.e(TAG, "检查更新请求失败: ${e.message}")
+                unregisterCheckTask(taskId)
                 activity.runOnUiThread {
                     loadingDialog?.dismiss()
-                    isCheckingUpdate = false
                     val msg = "网络请求失败: ${e.message}"
                     callback?.onCheckFailed(msg)
                     Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
@@ -179,11 +228,14 @@ class UpdateHelper(private val activity: AppCompatActivity) {
             }
 
             override fun onResponse(call: Call, response: Response) {
-                if (call.isCanceled()) return
+                if (call.isCanceled()) {
+                    unregisterCheckTask(taskId)
+                    return
+                }
                 if (!response.isSuccessful) {
+                    unregisterCheckTask(taskId)
                     activity.runOnUiThread {
                         loadingDialog?.dismiss()
-                        isCheckingUpdate = false
                         val msg = "HTTP 错误: ${response.code}"
                         callback?.onCheckFailed(msg)
                         Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
@@ -194,9 +246,9 @@ class UpdateHelper(private val activity: AppCompatActivity) {
                 try {
                     val json = response.body?.string()
                     if (json.isNullOrBlank()) {
+                        unregisterCheckTask(taskId)
                         activity.runOnUiThread {
                             loadingDialog?.dismiss()
-                            isCheckingUpdate = false
                             val msg = "返回数据为空"
                             callback?.onCheckFailed(msg)
                             Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
@@ -206,9 +258,9 @@ class UpdateHelper(private val activity: AppCompatActivity) {
 
                     val info = gson.fromJson(json, VersionInfo::class.java)
                     if (info == null) {
+                        unregisterCheckTask(taskId)
                         activity.runOnUiThread {
                             loadingDialog?.dismiss()
-                            isCheckingUpdate = false
                             val msg = "解析版本信息失败"
                             callback?.onCheckFailed(msg)
                             Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
@@ -220,11 +272,20 @@ class UpdateHelper(private val activity: AppCompatActivity) {
 
                     activity.runOnUiThread {
                         loadingDialog?.dismiss()
-                        isCheckingUpdate = false
 
                         if (info.versionCode > currentVersionCode) {
-                            handleUpdateAvailable(info)
+                            // 只有队列中最后一个任务才能弹窗
+                            if (isLastTask(taskId)) {
+                                // 弹窗前从队列移除自己
+                                unregisterCheckTask(taskId)
+                                handleUpdateAvailable(info)
+                            } else {
+                                // 不是最后一个任务，移除自己后直接返回
+                                unregisterCheckTask(taskId)
+                                Log.d(TAG, "任务 $taskId 不是最后一个，跳过弹窗")
+                            }
                         } else {
+                            unregisterCheckTask(taskId)
                             callback?.onAlreadyLatest()
                             Toast.makeText(
                                 activity,
@@ -235,9 +296,9 @@ class UpdateHelper(private val activity: AppCompatActivity) {
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "解析版本信息失败: ${e.message}", e)
+                    unregisterCheckTask(taskId)
                     activity.runOnUiThread {
                         loadingDialog?.dismiss()
-                        isCheckingUpdate = false
                         val msg = "解析失败: ${e.message}"
                         callback?.onCheckFailed(msg)
                         Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
@@ -264,6 +325,10 @@ class UpdateHelper(private val activity: AppCompatActivity) {
      * 显示统一弹窗 - 发现新版本（版本信息 + 更新/取消按钮）
      */
     private fun showNewVersionDialog(info: VersionInfo) {
+        // 关闭旧弹窗，确保同时只有一个更新弹窗存在
+        updateDialog?.dismiss()
+        updateDialog = null
+
         val inflater = LayoutInflater.from(activity)
         val view = inflater.inflate(R.layout.dialog_update, null)
 
@@ -339,59 +404,56 @@ class UpdateHelper(private val activity: AppCompatActivity) {
         }
 
         lastProgress = -1
-        progressBar?.setProgress(0, false)
+        isIndeterminateMode = false
+        progressBar?.setProgressCompat(0)
 
         downloadCall = downloadApk(
             activity, info.downloadUrl,
             object : DownloadCallback {
                 override fun onProgress(percent: Int, downloadedBytes: Long) {
-                    // percent=-1 表示服务器未提供 Content-Length，使用不确定进度模式
-                    if (percent == -1) {
-                        activity.runOnUiThread {
-                            progressBar?.apply {
-                                if (!isIndeterminate) {
-                                    isIndeterminate = true
+                    activity.runOnUiThread {
+                        if (percent == -1) {
+                            // 不确定模式：调粗进度条 + 启动高亮段动画
+                            if (!isIndeterminateMode) {
+                                isIndeterminateMode = true
+                                progressBar?.apply {
+                                    layoutParams = layoutParams.apply {
+                                        height = DisplayUtil.dp2px(activity, 4f)
+                                    }
+                                    setProgressCompat(-1)
                                 }
                             }
                             tvProgress?.text = formatDownloadProgress(downloadedBytes)
-                        }
-                        return
-                    }
-                    // 仅在百分比变化时更新 UI，避免 UI 线程被海量 Runnable 淹没
-                    if (percent == lastProgress) return
-                    lastProgress = percent
-                    activity.runOnUiThread {
-                        progressBar?.apply {
-                            if (isIndeterminate) {
-                                isIndeterminate = false
+                        } else {
+                            // 确定模式
+                            if (isIndeterminateMode) {
+                                isIndeterminateMode = false
+                                progressBar?.layoutParams = progressBar?.layoutParams?.apply {
+                                    height = DisplayUtil.dp2px(activity, 4f)
+                                }
                             }
-                            setProgress(percent, false)
+                            if (percent != lastProgress) {
+                                lastProgress = percent
+                                progressBar?.setProgressCompat(percent)
+                                tvProgress?.text =
+                                    activity.getString(R.string.update_downloaded, percent)
+                            }
                         }
-                        tvProgress?.text =
-                            activity.getString(R.string.update_downloaded, percent)
                     }
                 }
 
                 override fun onSuccess(file: File) {
                     activity.runOnUiThread {
-                        progressBar?.apply {
-                            if (isIndeterminate) {
-                                isIndeterminate = false
-                            }
-                            setProgress(100, false)
-                        }
-                        tvProgress?.text = activity.getString(R.string.update_downloaded, 100)
-                        tvProgress?.postDelayed({
-                            updateDialog?.dismiss()
-                            updateDialog = null
-                            val fileName = info.downloadUrl.substringAfterLast("/")
-                            saveDownloadedFileInfo(
-                                activity,
-                                info.versionCode,
-                                fileName
-                            )
-                            launchInstall(file)
-                        }, 500)
+                        // 下载完成：直接关闭弹窗进入安装，不碰进度条
+                        updateDialog?.dismiss()
+                        updateDialog = null
+                        val fileName = info.downloadUrl.substringAfterLast("/")
+                        saveDownloadedFileInfo(
+                            activity,
+                            info.versionCode,
+                            fileName
+                        )
+                        launchInstall(file)
                     }
                 }
 
@@ -560,11 +622,17 @@ class UpdateHelper(private val activity: AppCompatActivity) {
                         apkFile.delete()
                     }
                     if (tmpFile.renameTo(apkFile)) {
-                        callback.onProgress(100, downloadedBytes)
+                        // 仅在有 Content-Length 时发送 onProgress(100)，否则直接 onSuccess
+                        // 避免 indeterminate 模式切换回 determinate 时进度条从 0 重新刷到 100
+                        if (totalBytes > 0) {
+                            callback.onProgress(100, downloadedBytes)
+                        }
                         callback.onSuccess(apkFile)
                     } else {
                         Log.w(TAG, "重命名临时文件失败，返回临时文件")
-                        callback.onProgress(100, downloadedBytes)
+                        if (totalBytes > 0) {
+                            callback.onProgress(100, downloadedBytes)
+                        }
                         callback.onSuccess(tmpFile)
                     }
                 } catch (e: Exception) {

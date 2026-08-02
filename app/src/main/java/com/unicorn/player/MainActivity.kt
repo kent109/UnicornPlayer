@@ -804,6 +804,9 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         autoUpdateCheckRunnable?.let { binding.root.removeCallbacks(it) }
         autoUpdateCheckRunnable = null
 
+        // 清理静态 Handler 引用，避免内存泄漏
+        cancelPendingAutoUpdateCheck()
+
         // 清理观察者，避免内存泄漏
         removeBottomPlayerObservers()
         if (isServiceBound) {

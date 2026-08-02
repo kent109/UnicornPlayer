@@ -2,28 +2,18 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@android:id/background">
         <shape android:shape="rectangle">
-            <corners android:radius="2dp" />
+            <corners android:radius="8dp" />
             <solid android:color="@color/surfaceVariant" />
         </shape>
     </item>
-    <item android:id="@android:id/secondaryProgress">
-        <scale
-            android:scaleWidth="100%"
-            android:scaleGravity="left">
-            <shape android:shape="rectangle">
-                <corners android:radius="2dp" />
-                <solid android:color="@color/primary" />
-            </shape>
-        </scale>
-    </item>
     <item android:id="@android:id/progress">
-        <scale
-            android:scaleWidth="100%"
-            android:scaleGravity="left">
+        <clip
+            android:clipOrientation="horizontal"
+            android:gravity="left">
             <shape android:shape="rectangle">
-                <corners android:radius="2dp" />
+                <corners android:radius="8dp" />
                 <solid android:color="@color/primary" />
             </shape>
-        </scale>
+        </clip>
     </item>
 </layer-list>

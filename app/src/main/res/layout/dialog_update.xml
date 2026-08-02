@@ -70,16 +70,10 @@
             android:orientation="vertical"
             android:visibility="gone">
 
-            <ProgressBar
+            <com.unicorn.player.widget.IndeterminateProgressBar
                 android:id="@+id/progressBar"
-                style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="4dp"
-                android:max="100"
-                android:progress="0"
-                android:indeterminate="false"
-                android:indeterminateDrawable="@drawable/progress_indeterminate_rounded"
-                android:progressDrawable="@drawable/progress_rounded" />
+                android:layout_height="4dp" />
 
             <TextView
                 android:id="@+id/tvProgress"
