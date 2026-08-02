@@ -157,7 +157,9 @@
       "Bash(del *)",
       "Bash(echo \"exit:$?\")",
       "Bash(xxd \"D:/workspace/android_studio/UnicornPlayer/app/src/main/res/drawable/bottom_sheet_background.xml\")",
-      "Bash(xxd app/src/main/res/raw/manual.md)"
+      "Bash(xxd app/src/main/res/raw/manual.md)",
+      "Bash(r?)",
+      "Bash(powershell -Command \"\\(Get-Content 'D:/workspace/android_studio/UnicornPlayer/app/src/main/res/layout/dialog_update.xml' -Raw\\) -replace \\\\\"`r?`n\\\\\", \\\\\"`r`n\\\\\" | Set-Content 'D:/workspace/android_studio/UnicornPlayer/app/src/main/res/layout/dialog_update.xml' -NoNewline\")"
     ]
   }
 }
