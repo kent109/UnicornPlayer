@@ -3,15 +3,18 @@ package com.unicorn.player
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.unicorn.player.databinding.ActivitySettingsBinding
 import com.unicorn.player.util.UpdateHelper
+import java.io.File
 
 /**
  * 设置页面Activity
@@ -83,9 +86,21 @@ class SettingsActivity : AppCompatActivity() {
                 title = "扫描过滤",
                 hasChevron = true,
                 isFirst = false,
-                isLast = true,
+                isLast = false,
                 onClick = {
                     startActivity(Intent(this, ScanFilterActivity::class.java))
+                }
+            )
+        )
+        playItems.add(
+            SettingItem(
+                key = "clear_cache",
+                title = "清理缓存",
+                hasChevron = false,
+                isFirst = false,
+                isLast = true,
+                onClick = {
+                    showClearCacheDialog()
                 }
             )
         )
@@ -143,6 +158,53 @@ class SettingsActivity : AppCompatActivity() {
                 )
             )
         )
+    }
+
+    /**
+     * 显示清除缓存确认弹窗
+     * 使用自定义布局，风格与发现新版本弹窗保持一致
+     */
+    private fun showClearCacheDialog() {
+        val inflater = LayoutInflater.from(this)
+        val view = inflater.inflate(R.layout.dialog_clear_cache, null)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(view)
+            .setCancelable(true)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        view.findViewById<View>(R.id.btnConfirm).setOnClickListener {
+            dialog.dismiss()
+            performClearCache()
+        }
+        view.findViewById<View>(R.id.btnCancel).setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    /**
+     * 执行缓存清理：清除应用缓存目录 + 下载的更新文件
+     */
+    private fun performClearCache() {
+        try {
+            // 1. 清除应用缓存
+            cacheDir.deleteRecursively()
+            externalCacheDir?.deleteRecursively()
+
+            // 2. 清除下载的更新文件（update 目录）
+            val updateDir = File(getExternalFilesDir(null), UpdateHelper.DOWNLOAD_DIR_NAME)
+            if (updateDir.exists()) {
+                updateDir.deleteRecursively()
+            }
+
+            Toast.makeText(this, R.string.clear_cache_success, Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e("SettingsActivity", "清除缓存失败: ${e.message}", e)
+        }
     }
 
     /**

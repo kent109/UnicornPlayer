@@ -34,6 +34,14 @@
     <!-- 歌单 -->
     <string name="playlist_name_exists">歌单「%1$s」已存在</string>
 
+    <!-- 清除缓存 -->
+    <string name="clear_cache">清理缓存</string>
+    <string name="clear_cache_title">清理缓存</string>
+    <string name="clear_cache_message">确定要清除应用缓存和安装包吗？</string>
+    <string name="clear_cache_confirm">确定</string>
+    <string name="clear_cache_cancel">取消</string>
+    <string name="clear_cache_success">缓存已清除</string>
+
     <!-- 检查更新 -->
     <string name="update_new_version">发现新版本</string>
     <string name="update_version_label">版本 %1$s</string>

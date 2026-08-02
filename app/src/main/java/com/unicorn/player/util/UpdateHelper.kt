@@ -76,7 +76,7 @@ class UpdateHelper(private val activity: AppCompatActivity) {
         private const val KEY_DOWNLOADED_VERSION_CODE = "downloaded_version_code"
         private const val KEY_DOWNLOADED_FILE_NAME = "downloaded_file_name"
         private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
-        private const val DOWNLOAD_DIR_NAME = "update"
+        internal const val DOWNLOAD_DIR_NAME = "update"
 
         private val client = OkHttpClient()
         private val gson = Gson()
