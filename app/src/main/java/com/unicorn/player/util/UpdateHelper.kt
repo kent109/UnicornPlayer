@@ -16,6 +16,7 @@ import androidx.core.content.FileProvider
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.unicorn.player.R
 import okhttp3.Call
 import okhttp3.Callback
@@ -69,18 +70,44 @@ class UpdateHelper(private val activity: AppCompatActivity) {
         private const val PREFS_NAME = "update_prefs"
         private const val KEY_DOWNLOADED_VERSION_CODE = "downloaded_version_code"
         private const val KEY_DOWNLOADED_FILE_NAME = "downloaded_file_name"
+        private const val KEY_AUTO_CHECK_UPDATE = "auto_check_update"
         private const val DOWNLOAD_DIR_NAME = "update"
 
         private val client = OkHttpClient()
         private val gson = Gson()
+
+        /**
+         * 获取 SharedPreferences 实例
+         */
+        internal fun getPrefs(context: Context): SharedPreferences {
+            return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        }
+
+        /**
+         * 是否启用自动检查更新（默认启用）
+         */
+        fun isAutoCheckEnabled(context: Context): Boolean {
+            return getPrefs(context).getBoolean(KEY_AUTO_CHECK_UPDATE, true)
+        }
+
+        /**
+         * 设置是否启用自动检查更新
+         */
+        fun setAutoCheckEnabled(context: Context, enabled: Boolean) {
+            getPrefs(context).edit { putBoolean(KEY_AUTO_CHECK_UPDATE, enabled) }
+        }
     }
 
     // ==================== 数据类 ====================
 
     data class VersionInfo(
+        @SerializedName("versionCode")
         val versionCode: Int,
+        @SerializedName("versionName")
         val versionName: String,
+        @SerializedName("downloadUrl")
         val downloadUrl: String,
+        @SerializedName("updateLog")
         val updateLog: String
     )
 
@@ -121,12 +148,15 @@ class UpdateHelper(private val activity: AppCompatActivity) {
 
     /**
      * 检查更新（防止连续点击）
+     * @param silent 静默模式时不显示 loading 弹窗（用于启动时自动检查）
      */
-    fun checkForUpdate(callback: UpdateCallback? = null) {
+    fun checkForUpdate(callback: UpdateCallback? = null, silent: Boolean = false) {
         if (isCheckingUpdate) return
         isCheckingUpdate = true
 
-        showLoadingDialog()
+        if (!silent) {
+            showLoadingDialog()
+        }
 
         val currentVersionCode = getCurrentVersionCode(activity)
 
@@ -656,7 +686,4 @@ class UpdateHelper(private val activity: AppCompatActivity) {
         dialog.show()
     }
 
-    private fun getPrefs(context: Context): SharedPreferences {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    }
 }

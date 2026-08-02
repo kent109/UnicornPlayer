@@ -39,6 +39,7 @@
 -keep class com.unicorn.player.database.** { *; }
 -keep class com.unicorn.player.service.** { *; }
 -keep class com.unicorn.player.viewmodel.** { *; }
+-keep class com.unicorn.player.util.** { *; }
 
 -keepclassmembers class ** {
     @androidx.room.* <fields>;

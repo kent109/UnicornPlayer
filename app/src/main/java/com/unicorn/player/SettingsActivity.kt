@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.unicorn.player.databinding.ActivitySettingsBinding
 import com.unicorn.player.util.UpdateHelper
 
@@ -100,13 +101,23 @@ class SettingsActivity : AppCompatActivity() {
             inflater = inflater,
             items = listOf(
                 SettingItem(
+                    key = "auto_update",
+                    title = "自动检查更新",
+                    hasChevron = false,
+                    isFirst = true,
+                    isLast = false,
+                    type = SettingItemType.SWITCH
+                ),
+                SettingItem(
                     key = "version",
                     title = "版本号",
                     summary = getVersionName(),
                     hasChevron = false,
-                    isFirst = true,
+                    isFirst = false,
                     isLast = false,
                     onClick = {
+                        // 取消 MainActivity 中待执行的静默检查任务，避免重复检查
+                        MainActivity.cancelPendingAutoUpdateCheck()
                         updateHelper.checkForUpdate()
                     }
                 ),
@@ -207,6 +218,21 @@ class SettingsActivity : AppCompatActivity() {
         val ivChevron = view.findViewById<android.widget.ImageView>(R.id.ivChevron)
         ivChevron.visibility = if (item.hasChevron) View.VISIBLE else View.GONE
 
+        // 设置 SwitchButton（仅 SWITCH 类型显示）
+        val switchButton = view.findViewById<SwitchMaterial>(R.id.switchButton)
+        if (item.type == SettingItemType.SWITCH) {
+            switchButton.visibility = View.VISIBLE
+            switchButton.isChecked = UpdateHelper.isAutoCheckEnabled(this)
+            switchButton.tag = "${item.key}_switch"
+
+            // 监听开关变化
+            switchButton.setOnCheckedChangeListener { _, isChecked ->
+                UpdateHelper.setAutoCheckEnabled(this, isChecked)
+            }
+        } else {
+            switchButton.visibility = View.GONE
+        }
+
         // 设置背景
         val bgRes = when {
             item.isFirst && item.isLast -> R.drawable.bg_preference_single
@@ -216,11 +242,17 @@ class SettingsActivity : AppCompatActivity() {
         }
         view.setBackgroundResource(bgRes)
 
-        // 设置点击事件
-        view.isClickable = item.onClick != null
-        view.isFocusable = item.onClick != null
-        item.onClick?.let { clickListener ->
-            view.setOnClickListener { clickListener() }
+        // 设置点击事件（仅 NORMAL/SELECT 类型的 item 有 onClick；SWITCH 类型不能拦截，否则开关无效）
+        if (item.type != SettingItemType.SWITCH) {
+            view.isClickable = item.onClick != null
+            view.isFocusable = item.onClick != null
+            item.onClick?.let { clickListener ->
+                view.setOnClickListener { clickListener() }
+            }
+        } else {
+            // SWITCH 类型：行本身不接点击，让 SwitchMaterial 自己处理
+            view.isClickable = false
+            view.isFocusable = false
         }
 
         return view
@@ -257,6 +289,16 @@ class SettingsActivity : AppCompatActivity() {
         val hasChevron: Boolean = false,
         val isFirst: Boolean = false,
         val isLast: Boolean = false,
-        val onClick: (() -> Unit)? = null
+        val onClick: (() -> Unit)? = null,
+        val type: SettingItemType = SettingItemType.NORMAL
     )
+
+    /**
+     * 设置项类型
+     */
+    enum class SettingItemType {
+        NORMAL,
+        SWITCH,
+        SELECT
+    }
 }

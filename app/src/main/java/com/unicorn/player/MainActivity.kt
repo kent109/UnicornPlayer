@@ -33,6 +33,7 @@ import com.unicorn.player.ui.MainPagerAdapter
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongsFragment
+import com.unicorn.player.util.UpdateHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 
@@ -56,8 +57,28 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     // 底部播放栏控制器，封装底部播放栏的按钮事件、观察者与 UI 更新
     private lateinit var bottomPlayerController: BottomPlayerController
 
+    // 自动检查更新的延迟任务（用于在 onDestroy 时取消，避免内存泄漏）
+    private var autoUpdateCheckRunnable: Runnable? = null
+
     companion object {
         const val TAG = "MainActivity"
+        /** 启动后延迟自动检查更新的时间（毫秒） */
+        private const val AUTO_UPDATE_CHECK_DELAY_MS = 3000L
+
+        /** 待执行的静默检查任务 Handler（静态，供 SettingsActivity 手动检查时取消） */
+        private var autoUpdateHandler: android.os.Handler? = null
+        /** 待执行的静默检查任务 Runnable（静态，供 SettingsActivity 手动检查时取消） */
+        private var autoUpdatePendingRunnable: Runnable? = null
+
+        /**
+         * 取消待执行的静默检查更新任务
+         * 在 SettingsActivity 点击版本号手动检查时调用，避免重复检查
+         */
+        fun cancelPendingAutoUpdateCheck() {
+            autoUpdatePendingRunnable?.let { autoUpdateHandler?.removeCallbacks(it) }
+            autoUpdateHandler = null
+            autoUpdatePendingRunnable = null
+        }
     }
 
     private val multiPermissionLauncher = registerForActivityResult(
@@ -151,6 +172,36 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
         checkPermissions()
         bindMusicService()
+
+        // 自动检查更新（若用户启用）
+        checkUpdateOnStartup()
+    }
+
+    /**
+     * 应用启动时延迟自动检查更新（遵循用户设置）
+     * 使用 Handler.postDelayed 实现延迟，任务引用同时保存在实例变量和静态变量中：
+     * - 实例变量：onDestroy 时移除，避免 Activity 销毁后仍执行
+     * - 静态变量：SettingsActivity 手动检查时可取消待执行的静默任务
+     */
+    private fun checkUpdateOnStartup() {
+        if (!UpdateHelper.isAutoCheckEnabled(this)) return
+
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val runnable = Runnable {
+            if (isDestroyed || isFinishing) return@Runnable
+            UpdateHelper(this).checkForUpdate(silent = true)
+            // 执行完毕后清理静态引用
+            autoUpdateHandler = null
+            autoUpdatePendingRunnable = null
+        }
+
+        // 保存到实例变量（onDestroy 清理用）
+        autoUpdateCheckRunnable = runnable
+        // 保存到静态变量（SettingsActivity 手动检查时取消用）
+        autoUpdateHandler = handler
+        autoUpdatePendingRunnable = runnable
+
+        handler.postDelayed(runnable, AUTO_UPDATE_CHECK_DELAY_MS)
     }
 
     /**
@@ -749,13 +800,17 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        // 移除自动检查更新的延迟任务，避免 Activity 销毁后仍执行
+        autoUpdateCheckRunnable?.let { binding.root.removeCallbacks(it) }
+        autoUpdateCheckRunnable = null
+
         // 清理观察者，避免内存泄漏
         removeBottomPlayerObservers()
         if (isServiceBound) {
             unbindService(serviceConnection)
             isServiceBound = false
         }
+        super.onDestroy()
     }
 
     // 由 SongsFragment 转发的更多操作事件
