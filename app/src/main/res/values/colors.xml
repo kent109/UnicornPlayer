@@ -66,4 +66,6 @@
     <!-- 扫描过滤目录数量颜色 -->
     <color name="red_500">#F44336</color>
     <color name="green_500">#4CAF50</color>
+
+    <color name="progress_color">#cc49454F</color>
 </resources>

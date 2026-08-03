@@ -25,7 +25,7 @@ class IndeterminateProgressBar @JvmOverloads constructor(
         color = "#FFE0E0E0".toColorInt()
     }
     private val fgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.surfaceVariant)
+        color = ContextCompat.getColor(context, R.color.progress_color)
     }
     private val rect = RectF()
 

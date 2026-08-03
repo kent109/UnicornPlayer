@@ -124,10 +124,10 @@ class UpdateHelper(private val activity: AppCompatActivity) {
         }
 
         /**
-         * 是否启用自动检查更新（默认启用）
+         * 是否启用自动检查更新
          */
         fun isAutoCheckEnabled(context: Context): Boolean {
-            return getPrefs(context).getBoolean(KEY_AUTO_CHECK_UPDATE, true)
+            return getPrefs(context).getBoolean(KEY_AUTO_CHECK_UPDATE, false)
         }
 
         /**
