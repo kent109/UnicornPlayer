@@ -96,7 +96,7 @@ class SettingsActivity : AppCompatActivity() {
         playItems.add(
             SettingItem(
                 key = "clear_cache",
-                title = "清理缓存",
+                title = "清理存储",
                 hasChevron = false,
                 isFirst = false,
                 isLast = true,
