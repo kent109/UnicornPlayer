@@ -137,6 +137,16 @@ class SettingsActivity : AppCompatActivity() {
                     }
                 ),
                 SettingItem(
+                    key = "feedback",
+                    title = "意见反馈",
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = false,
+                    onClick = {
+                        startActivity(Intent(this, FeedbackActivity::class.java))
+                    }
+                ),
+                SettingItem(
                     key = "manual",
                     title = "使用指南",
                     hasChevron = true,
