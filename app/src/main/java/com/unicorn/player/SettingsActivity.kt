@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import androidx.core.content.FileProvider
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.unicorn.player.databinding.ActivitySettingsBinding
 import com.unicorn.player.util.UpdateHelper
@@ -134,6 +135,16 @@ class SettingsActivity : AppCompatActivity() {
                         // 取消 MainActivity 中待执行的静默检查任务，避免重复检查
                         MainActivity.cancelPendingAutoUpdateCheck()
                         updateHelper.checkForUpdate()
+                    }
+                ),
+                SettingItem(
+                    key = "share",
+                    title = getString(R.string.share_friends),
+                    hasChevron = false,
+                    isFirst = false,
+                    isLast = false,
+                    onClick = {
+                        shareAppImage()
                     }
                 ),
                 SettingItem(
@@ -372,5 +383,40 @@ class SettingsActivity : AppCompatActivity() {
         NORMAL,
         SWITCH,
         SELECT
+    }
+
+    /**
+     * 分享应用图片
+     */
+    private fun shareAppImage() {
+        try {
+            val inputStream = resources.openRawResource(R.raw.app)
+            val destFile = File(getExternalFilesDir(null), "share_image.png")
+
+            inputStream.use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            val imageUri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                destFile
+            )
+
+            val shareIntent = Intent().apply {
+                action = Intent.ACTION_SEND
+                putExtra(Intent.EXTRA_STREAM, imageUri)
+                type = "image/png"
+                putExtra(Intent.EXTRA_SUBJECT, getString(R.string.share_text))
+                putExtra(Intent.EXTRA_TEXT, getString(R.string.share_text))
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            startActivity(Intent.createChooser(shareIntent, "分享轻籁"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "分享失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 }

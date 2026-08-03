@@ -53,4 +53,6 @@
     <string name="update_already_latest">已是最新版本</string>
     <string name="update_check_failed">检查更新失败，请稍后重试</string>
     <string name="update_download_failed">下载失败，请重试</string>
+    <string name="share_friends">分享好友</string>
+    <string name="share_text">给你安利一款体验良好的音乐播放器『轻籁』</string>
 </resources>
