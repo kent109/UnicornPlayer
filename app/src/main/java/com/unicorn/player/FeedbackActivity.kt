@@ -21,6 +21,7 @@ class FeedbackActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityFeedbackBinding
     private var deviceInfo: String = ""
+    private var isSubmitting = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,18 +30,24 @@ class FeedbackActivity : AppCompatActivity() {
 
         deviceInfo = "${Build.BRAND}_${Build.MODEL}_${Build.VERSION.RELEASE}"
         setupViews()
+        setupInputListeners()
+        binding.btnSubmit.isEnabled = false
+        binding.btnSubmit.alpha = 0.6f
     }
 
     /**
      * 初始化视图
      */
     private fun setupViews() {
-        val btnSubmit = binding.btnSubmit
         val etFeedbackContent = binding.etFeedbackContent
         val etContact = binding.etContact
         val etTitle = binding.etTitle
 
-        btnSubmit.setOnClickListener {
+        binding.btnSubmit.setOnClickListener {
+            if (isSubmitting) {
+                return@setOnClickListener
+            }
+
             val feedbackContent = etFeedbackContent.text.toString().trim()
             val contact = etContact.text.toString().trim()
             val title = etTitle.text.toString().trim()
@@ -65,7 +72,8 @@ class FeedbackActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            btnSubmit.isEnabled = false
+            isSubmitting = true
+            binding.btnSubmit.isEnabled = false
 
             FeedbackHelper.submitFeedback(
                 title = title,
@@ -79,14 +87,81 @@ class FeedbackActivity : AppCompatActivity() {
                     etTitle.text.clear()
                     val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
                     imm.hideSoftInputFromWindow(window.decorView.windowToken, 0)
-                    btnSubmit.isEnabled = true
+                    isSubmitting = false
+                    checkInputs()
                 },
                 onError = { errorMsg ->
                     Log.e(TAG, "errorMsg=$errorMsg")
                     Toast.makeText(this, "提交失败: $errorMsg", Toast.LENGTH_LONG).show()
-                    btnSubmit.isEnabled = true
+                    isSubmitting = false
+                    checkInputs()
                 }
             )
         }
+    }
+
+    /**
+     * 为输入框添加监听器
+     */
+    private fun setupInputListeners() {
+        val listener = { _: android.view.View ->
+            checkInputs()
+        }
+
+        binding.etFeedbackContent.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                listener(binding.etFeedbackContent)
+            }
+
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        binding.etContact.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                listener(binding.etContact)
+            }
+
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        binding.etTitle.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                listener(binding.etTitle)
+            }
+
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+    }
+
+    /**
+     * 检查3个输入框是否有内容
+     */
+    private fun checkInputs() {
+        if (isSubmitting) {
+            return
+        }
+
+        val feedbackContent = binding.etFeedbackContent.text.toString().trim()
+        val contact = binding.etContact.text.toString().trim()
+        val title = binding.etTitle.text.toString().trim()
+
+        val hasContent = feedbackContent.isNotEmpty() && contact.isNotEmpty() && title.isNotEmpty()
+
+        binding.btnSubmit.isEnabled = hasContent
+        binding.btnSubmit.alpha = if (hasContent) 1.0f else 0.6f
+    }
+
+    /**
+     * 重置提交状态
+     */
+    override fun onDestroy() {
+        super.onDestroy()
+        isSubmitting = false
     }
 }

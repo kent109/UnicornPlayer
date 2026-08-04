@@ -47,7 +47,7 @@
             android:maxLines="1"
             android:padding="12dp"
             android:textColor="@color/onSurface"
-            android:textColorHint="@color/onSurfaceVariant"
+            android:textColorHint="@android:color/darker_gray"
             android:textSize="16sp" />
 
         <!-- 反馈内容输入框 -->
@@ -64,15 +64,15 @@
         <EditText
             android:id="@+id/etFeedbackContent"
             android:layout_width="match_parent"
-            android:layout_height="150dp"
+            android:layout_height="wrap_content"
             android:background="@drawable/bg_edittext"
             android:gravity="top|start"
             android:hint="描述您遇到的问题，或分享改进建议。"
             android:inputType="textMultiLine"
-            android:minHeight="200dp"
+            android:minHeight="180dp"
             android:padding="12dp"
             android:textColor="@color/onSurface"
-            android:textColorHint="@color/onSurfaceVariant"
+            android:textColorHint="@android:color/darker_gray"
             android:textSize="16sp" />
 
         <!-- 联系方式输入框 -->
@@ -95,7 +95,7 @@
             android:inputType="text"
             android:padding="12dp"
             android:textColor="@color/onSurface"
-            android:textColorHint="@color/onSurfaceVariant"
+            android:textColorHint="@android:color/darker_gray"
             android:textSize="16sp" />
 
         <!-- 提交按钮 -->
