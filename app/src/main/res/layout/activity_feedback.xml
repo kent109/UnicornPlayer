@@ -26,7 +26,7 @@
         android:paddingEnd="16dp"
         android:paddingBottom="24dp">
 
-        <!-- 反馈内容输入框 -->
+        <!-- 问题标题输入框 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -37,14 +37,39 @@
             android:textStyle="bold" />
 
         <EditText
+            android:id="@+id/etTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_edittext"
+            android:hint="简要描述问题"
+            android:inputType="text"
+            android:maxLength="100"
+            android:maxLines="1"
+            android:padding="12dp"
+            android:textColor="@color/onSurface"
+            android:textColorHint="@color/onSurfaceVariant"
+            android:textSize="16sp" />
+
+        <!-- 反馈内容输入框 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="问题详情："
+            android:textColor="@color/onSurface"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <EditText
             android:id="@+id/etFeedbackContent"
             android:layout_width="match_parent"
             android:layout_height="150dp"
             android:background="@drawable/bg_edittext"
             android:gravity="top|start"
-            android:hint="描述您遇到的问题，或分享改进意见。"
+            android:hint="描述您遇到的问题，或分享改进建议。"
             android:inputType="textMultiLine"
-            android:minHeight="150dp"
+            android:minHeight="200dp"
             android:padding="12dp"
             android:textColor="@color/onSurface"
             android:textColorHint="@color/onSurfaceVariant"
@@ -66,7 +91,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_edittext"
-            android:hint="请输入您的QQ或邮箱"
+            android:hint="输入您的QQ或邮箱"
             android:inputType="text"
             android:padding="12dp"
             android:textColor="@color/onSurface"
