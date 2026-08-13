@@ -410,6 +410,7 @@ class PlayerActivity : AppCompatActivity() {
             content,
             centerX,
             centerY,
+            startInEditMode = true,
             onSave = { content -> saveLyrics(content) },
             showSaveButton = false
         ).also { it.show() }

@@ -172,9 +172,9 @@ class LrcSearchActivity : AppCompatActivity(),
     private var previewDialog: LrcPreviewDialog? = null
 
     /**
-     * 搜索结果点击 - 弹出歌词预览对话框（从 item 位置弹出，可滑动关闭，支持编辑）
+     * 搜索结果点击 -  弹出"使用歌词"确认对话框
      */
-    override fun onResultLongClick(result: LrcSearchResult) {
+    override fun onResultClick(result: LrcSearchResult) {
         MaterialAlertDialogBuilder(this)
             .setTitle("使用歌词")
             .setMessage("确定要使用「${result.trackName} - ${result.artistName}」的歌词吗？")
@@ -199,9 +199,9 @@ class LrcSearchActivity : AppCompatActivity(),
     }
 
     /**
-     * 搜索结果长按 - 弹出"使用歌词"确认对话框
+     * 搜索结果长按 - 弹出歌词预览对话框（从 item 位置弹出，可滑动关闭，支持编辑）
      */
-    override fun onResultClick(result: LrcSearchResult) {
+    override fun onResultLongClick(result: LrcSearchResult) {
         // 获取列表在屏幕上的中心位置作为动画起点
         val location = IntArray(2)
         binding.rvResults.getLocationOnScreen(location)
@@ -213,6 +213,7 @@ class LrcSearchActivity : AppCompatActivity(),
             result.syncedLyrics,
             centerX,
             centerY,
+            startInEditMode = true,
             onContentUpdated = { updatedContent ->
                 // 更新列表 item 的 syncedLyrics
                 updateResultContent(result, updatedContent)
