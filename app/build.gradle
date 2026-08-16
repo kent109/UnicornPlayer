@@ -98,14 +98,14 @@ dependencies {
     implementation 'androidx.datastore:datastore-preferences:1.0.0'
 
     // SmartRefreshLayout - 下拉刷新和广告展示
-    implementation  'io.github.scwang90:refresh-layout-kernel:3.0.0-alpha'      //核心必须依赖
-    implementation  'io.github.scwang90:refresh-header-classics:3.0.0-alpha'    //经典刷新头
-    implementation  'io.github.scwang90:refresh-header-radar:3.0.0-alpha'       //雷达刷新头
-    implementation  'io.github.scwang90:refresh-header-falsify:3.0.0-alpha'     //虚拟刷新头
-    implementation  'io.github.scwang90:refresh-header-material:3.0.0-alpha'    //谷歌刷新头
-    implementation  'io.github.scwang90:refresh-header-two-level:3.0.0-alpha'   //二级刷新头
-    implementation  'io.github.scwang90:refresh-footer-ball:3.0.0-alpha'        //球脉冲加载
-    implementation  'io.github.scwang90:refresh-footer-classics:3.0.0-alpha'    //经典加载
+    implementation 'io.github.scwang90:refresh-layout-kernel:3.0.0-alpha'      //核心必须依赖
+    implementation 'io.github.scwang90:refresh-header-classics:3.0.0-alpha'    //经典刷新头
+    implementation 'io.github.scwang90:refresh-header-radar:3.0.0-alpha'       //雷达刷新头
+    implementation 'io.github.scwang90:refresh-header-falsify:3.0.0-alpha'     //虚拟刷新头
+    implementation 'io.github.scwang90:refresh-header-material:3.0.0-alpha'    //谷歌刷新头
+    implementation 'io.github.scwang90:refresh-header-two-level:3.0.0-alpha'   //二级刷新头
+    implementation 'io.github.scwang90:refresh-footer-ball:3.0.0-alpha'        //球脉冲加载
+    implementation 'io.github.scwang90:refresh-footer-classics:3.0.0-alpha'    //经典加载
 
     implementation 'com.github.bifan-wei:LrcView:V1.4'
 
@@ -129,4 +129,11 @@ dependencies {
 
     // Markdown 渲染：原生 TextView Spannable，无需 WebView
     implementation 'io.noties.markwon:core:4.6.2'
+
+    // Kotlin序列化
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-core:1.11.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0'
+
+    // DI
+    implementation 'javax.inject:javax.inject:1'
 }
