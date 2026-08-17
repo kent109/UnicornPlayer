@@ -1202,6 +1202,15 @@ class MusicService : Service() {
 
     fun getDuration(): Int = mediaPlayer.duration
 
+    fun getAudioSessionId(): Int {
+        return try {
+            mediaPlayer.audioSessionId
+        } catch (e: IllegalStateException) {
+            LogWriter.writeError(TAG, "getAudioSessionId: MediaPlayer state error", e)
+            0
+        }
+    }
+
     /**
      * 将 MusicService 当前播放进度同步到 DataStore
      * 用于 Activity 重新绑定服务后，确保保存的进度与实际进度一致

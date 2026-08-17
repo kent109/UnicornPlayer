@@ -1,0 +1,91 @@
+package com.unicorn.player
+
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.Bundle
+import android.os.IBinder
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.bullhead.equalizer.EqualizerFragment
+import com.unicorn.player.databinding.ActivityEqualizerBinding
+import com.unicorn.player.service.MusicService
+
+class EqualizerActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityEqualizerBinding
+    private var musicService: MusicService? = null
+    private var isServiceBound = false
+
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as MusicService.MusicBinder
+            musicService = binder.getService()
+            isServiceBound = true
+            setupEqualizerFragment()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            musicService = null
+            isServiceBound = false
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityEqualizerBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        setupTitleBar()
+        bindMusicService()
+    }
+
+    private fun setupTitleBar() {
+        binding.titleBar.setOnBackClickListener {
+            finish()
+        }
+    }
+
+    private fun bindMusicService() {
+        val intent = Intent(this, MusicService::class.java)
+        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        startService(intent)
+    }
+
+    private fun setupEqualizerFragment() {
+        val sessionId = musicService?.getAudioSessionId() ?: 0
+        if (sessionId == 0) {
+            finish()
+            return
+        }
+
+        val equalizerFragment = EqualizerFragment.newBuilder()
+            .setAccentColor(ContextCompat.getColor(this, R.color.primary))
+            .setAudioSessionId(sessionId)
+            .build()
+
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.eqFrame, equalizerFragment)
+            .commit()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (isServiceBound && musicService != null) {
+            setupEqualizerFragment()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        musicService?.savePlaybackState()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unbindService(serviceConnection)
+        isServiceBound = false
+        musicService = null
+    }
+}

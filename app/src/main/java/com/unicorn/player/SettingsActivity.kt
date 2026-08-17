@@ -65,7 +65,7 @@ class SettingsActivity : AppCompatActivity() {
                 isFirst = true,
                 isLast = false,
                 onClick = {
-                    Toast.makeText(this, "功能开发中，敬请期待", Toast.LENGTH_SHORT).show()
+                    startActivity(Intent(this, EqualizerActivity::class.java))
                 }
             )
         )
