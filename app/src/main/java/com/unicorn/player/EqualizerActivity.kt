@@ -6,9 +6,12 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.bullhead.equalizer.AudioEffectManager
 import com.bullhead.equalizer.EqualizerFragment
+import com.bullhead.equalizer.Settings
 import com.unicorn.player.databinding.ActivityEqualizerBinding
 import com.unicorn.player.service.MusicService
 
@@ -17,6 +20,10 @@ class EqualizerActivity : AppCompatActivity() {
     private lateinit var binding: ActivityEqualizerBinding
     private var musicService: MusicService? = null
     private var isServiceBound = false
+
+    companion object {
+        private const val TAG = "EqualizerActivity"
+    }
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -39,6 +46,34 @@ class EqualizerActivity : AppCompatActivity() {
 
         setupTitleBar()
         bindMusicService()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unbindService(serviceConnection)
+        isServiceBound = false
+        musicService = null
+    }
+
+    override fun onStart() {
+        super.onStart()
+
+        if (isServiceBound && musicService != null) {
+            val sessionId = musicService?.getAudioSessionId() ?: 0
+
+            if (sessionId == 0) {
+                Log.e(TAG, "Invalid audio session ID: 0")
+                return
+            }
+
+            if (Settings.isEqualizerEnabled) {
+                AudioEffectManager.enableEffects(this)
+                setupEqualizerFragment()
+            } else {
+                AudioEffectManager.disableEffects()
+                setupEqualizerFragment()
+            }
+        }
     }
 
     private fun setupTitleBar() {
@@ -73,19 +108,18 @@ class EqualizerActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (isServiceBound && musicService != null) {
-            setupEqualizerFragment()
+            val sessionId = musicService?.getAudioSessionId() ?: 0
+            if (sessionId != 0) {
+                val existingFragment = supportFragmentManager.findFragmentById(R.id.eqFrame)
+                if (existingFragment == null || !existingFragment.isVisible) {
+                    setupEqualizerFragment()
+                }
+            }
         }
     }
 
     override fun onPause() {
         super.onPause()
         musicService?.savePlaybackState()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        unbindService(serviceConnection)
-        isServiceBound = false
-        musicService = null
     }
 }

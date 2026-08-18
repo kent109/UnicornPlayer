@@ -11,6 +11,7 @@ import android.media.audiofx.BassBoost;
 import android.media.audiofx.Equalizer;
 import android.media.audiofx.PresetReverb;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -47,6 +48,7 @@ import java.util.Locale;
 public class EqualizerFragment extends Fragment {
 
     public static final String ARG_AUDIO_SESSIOIN_ID = "audio_session_id";
+    private static final String TAG = "EqualizerFragment";
 
     static int themeColor = Color.parseColor("#B24242");
     public Equalizer mEqualizer;
@@ -72,6 +74,8 @@ public class EqualizerFragment extends Fragment {
     FrameLayout equalizerTouchBlocker;
 
     Context ctx;
+
+    private boolean isAudioEffectsAvailable = false;
 
     public EqualizerFragment() {
         // Required empty public constructor
@@ -100,21 +104,26 @@ public class EqualizerFragment extends Fragment {
 
         Settings.isEditing = true;
 
-        if (getArguments() != null && getArguments().containsKey(ARG_AUDIO_SESSIOIN_ID)) {
-            audioSesionId = getArguments().getInt(ARG_AUDIO_SESSIOIN_ID);
-        }
-
         if (Settings.equalizerModel == null) {
             Settings.equalizerModel = new EqualizerModel();
             Settings.equalizerModel.setReverbPreset(PresetReverb.PRESET_NONE);
             Settings.equalizerModel.setBassStrength((short) (1000 / 19));
         }
 
-        mEqualizer = new Equalizer(0, audioSesionId);
-        bassBoost = new BassBoost(0, audioSesionId);
-        presetReverb = new PresetReverb(0, audioSesionId);
+        isAudioEffectsAvailable = true;
 
-        if (Settings.isEqualizerEnabled) {
+        if (mEqualizer == null || bassBoost == null || presetReverb == null) {
+            mEqualizer = AudioEffectManager.getEqualizer();
+            bassBoost = AudioEffectManager.getBassBoost();
+            presetReverb = AudioEffectManager.getPresetReverb();
+
+            if (mEqualizer == null || bassBoost == null || presetReverb == null) {
+                Log.e(TAG, "Audio effects not initialized. Please enable equalizer first.");
+                isAudioEffectsAvailable = false;
+            }
+        }
+
+        if (isAudioEffectsAvailable && Settings.isEqualizerEnabled) {
             bassBoost.setEnabled(true);
             presetReverb.setEnabled(true);
             mEqualizer.setEnabled(true);
@@ -122,24 +131,31 @@ public class EqualizerFragment extends Fragment {
             BassBoost.Settings bassBoostSetting = new BassBoost.Settings(bassBoostSettingTemp.toString());
             bassBoostSetting.strength = Settings.equalizerModel.getBassStrength();
             bassBoost.setProperties(bassBoostSetting);
-            presetReverb.setPreset(Settings.equalizerModel.getReverbPreset());
-        } else {
+            try {
+                presetReverb.setPreset(Settings.equalizerModel.getReverbPreset());
+            } catch (IllegalArgumentException e) {
+                Log.e(TAG, "Invalid reverb preset value: " + Settings.equalizerModel.getReverbPreset());
+                presetReverb.setPreset(PresetReverb.PRESET_NONE);
+            }
+        } else if (isAudioEffectsAvailable) {
             bassBoost.setEnabled(false);
             presetReverb.setEnabled(false);
             mEqualizer.setEnabled(false);
         }
 
-        if (Settings.presetPos == 0) {
-            for (short bandIdx = 0; bandIdx < mEqualizer.getNumberOfBands(); bandIdx++) {
-                mEqualizer.setBandLevel(bandIdx, (short) Settings.seekbarpos[bandIdx]);
-            }
-        } else {
-            short numberOfPresets = mEqualizer.getNumberOfPresets();
-            if (Settings.presetPos > 0 && Settings.presetPos <= numberOfPresets) {
-                mEqualizer.usePreset((short) Settings.presetPos);
-            } else {
+        if (isAudioEffectsAvailable) {
+            if (Settings.presetPos == 0) {
                 for (short bandIdx = 0; bandIdx < mEqualizer.getNumberOfBands(); bandIdx++) {
                     mEqualizer.setBandLevel(bandIdx, (short) Settings.seekbarpos[bandIdx]);
+                }
+            } else {
+                short numberOfPresets = mEqualizer.getNumberOfPresets();
+                if (Settings.presetPos > 0 && Settings.presetPos <= numberOfPresets) {
+                    mEqualizer.usePreset((short) Settings.presetPos);
+                } else {
+                    for (short bandIdx = 0; bandIdx < mEqualizer.getNumberOfBands(); bandIdx++) {
+                        mEqualizer.setBandLevel(bandIdx, (short) Settings.seekbarpos[bandIdx]);
+                    }
                 }
             }
         }
@@ -177,6 +193,13 @@ public class EqualizerFragment extends Fragment {
 
         equalizerSwitch = view.findViewById(R.id.equalizer_switch);
         equalizerTouchBlocker = view.findViewById(R.id.equalizerTouchBlocker);
+
+        if (!isAudioEffectsAvailable) {
+            equalizerSwitch.setChecked(false);
+            setControlsEnabled(false);
+            return;
+        }
+
         equalizerSwitch.setChecked(Settings.isEqualizerEnabled);
         equalizerSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             mEqualizer.setEnabled(isChecked);
@@ -299,6 +322,10 @@ public class EqualizerFragment extends Fragment {
 
         points = new float[numberOfFrequencyBands];
 
+        if (!isAudioEffectsAvailable) {
+            return;
+        }
+
         final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
         final short upperEqualizerBandLevel = mEqualizer.getBandLevelRange()[1];
 
@@ -404,9 +431,11 @@ public class EqualizerFragment extends Fragment {
 
                 @Override
                 public void onStartTrackingTouch(SeekBar seekBar) {
-                    presetSpinner.setSelection(0);
-                    Settings.presetPos = 0;
-                    Settings.equalizerModel.setPresetPos(0);
+                    if (isAudioEffectsAvailable && presetSpinner != null) {
+                        presetSpinner.setSelection(0);
+                        Settings.presetPos = 0;
+                        Settings.equalizerModel.setPresetPos(0);
+                    }
                 }
 
                 @Override
@@ -445,6 +474,10 @@ public class EqualizerFragment extends Fragment {
     }
 
     public void equalizeSound() {
+        if (!isAudioEffectsAvailable) {
+            return;
+        }
+
         ArrayList<String> equalizerPresetNames = new ArrayList<>();
         ArrayAdapter<String> equalizerPresetSpinnerAdapter = new ArrayAdapter<>(ctx,
                 R.layout.spinner_item,
@@ -484,7 +517,7 @@ public class EqualizerFragment extends Fragment {
                     if (position != 0) {
                         short numberOfPresets = mEqualizer.getNumberOfPresets();
                         short presetIndex = (short) (position - 1);
-                        if (presetIndex >= 0 && presetIndex < numberOfPresets) {
+                        if (presetIndex >= 0 && presetIndex < numberOfPresets && isAudioEffectsAvailable) {
                             mEqualizer.usePreset(presetIndex);
                             Settings.presetPos = position;
                             short numberOfFreqBands = 5;
@@ -518,13 +551,23 @@ public class EqualizerFragment extends Fragment {
     @Override
     public void onStop() {
         super.onStop();
-        setControlsEnabled(equalizerSwitch.isChecked());
+        if (equalizerSwitch != null) {
+            boolean isEnabled = equalizerSwitch.isChecked();
+            setControlsEnabled(isEnabled);
+        }
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        setControlsEnabled(equalizerSwitch.isChecked());
+
+        if (!isAudioEffectsAvailable || equalizerSwitch == null) {
+            return;
+        }
+
+        boolean isEnabled = Settings.isEqualizerEnabled;
+        equalizerSwitch.setChecked(isEnabled);
+        setControlsEnabled(isEnabled);
     }
 
     @Override
@@ -543,17 +586,6 @@ public class EqualizerFragment extends Fragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (mEqualizer != null) {
-            mEqualizer.release();
-        }
-
-        if (bassBoost != null) {
-            bassBoost.release();
-        }
-
-        if (presetReverb != null) {
-            presetReverb.release();
-        }
 
         Settings.isEditing = false;
     }
@@ -563,10 +595,12 @@ public class EqualizerFragment extends Fragment {
     }
 
     private void setControlsEnabled(boolean enabled) {
-        if (enabled) {
-            equalizerTouchBlocker.setVisibility(View.INVISIBLE);
-        } else {
-            equalizerTouchBlocker.setVisibility(View.VISIBLE);
+        if (equalizerTouchBlocker != null) {
+            if (enabled) {
+                equalizerTouchBlocker.setVisibility(View.INVISIBLE);
+            } else {
+                equalizerTouchBlocker.setVisibility(View.VISIBLE);
+            }
         }
 
         if (presetSpinner != null) {

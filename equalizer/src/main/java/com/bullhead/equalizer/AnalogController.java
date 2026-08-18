@@ -121,7 +121,9 @@ public class AnalogController extends View {
             return false;
         }
 
-        mListener.onProgressChanged((int) (deg - 2));
+        if (mListener != null) {
+            mListener.onProgressChanged((int) (deg - 2));
+        }
 
         if (e.getAction() == MotionEvent.ACTION_DOWN) {
             float dx = e.getX() - midx;

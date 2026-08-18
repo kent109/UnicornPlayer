@@ -13,6 +13,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.media.audiofx.PresetReverb
 import android.os.Binder
 import android.os.IBinder
 import android.os.SystemClock
@@ -31,6 +32,9 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.bullhead.equalizer.AudioEffectManager
+import com.bullhead.equalizer.EqualizerModel
+import com.bullhead.equalizer.Settings
 import com.unicorn.player.MainActivity
 import com.unicorn.player.R
 import com.unicorn.player.database.MusicDatabase
@@ -68,6 +72,13 @@ object DataStoreKeys {
 
     // 用户从列表中隐藏的歌曲 ID 集合（从列表中删除的歌曲），下拉刷新时清除
     val HIDDEN_SONG_IDS = stringSetPreferencesKey("hidden_song_ids")
+
+    // 均衡器相关键
+    val IS_EQUALIZER_ENABLED = intPreferencesKey("is_equalizer_enabled")
+    val EQUALIZER_BAND_LEVELS = stringPreferencesKey("equalizer_band_levels")
+    val EQUALIZER_PRESET_POS = intPreferencesKey("equalizer_preset_pos")
+    val BASS_STRENGTH = intPreferencesKey("bass_strength")
+    val REVERB_PRESET = intPreferencesKey("reverb_preset")
 }
 
 /**
@@ -145,6 +156,8 @@ class MusicService : Service() {
     private var _wasPlayingBeforeFocusLoss = false
 
     private lateinit var audioFocusRequest: AudioFocusRequest
+
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     var currentIndex = 0
     var isChangingSong = false
     var isSkippingFailedSong = false
@@ -369,11 +382,13 @@ class MusicService : Service() {
         // 服务被系统重启时（START_STICKY），不恢复到旧进度
         // 以 MusicService 当前进度为准，避免跳转到过时的位置；
         // 无播放进度时不自动恢复歌曲到底部播放条
-        loadPlaybackState(restorePosition = false)
-        mediaSession.isActive = true
+          mediaSession.isActive = true
 
-        // 初始化音频管理器（但不请求焦点）
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+          // 加载播放状态和均衡器设置
+          loadPlaybackState(restorePosition = false)
+
+          // 初始化音频管理器（但不请求焦点）
+          audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
         // 启动文件监听
         // startFileObserver()
@@ -465,6 +480,9 @@ class MusicService : Service() {
 
         // Use modern API for stopping foreground service
         stopForeground(STOP_FOREGROUND_REMOVE)
+
+        // 销毁音频效果管理器
+        AudioEffectManager.destroy()
     }
 
     private fun createNotificationChannel() {
@@ -733,6 +751,9 @@ class MusicService : Service() {
         }
 
         try {
+            // 确保音频效果管理器已初始化（在 MediaPlayer 准备好之后）
+            initializeAudioEffects()
+
             mediaPlayer.start()
             // 立即更新播放状态为true，确保通知栏能正确显示
             _isPlaying.value = true
@@ -1427,29 +1448,69 @@ class MusicService : Service() {
                                 "savePlaybackState: MediaPlayer state error",
                                 e
                             )
-                        }
-                        // 保存播放模式
-                        preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
-                        // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
-                        preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
-                    } else {
-                        // 清除保存的状态（包括上次播放进度、播放入口标签）
-                        preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
-                        preferences.remove(DataStoreKeys.SONG_TITLE)
-                        preferences.remove(DataStoreKeys.SONG_ARTIST)
-                        preferences.remove(DataStoreKeys.SONG_PATH)
-                        preferences.remove(DataStoreKeys.CURRENT_POSITION)
-                        preferences.remove(DataStoreKeys.IS_PLAYING)
-                        preferences.remove(DataStoreKeys.PLAY_SOURCE_TAG)
-                    }
+                          }
+                          // 保存播放模式
+                          preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
+                          // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
+                          preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
+                          // 保存均衡器设置
+                          preferences[DataStoreKeys.IS_EQUALIZER_ENABLED] = if (Settings.isEqualizerEnabled) 1 else 0
+                          preferences[DataStoreKeys.EQUALIZER_BAND_LEVELS] = Settings.seekbarpos.joinToString(",")
+                          preferences[DataStoreKeys.EQUALIZER_PRESET_POS] = Settings.presetPos
+                          preferences[DataStoreKeys.BASS_STRENGTH] = Settings.bassStrength.toInt()
+                          preferences[DataStoreKeys.REVERB_PRESET] = Settings.reverbPreset.toInt()
+                      } else {
+                          // 清除保存的状态（包括上次播放进度、播放入口标签）
+                          preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
+                          preferences.remove(DataStoreKeys.SONG_TITLE)
+                          preferences.remove(DataStoreKeys.SONG_ARTIST)
+                          preferences.remove(DataStoreKeys.SONG_PATH)
+                          preferences.remove(DataStoreKeys.CURRENT_POSITION)
+                          preferences.remove(DataStoreKeys.IS_PLAYING)
+                          preferences.remove(DataStoreKeys.PLAY_SOURCE_TAG)
+                          preferences.remove(DataStoreKeys.IS_EQUALIZER_ENABLED)
+                          preferences.remove(DataStoreKeys.EQUALIZER_BAND_LEVELS)
+                          preferences.remove(DataStoreKeys.EQUALIZER_PRESET_POS)
+                          preferences.remove(DataStoreKeys.BASS_STRENGTH)
+                          preferences.remove(DataStoreKeys.REVERB_PRESET)
+                      }
                 }
             } catch (e: Exception) {
                 LogWriter.writeError(TAG, "savePlaybackState failed", e)
-            }
-        }
-    }
+              }
+          }
+      }
 
-    fun loadPlaybackState(restorePosition: Boolean = true) {
+      fun initializeAudioEffects() {
+          var retryCount = 0
+          val maxRetries = 20
+
+          fun tryInitialize() {
+              try {
+                  val sessionId = mediaPlayer.audioSessionId
+                  if (sessionId != 0) {
+                      AudioEffectManager.initialize(this, sessionId)
+                      Log.d(TAG, "Audio effects initialized, session ID: $sessionId, enabled: ${Settings.isEqualizerEnabled}")
+                      return
+                  }
+                  Log.w(TAG, "Audio session ID is 0, retrying ($retryCount/$maxRetries)")
+              } catch (e: Exception) {
+                  Log.e(TAG, "Failed to initialize audio effects", e)
+              }
+
+              if (retryCount < maxRetries) {
+                  retryCount++
+                  Log.w(TAG, "Audio session ID is 0, retrying ($retryCount/$maxRetries)")
+                  handler.postDelayed({ tryInitialize() }, 200)
+              } else {
+                  Log.e(TAG, "Failed to initialize audio effects after $maxRetries retries")
+              }
+          }
+
+          tryInitialize()
+      }
+
+      fun loadPlaybackState(restorePosition: Boolean = true) {
         // 如果已经加载过播放状态，不需要重复加载
         if (isPlaybackStateLoaded) {
             Log.i(TAG, "loadPlaybackState: already loaded, skip")
@@ -1461,6 +1522,37 @@ class MusicService : Service() {
                 val preferences = applicationDataStore.data.first()
                 // 检查用户是否从最近任务移除了应用
                 val isTaskRemoved = preferences[DataStoreKeys.TASK_REMOVED_FLAG] == 1
+                if (isTaskRemoved) {
+                    // 清除标志，下次正常启动时可以正常显示通知
+                    applicationDataStore.edit { p ->
+                        p.remove(DataStoreKeys.TASK_REMOVED_FLAG)
+                    }
+                }
+
+                // 加载均衡器设置（必须在currentPosition检查之前）
+                val isEqualizerEnabled = preferences[DataStoreKeys.IS_EQUALIZER_ENABLED] == 1
+                Settings.isEqualizerEnabled = isEqualizerEnabled
+
+                // 加载均衡器参数
+                if (isEqualizerEnabled) {
+                    val savedBandLevels = preferences[DataStoreKeys.EQUALIZER_BAND_LEVELS]
+                    if (savedBandLevels != null) {
+                        val bandLevelsArray = savedBandLevels.split(",")
+                        for (i in bandLevelsArray.indices) {
+                            Settings.seekbarpos[i] = bandLevelsArray[i].toInt()
+                        }
+                    }
+                    Settings.presetPos = preferences[DataStoreKeys.EQUALIZER_PRESET_POS] ?: 0
+                    Settings.bassStrength = preferences[DataStoreKeys.BASS_STRENGTH]?.toShort() ?: 0
+                    val reverbPreset = preferences[DataStoreKeys.REVERB_PRESET]?.toShort() ?: -1.toShort()
+
+                    if (Settings.equalizerModel == null) {
+                        Settings.equalizerModel = EqualizerModel()
+                        Settings.equalizerModel.setReverbPreset(if (reverbPreset == -1.toShort()) PresetReverb.PRESET_NONE else reverbPreset.toShort())
+                        Settings.equalizerModel.setBassStrength(Settings.bassStrength)
+                    }
+                }
+
                 if (isTaskRemoved) {
                     Log.d(
                         TAG,
@@ -1493,6 +1585,8 @@ class MusicService : Service() {
 
                 // 无播放进度时不自动恢复歌曲到底部播放条（避免扫描后无进度却自动加载）
                 if (currentPosition == 0) {
+                    // 仍然设置isPlaybackStateLoaded = true，避免重复加载
+                    isPlaybackStateLoaded = true
                     return@launch
                 }
                 Log.d(
