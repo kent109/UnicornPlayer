@@ -655,6 +655,8 @@ class MusicService : Service() {
             mediaPlayer.reset()
             mediaPlayer.setDataSource(song.path)
             mediaPlayer.prepare()
+            // 确保音频效果管理器已初始化（在 MediaPlayer 准备好之后）
+            initializeAudioEffects()
             mediaPlayer.start()
             // 播放后立即更新通知和状态
             updateNotification(song)
@@ -1482,8 +1484,9 @@ class MusicService : Service() {
       }
 
       fun initializeAudioEffects() {
-          var retryCount = 0
-          val maxRetries = 20
+          if (AudioEffectManager.areEffectsEnabled()) {
+              return
+          }
 
           fun tryInitialize() {
               try {
@@ -1493,17 +1496,8 @@ class MusicService : Service() {
                       Log.d(TAG, "Audio effects initialized, session ID: $sessionId, enabled: ${Settings.isEqualizerEnabled}")
                       return
                   }
-                  Log.w(TAG, "Audio session ID is 0, retrying ($retryCount/$maxRetries)")
               } catch (e: Exception) {
                   Log.e(TAG, "Failed to initialize audio effects", e)
-              }
-
-              if (retryCount < maxRetries) {
-                  retryCount++
-                  Log.w(TAG, "Audio session ID is 0, retrying ($retryCount/$maxRetries)")
-                  handler.postDelayed({ tryInitialize() }, 200)
-              } else {
-                  Log.e(TAG, "Failed to initialize audio effects after $maxRetries retries")
               }
           }
 
@@ -1544,12 +1538,12 @@ class MusicService : Service() {
                     }
                     Settings.presetPos = preferences[DataStoreKeys.EQUALIZER_PRESET_POS] ?: 0
                     Settings.bassStrength = preferences[DataStoreKeys.BASS_STRENGTH]?.toShort() ?: 0
-                    val reverbPreset = preferences[DataStoreKeys.REVERB_PRESET]?.toShort() ?: -1.toShort()
+                    val reverbPreset = preferences[DataStoreKeys.REVERB_PRESET]?.toShort() ?: (-1).toShort()
 
                     if (Settings.equalizerModel == null) {
                         Settings.equalizerModel = EqualizerModel()
-                        Settings.equalizerModel.setReverbPreset(if (reverbPreset == -1.toShort()) PresetReverb.PRESET_NONE else reverbPreset.toShort())
-                        Settings.equalizerModel.setBassStrength(Settings.bassStrength)
+                        Settings.equalizerModel.reverbPreset = if (reverbPreset == (-1).toShort()) PresetReverb.PRESET_NONE else reverbPreset
+                        Settings.equalizerModel.bassStrength = Settings.bassStrength
                     }
                 }
 

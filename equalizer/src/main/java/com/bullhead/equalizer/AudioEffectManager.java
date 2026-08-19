@@ -127,7 +127,7 @@ public class AudioEffectManager {
                     sEqualizer.setBandLevel(bandIdx, (short) savedLevel);
                 }
             } else {
-                sEqualizer.usePreset((short) Settings.presetPos);
+                sEqualizer.usePreset((short) (Settings.presetPos - 1));
             }
 
             if (sBassBoost != null) {

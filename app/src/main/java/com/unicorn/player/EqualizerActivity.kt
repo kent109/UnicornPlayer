@@ -66,12 +66,12 @@ class EqualizerActivity : AppCompatActivity() {
                 return
             }
 
+            setupEqualizerFragment()
+
             if (Settings.isEqualizerEnabled) {
                 AudioEffectManager.enableEffects(this)
-                setupEqualizerFragment()
             } else {
                 AudioEffectManager.disableEffects()
-                setupEqualizerFragment()
             }
         }
     }

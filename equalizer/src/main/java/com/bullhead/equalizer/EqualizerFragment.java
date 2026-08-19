@@ -110,17 +110,15 @@ public class EqualizerFragment extends Fragment {
             Settings.equalizerModel.setBassStrength((short) (1000 / 19));
         }
 
-        isAudioEffectsAvailable = true;
-
+        // 点击播放时，AudioEffectManager会初始化，new这三个对象
+        mEqualizer = AudioEffectManager.getEqualizer();
+        bassBoost = AudioEffectManager.getBassBoost();
+        presetReverb = AudioEffectManager.getPresetReverb();
         if (mEqualizer == null || bassBoost == null || presetReverb == null) {
-            mEqualizer = AudioEffectManager.getEqualizer();
-            bassBoost = AudioEffectManager.getBassBoost();
-            presetReverb = AudioEffectManager.getPresetReverb();
-
-            if (mEqualizer == null || bassBoost == null || presetReverb == null) {
-                Log.e(TAG, "Audio effects not initialized. Please enable equalizer first.");
-                isAudioEffectsAvailable = false;
-            }
+            Log.e(TAG, "Audio effects not initialized. Please enable equalizer first.");
+            isAudioEffectsAvailable = false;
+        } else {
+            isAudioEffectsAvailable = true;
         }
 
         if (isAudioEffectsAvailable && Settings.isEqualizerEnabled) {
@@ -137,7 +135,7 @@ public class EqualizerFragment extends Fragment {
                 Log.e(TAG, "Invalid reverb preset value: " + Settings.equalizerModel.getReverbPreset());
                 presetReverb.setPreset(PresetReverb.PRESET_NONE);
             }
-        } else if (isAudioEffectsAvailable) {
+        } else if (isAudioEffectsAvailable) { // 已调了全局初始化，但是开关没有打开
             bassBoost.setEnabled(false);
             presetReverb.setEnabled(false);
             mEqualizer.setEnabled(false);
@@ -151,7 +149,7 @@ public class EqualizerFragment extends Fragment {
             } else {
                 short numberOfPresets = mEqualizer.getNumberOfPresets();
                 if (Settings.presetPos > 0 && Settings.presetPos <= numberOfPresets) {
-                    mEqualizer.usePreset((short) Settings.presetPos);
+                    mEqualizer.usePreset((short) (Settings.presetPos - 1));
                 } else {
                     for (short bandIdx = 0; bandIdx < mEqualizer.getNumberOfBands(); bandIdx++) {
                         mEqualizer.setBandLevel(bandIdx, (short) Settings.seekbarpos[bandIdx]);
@@ -168,8 +166,7 @@ public class EqualizerFragment extends Fragment {
     }
 
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         return inflater.inflate(R.layout.fragment_equalizer, container, false);
     }
 
@@ -284,31 +281,25 @@ public class EqualizerFragment extends Fragment {
             }
         }
 
-        bassController.setOnProgressChangedListener(new AnalogController.onProgressChangedListener() {
-            @Override
-            public void onProgressChanged(int progress) {
-                Settings.bassStrength = (short) (((float) 1000 / 19) * (progress));
-                try {
-                    bassBoost.setStrength(Settings.bassStrength);
-                    Settings.equalizerModel.setBassStrength(Settings.bassStrength);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+        bassController.setOnProgressChangedListener(progress -> {
+            Settings.bassStrength = (short) (((float) 1000 / 19) * (progress));
+            try {
+                bassBoost.setStrength(Settings.bassStrength);
+                Settings.equalizerModel.setBassStrength(Settings.bassStrength);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         });
 
-        reverbController.setOnProgressChangedListener(new AnalogController.onProgressChangedListener() {
-            @Override
-            public void onProgressChanged(int progress) {
-                Settings.reverbPreset = (short) ((progress * 6) / 19);
-                Settings.equalizerModel.setReverbPreset(Settings.reverbPreset);
-                try {
-                    presetReverb.setPreset(Settings.reverbPreset);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                y = progress;
+        reverbController.setOnProgressChangedListener(progress -> {
+            Settings.reverbPreset = (short) ((progress * 6) / 19);
+            Settings.equalizerModel.setReverbPreset(Settings.reverbPreset);
+            try {
+                presetReverb.setPreset(Settings.reverbPreset);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
+            y = progress;
         });
 
         mLinearLayout = view.findViewById(R.id.equalizerContainer);
@@ -332,10 +323,7 @@ public class EqualizerFragment extends Fragment {
         for (short i = 0; i < numberOfFrequencyBands; i++) {
             final short equalizerBandIndex = i;
             final TextView frequencyHeaderTextView = new TextView(getContext());
-            frequencyHeaderTextView.setLayoutParams(new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            ));
+            frequencyHeaderTextView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             frequencyHeaderTextView.setGravity(Gravity.CENTER_HORIZONTAL);
             frequencyHeaderTextView.setTextColor(Color.parseColor("#FFFFFF"));
             int freq = mEqualizer.getCenterFreq(equalizerBandIndex) / 1000;
@@ -350,25 +338,16 @@ public class EqualizerFragment extends Fragment {
             seekBarRowLayout.setOrientation(LinearLayout.VERTICAL);
 
             TextView lowerEqualizerBandLevelTextView = new TextView(getContext());
-            lowerEqualizerBandLevelTextView.setLayoutParams(new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-            ));
+            lowerEqualizerBandLevelTextView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
             lowerEqualizerBandLevelTextView.setTextColor(Color.parseColor("#FFFFFF"));
             lowerEqualizerBandLevelTextView.setText((lowerEqualizerBandLevel / 100) + "dB");
 
             TextView upperEqualizerBandLevelTextView = new TextView(getContext());
-            lowerEqualizerBandLevelTextView.setLayoutParams(new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            ));
+            lowerEqualizerBandLevelTextView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             upperEqualizerBandLevelTextView.setTextColor(Color.parseColor("#FFFFFF"));
             upperEqualizerBandLevelTextView.setText((upperEqualizerBandLevel / 100) + "dB");
 
-            LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-            );
+            LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             layoutParams.weight = 1;
 
             SeekBar seekBar = new SeekBar(getContext());
@@ -479,9 +458,7 @@ public class EqualizerFragment extends Fragment {
         }
 
         ArrayList<String> equalizerPresetNames = new ArrayList<>();
-        ArrayAdapter<String> equalizerPresetSpinnerAdapter = new ArrayAdapter<>(ctx,
-                R.layout.spinner_item,
-                equalizerPresetNames);
+        ArrayAdapter<String> equalizerPresetSpinnerAdapter = new ArrayAdapter<>(ctx, R.layout.spinner_item, equalizerPresetNames);
         equalizerPresetSpinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
 
         equalizerPresetNames.add("自定义");
@@ -605,6 +582,10 @@ public class EqualizerFragment extends Fragment {
 
         if (presetSpinner != null) {
             presetSpinner.setEnabled(enabled);
+        }
+
+        if (spinnerDropDownIcon != null) {
+            spinnerDropDownIcon.setEnabled(enabled);
         }
 
         if (chart != null) {
