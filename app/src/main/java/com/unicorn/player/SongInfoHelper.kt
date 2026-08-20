@@ -76,7 +76,7 @@ class SongInfoHelper(private val context: Context) {
             addClickableItem(
                 dialogBinding.infoContainer,
                 "添加到歌单",
-                null
+                R.color.quality_std
             ) {
                 bottomSheetDialog.dismiss()
                 onAddToPlaylistListener?.onAddToPlaylist(song)

@@ -39,6 +39,7 @@ import com.db.chart.view.LineChartView;
 import com.example.equalizer.R;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Locale;
 
 
@@ -142,19 +143,19 @@ public class EqualizerFragment extends Fragment {
         }
 
         if (isAudioEffectsAvailable) {
+            Log.d(TAG, "onCreate: Loading custom preset from persistent storage");
+            int pos = Settings.loadPresetPos(ctx);
+            if (pos >= 0) {
+                Settings.presetPos = pos;
+            }
             if (Settings.presetPos == 0) {
-                for (short bandIdx = 0; bandIdx < mEqualizer.getNumberOfBands(); bandIdx++) {
-                    mEqualizer.setBandLevel(bandIdx, (short) Settings.seekbarpos[bandIdx]);
+                int[] customPreset = Settings.loadCustomPreset(ctx);
+                if (customPreset != null) {
+                    Settings.seekbarpos = customPreset;
                 }
-            } else {
-                short numberOfPresets = mEqualizer.getNumberOfPresets();
-                if (Settings.presetPos > 0 && Settings.presetPos <= numberOfPresets) {
-                    mEqualizer.usePreset((short) (Settings.presetPos - 1));
-                } else {
-                    for (short bandIdx = 0; bandIdx < mEqualizer.getNumberOfBands(); bandIdx++) {
-                        mEqualizer.setBandLevel(bandIdx, (short) Settings.seekbarpos[bandIdx]);
-                    }
-                }
+            }
+            for (short bandIdx = 0; bandIdx < mEqualizer.getNumberOfBands(); bandIdx++) {
+                mEqualizer.setBandLevel(bandIdx, (short) Settings.seekbarpos[bandIdx]);
             }
         }
     }
@@ -236,8 +237,9 @@ public class EqualizerFragment extends Fragment {
         bassController.linePaint.setColor(themeColor);
         reverbController.invalidate();
 
+        int x;
         if (!Settings.isEqualizerReloaded) {
-            int x = 0;
+            x = 0;
             if (bassBoost != null) {
                 try {
                     x = ((bassBoost.getRoundedStrength() * 19) / 1000);
@@ -254,31 +256,27 @@ public class EqualizerFragment extends Fragment {
                 }
             }
 
-            if (x == 0) {
-                bassController.setProgress(1);
-            } else {
-                bassController.setProgress(x);
-            }
-
-            if (y == 0) {
-                reverbController.setProgress(1);
-            } else {
-                reverbController.setProgress(y);
-            }
         } else {
-            int x = ((Settings.bassStrength * 19) / 1000);
+            x = ((Settings.bassStrength * 19) / 1000);
             y = (Settings.reverbPreset * 19) / 6;
-            if (x == 0) {
-                bassController.setProgress(1);
-            } else {
-                bassController.setProgress(x);
+            int bass = Settings.loadBassProgress(ctx);
+            if (bass >= 0) {
+                x = bass;
             }
-
-            if (y == 0) {
-                reverbController.setProgress(1);
-            } else {
-                reverbController.setProgress(y);
+            int reverb = Settings.loadReverbProgress(ctx);
+            if (reverb >= 0) {
+                y = reverb;
             }
+        }
+        if (x == 0) {
+            bassController.setProgress(1);
+        } else {
+            bassController.setProgress(x);
+        }
+        if (y == 0) {
+            reverbController.setProgress(1);
+        } else {
+            reverbController.setProgress(y);
         }
 
         bassController.setOnProgressChangedListener(progress -> {
@@ -286,6 +284,7 @@ public class EqualizerFragment extends Fragment {
             try {
                 bassBoost.setStrength(Settings.bassStrength);
                 Settings.equalizerModel.setBassStrength(Settings.bassStrength);
+                Settings.saveBassProgress(ctx, progress);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -296,6 +295,7 @@ public class EqualizerFragment extends Fragment {
             Settings.equalizerModel.setReverbPreset(Settings.reverbPreset);
             try {
                 presetReverb.setPreset(Settings.reverbPreset);
+                Settings.saveReverbProgress(ctx, progress);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -480,9 +480,21 @@ public class EqualizerFragment extends Fragment {
         presetSpinner.setAdapter(equalizerPresetSpinnerAdapter);
         //presetSpinner.setDropDownWidth((Settings.screen_width * 3) / 4);
         presetSpinner.setDropDownVerticalOffset(108);
-        if (Settings.isEqualizerReloaded && Settings.presetPos != 0) {
-//            correctPosition = false;
-            presetSpinner.setSelection(Settings.presetPos);
+        if (Settings.isEqualizerReloaded) {
+            if (Settings.presetPos == 0) {
+                final short numberOfFreqBands = 5;
+                final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
+                for (short i = 0; i < numberOfFreqBands; i++) {
+                    mEqualizer.setBandLevel(i, (short) Settings.seekbarpos[i]);
+                    seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
+                    points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
+                }
+                dataset.updateValues(points);
+                chart.notifyDataUpdate();
+            } else {
+                presetSpinner.setSelection(Settings.presetPos);
+                mEqualizer.usePreset((short) (Settings.presetPos - 1));
+            }
         }
 
         updateSpinnerIconColor();
@@ -490,27 +502,54 @@ public class EqualizerFragment extends Fragment {
         presetSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                Log.d(TAG, "onItemSelected: position=" + position);
+                Log.d(TAG, "Settings.seekbarpos BEFORE: " + Arrays.toString(Settings.seekbarpos));
                 try {
+                    Log.d(TAG, "onItemSelected: position=" + position);
                     if (position != 0) {
                         short numberOfPresets = mEqualizer.getNumberOfPresets();
                         short presetIndex = (short) (position - 1);
                         if (presetIndex >= 0 && presetIndex < numberOfPresets && isAudioEffectsAvailable) {
-                            mEqualizer.usePreset(presetIndex);
-                            Settings.presetPos = position;
-                            short numberOfFreqBands = 5;
-
+                            final short numberOfFreqBands = 5;
                             final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
 
+                            // 切换前是自定义，保存
+                            if (Settings.presetPos == 0) {
+                                Log.d(TAG, "Saving current settings before preset");
+                                Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
+                            }
+
+                            Log.d(TAG, "Loading preset: " + presetIndex);
+                            mEqualizer.usePreset(presetIndex);
+                            Settings.presetPos = position;
+
+                            Log.d(TAG, "Updating UI after preset");
                             for (short i = 0; i < numberOfFreqBands; i++) {
                                 seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
                                 points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
-                                Settings.seekbarpos[i] = mEqualizer.getBandLevel(i);
                                 Settings.equalizerModel.getSeekbarpos()[i] = mEqualizer.getBandLevel(i);
                             }
                             dataset.updateValues(points);
                             chart.notifyDataUpdate();
                         }
+                    } else {
+                        Log.d(TAG, "Position is 0 (Custom), restoring from persistent storage");
+                        final short numberOfFreqBands = 5;
+                        final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
+                        int[] tempSeekbarPos = Settings.loadCustomPreset(ctx);
+                        int[] seekbarPos = tempSeekbarPos != null ? tempSeekbarPos : Settings.seekbarpos;
+                        for (short i = 0; i < numberOfFreqBands; i++) {
+                            Log.d(TAG, "  Band " + i + ": " + seekbarPos[i]);
+                            mEqualizer.setBandLevel(i, (short) seekbarPos[i]);
+                            Log.d(TAG, "  After setBandLevel Band " + i + ": " + mEqualizer.getBandLevel(i));
+                            seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
+                            points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
+                        }
+                        dataset.updateValues(points);
+                        chart.notifyDataUpdate();
                     }
+                    Settings.savePresetPos(ctx, position);
+                    Log.d(TAG, "Settings.seekbarpos AFTER: " + Arrays.toString(Settings.seekbarpos));
                 } catch (Exception e) {
                     e.printStackTrace();
                     Toast.makeText(ctx, "Error while updating Equalizer", Toast.LENGTH_SHORT).show();
@@ -550,7 +589,11 @@ public class EqualizerFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-
+        // 退出前是自定义，保存
+        if (Settings.presetPos == 0) {
+            Log.d(TAG, "Saving current settings before exit");
+            Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
+        }
     }
 
     private void updateSpinnerIconColor() {

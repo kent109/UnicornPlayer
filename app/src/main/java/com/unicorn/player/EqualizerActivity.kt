@@ -95,13 +95,19 @@ class EqualizerActivity : AppCompatActivity() {
             return
         }
 
-        val equalizerFragment = EqualizerFragment.newBuilder()
+        var equalizerFragment =
+            supportFragmentManager.findFragmentByTag("f_eq") as? EqualizerFragment
+        if (equalizerFragment != null && equalizerFragment.isVisible) {
+            return
+        }
+
+        equalizerFragment = EqualizerFragment.newBuilder()
             .setAccentColor(ContextCompat.getColor(this, R.color.primary))
             .setAudioSessionId(sessionId)
             .build()
 
         supportFragmentManager.beginTransaction()
-            .replace(R.id.eqFrame, equalizerFragment)
+            .replace(R.id.eqFrame, equalizerFragment, "f_eq")
             .commit()
     }
 
