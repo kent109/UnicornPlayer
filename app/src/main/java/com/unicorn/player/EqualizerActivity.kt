@@ -78,7 +78,13 @@ class EqualizerActivity : AppCompatActivity() {
 
     private fun setupTitleBar() {
         binding.titleBar.setOnBackClickListener {
-            finish()
+            val equalizerFragment =
+                supportFragmentManager.findFragmentByTag("f_eq") as? EqualizerFragment
+            if (equalizerFragment == null) {
+                finish()
+                return@setOnBackClickListener
+            }
+            equalizerFragment.showSaveEqDialog(true)
         }
     }
 

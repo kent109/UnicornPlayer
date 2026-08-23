@@ -7,4 +7,8 @@
     <color name="analog_ring_color">#222222</color>
     <color name="analog_fill_color">#000000</color>
     <color name="eq_icon_color">#E6E1E5</color>
+
+    <color name="eq_surface">#1C1B1F</color>
+    <color name="eq_onSurface">#E6E1E5</color>
+    <color name="eq_onSurfaceVariant">#CAC4D0</color>
 </resources>

@@ -27,8 +27,10 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.fragment.app.Fragment;
 
@@ -41,6 +43,7 @@ import com.example.equalizer.R;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.Objects;
 
 
 /**
@@ -75,6 +78,8 @@ public class EqualizerFragment extends Fragment {
     FrameLayout equalizerTouchBlocker;
 
     Context ctx;
+
+    private boolean customModifyFlag;
 
     private boolean isAudioEffectsAvailable = false;
 
@@ -406,6 +411,9 @@ public class EqualizerFragment extends Fragment {
                     Settings.equalizerModel.getSeekbarpos()[seekBar.getId()] = (progress + lowerEqualizerBandLevel);
                     dataset.updateValues(points);
                     chart.notifyDataUpdate();
+                    if (fromUser) {
+                        customModifyFlag = true;
+                    }
                 }
 
                 @Override
@@ -449,7 +457,68 @@ public class EqualizerFragment extends Fragment {
         mEndButton.setBackgroundColor(themeColor);
         mEndButton.setTextColor(Color.WHITE);
 
+        OnBackPressedCallback backCallback = new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                showSaveEqDialog(true);
+            }
+        };
 
+        // 将回调添加到 Activity 的 Dispatcher 中，并绑定当前 Fragment 的生命周期
+        requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), backCallback);
+    }
+
+    public void showSaveEqDialog(boolean exit) {
+        if (!customModifyFlag) {
+            if (exit) {
+                requireActivity().finish();
+            }
+            return;
+        }
+        LayoutInflater inflater = LayoutInflater.from(requireContext());
+        View view = inflater.inflate(R.layout.dialog_save_eq, null);
+        AlertDialog dialog = new AlertDialog.Builder(requireContext())
+                .setView(view)
+                .setCancelable(false)
+                .setOnDismissListener(dialog1 -> {
+                    customModifyFlag = false;
+                    if (exit) {
+                        requireActivity().finish();
+                    }
+                })
+                .create();
+        Objects.requireNonNull(dialog.getWindow()).setBackgroundDrawableResource(android.R.color.transparent);
+        view.findViewById(R.id.btnConfirm).setOnClickListener(v -> {
+            saveCustomEq();
+            dialog.dismiss();
+        });
+        view.findViewById(R.id.btnCancel).setOnClickListener(v -> {
+            discardEq();
+            dialog.dismiss();
+        });
+        dialog.show();
+    }
+
+    private void saveCustomEq() {
+        // 保存/覆盖自定义存储
+        Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
+    }
+
+    private void discardEq() {
+        // 还原音效，只考虑preset=0(!=0表示spinner切换已处理)
+        final short numberOfFreqBands = 5;
+        final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
+        int[] tempSeekbarPos = Settings.loadCustomPreset(ctx);
+        int[] seekbarPos = tempSeekbarPos != null ? tempSeekbarPos : Settings.seekbarpos;
+        for (short i = 0; i < numberOfFreqBands; i++) {
+            mEqualizer.setBandLevel(i, (short) seekbarPos[i]);
+            seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
+            Settings.seekbarpos[seekBarFinal[i].getId()] = seekbarPos[i];
+            Settings.equalizerModel.getSeekbarpos()[seekBarFinal[i].getId()] = seekbarPos[i];
+            points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
+        }
+        dataset.updateValues(points);
+        chart.notifyDataUpdate();
     }
 
     public void equalizeSound() {
@@ -516,7 +585,12 @@ public class EqualizerFragment extends Fragment {
                             // 切换前是自定义，保存
                             if (Settings.presetPos == 0) {
                                 Log.d(TAG, "Saving current settings before preset");
-                                Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
+                                int[] existPos = Settings.loadCustomPreset(ctx);
+                                if (existPos == null) {
+                                    Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
+                                } else {
+                                    showSaveEqDialog(false);
+                                }
                             }
 
                             Log.d(TAG, "Loading preset: " + presetIndex);
