@@ -38,10 +38,10 @@ android {
 
     signingConfigs {
         release {
-            storeFile file('../keystore.jks')
-            storePassword 'Pro_365zm'
+            storeFile file('D:/keystore/keystore.jks')
+            storePassword System.getenv('SIGN_PASS')
             keyAlias 'relkey'
-            keyPassword 'Pro_365zm'
+            keyPassword System.getenv('SIGN_PASS')
         }
     }
 
