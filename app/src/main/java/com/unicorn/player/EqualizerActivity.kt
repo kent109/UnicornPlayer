@@ -84,7 +84,7 @@ class EqualizerActivity : AppCompatActivity() {
                 finish()
                 return@setOnBackClickListener
             }
-            equalizerFragment.showSaveEqDialog(true)
+            equalizerFragment.showSaveEqDialog(true, null)
         }
     }
 

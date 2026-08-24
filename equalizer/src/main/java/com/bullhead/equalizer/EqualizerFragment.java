@@ -267,19 +267,23 @@ public class EqualizerFragment extends Fragment {
             int bass = Settings.loadBassProgress(ctx);
             if (bass >= 0) {
                 x = bass;
+            } else {
+                x = -2;  // 指针垂直向下
             }
             int reverb = Settings.loadReverbProgress(ctx);
             if (reverb >= 0) {
                 y = reverb;
+            } else {
+                y = -2;  // 指针垂直向下
             }
         }
         if (x == 0) {
-            bassController.setProgress(1);
+            bassController.setProgress(-2);
         } else {
             bassController.setProgress(x);
         }
         if (y == 0) {
-            reverbController.setProgress(1);
+            reverbController.setProgress(-2);
         } else {
             reverbController.setProgress(y);
         }
@@ -460,7 +464,7 @@ public class EqualizerFragment extends Fragment {
         OnBackPressedCallback backCallback = new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                showSaveEqDialog(true);
+                showSaveEqDialog(true, null);
             }
         };
 
@@ -468,7 +472,7 @@ public class EqualizerFragment extends Fragment {
         requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), backCallback);
     }
 
-    public void showSaveEqDialog(boolean exit) {
+    public void showSaveEqDialog(boolean exit, int[] toSavePos) {
         if (!customModifyFlag) {
             if (exit) {
                 requireActivity().finish();
@@ -489,22 +493,29 @@ public class EqualizerFragment extends Fragment {
                 .create();
         Objects.requireNonNull(dialog.getWindow()).setBackgroundDrawableResource(android.R.color.transparent);
         view.findViewById(R.id.btnConfirm).setOnClickListener(v -> {
-            saveCustomEq();
+            saveCustomEq(toSavePos);
             dialog.dismiss();
         });
         view.findViewById(R.id.btnCancel).setOnClickListener(v -> {
-            discardEq();
+            discardEq(exit);
             dialog.dismiss();
         });
         dialog.show();
     }
 
-    private void saveCustomEq() {
+    private void saveCustomEq(int[] toSavePos) {
+        if (toSavePos == null) {
+            toSavePos = Settings.seekbarpos.clone();
+        }
         // 保存/覆盖自定义存储
-        Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
+        Settings.saveCustomPreset(ctx, toSavePos);
     }
 
-    private void discardEq() {
+    private void discardEq(boolean exit) {
+        // 切换Spinner时放弃修改，不用做处理
+        if (!exit) {
+            return;
+        }
         // 还原音效，只考虑preset=0(!=0表示spinner切换已处理)
         final short numberOfFreqBands = 5;
         final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
@@ -589,7 +600,7 @@ public class EqualizerFragment extends Fragment {
                                 if (existPos == null) {
                                     Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
                                 } else {
-                                    showSaveEqDialog(false);
+                                    showSaveEqDialog(false, Settings.seekbarpos.clone());
                                 }
                             }
 
