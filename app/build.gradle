@@ -5,7 +5,27 @@ plugins {
     id 'kotlin-parcelize'
 }
 
+import groovy.json.JsonSlurper
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+def getVersionInfo() {
+    def versionFile = file("${rootProject.projectDir}/version.json")
+    if (versionFile.exists()) {
+        def jsonContent = versionFile.text
+        def jsonSlurper = new JsonSlurper()
+        def jsonObject = jsonSlurper.parseText(jsonContent)
+        return [
+                code: jsonObject.versionCode as int,
+                name: jsonObject.versionName as String,
+                log: jsonObject.changelog as String
+        ]
+    } else {
+        println "Warning: version.json not found, using default values."
+        return [code: 1, name: "1.0.0", log: ""]
+    }
+}
+
+def versionInfo = getVersionInfo()
 
 // 保留 Kotlin 方法参数名到字节码，供 Room kapt 正确匹配 :param 占位符
 kapt {
@@ -22,8 +42,8 @@ android {
         applicationId "com.unicorn.player"
         minSdk 29
         targetSdk 35
-        versionCode 1
-        versionName "1.0.0"
+        versionCode versionInfo.code
+        versionName versionInfo.name
     }
 
     applicationVariants.all { variant ->
