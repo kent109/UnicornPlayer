@@ -51,6 +51,8 @@
 
     <color name="divider">#080808</color>
 
+    <color name="quality_sq">#FFD700</color>   <!-- 金色 -->
+
     <!-- 歌词控件颜色 - 夜间模式 -->
     <color name="lrc_normal_row">@color/onSurface</color>    <!-- 默认行颜色 -->
     <color name="lrc_select_line">#D0BCFF</color>            <!-- 选中行颜色 -->

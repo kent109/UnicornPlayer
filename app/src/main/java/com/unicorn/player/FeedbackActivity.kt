@@ -81,7 +81,7 @@ class FeedbackActivity : AppCompatActivity() {
                 contact = contact,
                 deviceInfo = deviceInfo,
                 onSuccess = { _ ->
-                    Toast.makeText(this, "提交成功", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "反馈成功", Toast.LENGTH_SHORT).show()
                     etFeedbackContent.text.clear()
                     etContact.text.clear()
                     etTitle.text.clear()
@@ -92,7 +92,7 @@ class FeedbackActivity : AppCompatActivity() {
                 },
                 onError = { errorMsg ->
                     Log.e(TAG, "errorMsg=$errorMsg")
-                    Toast.makeText(this, "提交失败: $errorMsg", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "反馈失败: $errorMsg", Toast.LENGTH_LONG).show()
                     isSubmitting = false
                     checkInputs()
                 }

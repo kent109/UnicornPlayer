@@ -16,98 +16,120 @@
         app:title="意见反馈" />
 
     <!-- 内容区域 -->
-    <LinearLayout
+    <com.scwang.smart.refresh.layout.SmartRefreshLayout
+        android:id="@+id/smartRefreshLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginTop="8dp"
-        android:orientation="vertical"
-        android:paddingStart="16dp"
-        android:paddingTop="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="24dp">
+        app:srlEnableAutoLoadMore="false"
+        app:srlEnableFooterFollowWhenNoMoreData="false"
+        app:srlEnableLoadMore="false"
+        app:srlEnableOverScrollBounce="true"
+        app:srlEnableOverScrollDrag="true"
+        app:srlEnablePureScrollMode="true"
+        app:srlEnableRefresh="false">
 
-        <!-- 问题标题输入框 -->
-        <TextView
+        <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:text="问题描述："
-            android:textColor="@color/onSurface"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:layout_height="match_parent"
+            android:overScrollMode="always"
+            android:scrollbars="none">
 
-        <EditText
-            android:id="@+id/etTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_edittext"
-            android:hint="简要描述问题"
-            android:inputType="text"
-            android:maxLength="100"
-            android:maxLines="1"
-            android:padding="12dp"
-            android:textColor="@color/onSurface"
-            android:textColorHint="@android:color/darker_gray"
-            android:textSize="16sp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingTop="16dp"
+                android:paddingEnd="16dp"
+                android:paddingBottom="24dp">
 
-        <!-- 反馈内容输入框 -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="8dp"
-            android:text="问题详情："
-            android:textColor="@color/onSurface"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+                <!-- 问题标题输入框 -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="问题描述："
+                    android:textColor="@color/onSurface"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
-        <EditText
-            android:id="@+id/etFeedbackContent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_edittext"
-            android:gravity="top|start"
-            android:hint="描述您遇到的问题，或分享改进建议。"
-            android:inputType="textMultiLine"
-            android:minHeight="180dp"
-            android:padding="12dp"
-            android:textColor="@color/onSurface"
-            android:textColorHint="@android:color/darker_gray"
-            android:textSize="16sp" />
+                <EditText
+                    android:id="@+id/etTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_edittext"
+                    android:hint="简要描述问题"
+                    android:inputType="text"
+                    android:maxLength="100"
+                    android:maxLines="1"
+                    android:padding="12dp"
+                    android:textColor="@color/onSurface"
+                    android:textColorHint="@android:color/darker_gray"
+                    android:textSize="16sp" />
 
-        <!-- 联系方式输入框 -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="8dp"
-            android:text="联系方式："
-            android:textColor="@color/onSurface"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+                <!-- 反馈内容输入框 -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="问题详情："
+                    android:textColor="@color/onSurface"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
-        <EditText
-            android:id="@+id/etContact"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_edittext"
-            android:hint="输入您的QQ或邮箱"
-            android:inputType="text"
-            android:padding="12dp"
-            android:textColor="@color/onSurface"
-            android:textColorHint="@android:color/darker_gray"
-            android:textSize="16sp" />
+                <EditText
+                    android:id="@+id/etFeedbackContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_edittext"
+                    android:gravity="top|start"
+                    android:hint="描述您遇到的问题，或分享改进建议。"
+                    android:inputType="textMultiLine"
+                    android:minHeight="180dp"
+                    android:padding="12dp"
+                    android:textColor="@color/onSurface"
+                    android:textColorHint="@android:color/darker_gray"
+                    android:textSize="16sp" />
 
-        <!-- 提交按钮 -->
-        <Button
-            android:id="@+id/btnSubmit"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:backgroundTint="@color/primary"
-            android:text="提交"
-            android:textColor="@color/onPrimary" />
+                <!-- 联系方式输入框 -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="联系方式："
+                    android:textColor="@color/onSurface"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
-    </LinearLayout>
+                <EditText
+                    android:id="@+id/etContact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_edittext"
+                    android:hint="输入您的QQ或邮箱"
+                    android:inputType="text"
+                    android:padding="12dp"
+                    android:textColor="@color/onSurface"
+                    android:textColorHint="@android:color/darker_gray"
+                    android:textSize="16sp" />
+
+                <!-- 提交按钮 -->
+                <Button
+                    android:id="@+id/btnSubmit"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:backgroundTint="@color/primary"
+                    android:text="提交"
+                    android:textColor="@color/onPrimary" />
+
+            </LinearLayout>
+
+        </ScrollView>
+
+    </com.scwang.smart.refresh.layout.SmartRefreshLayout>
 
 </LinearLayout>
