@@ -561,6 +561,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         expandTouchTarget(binding.ivLoop, expandPx)
         expandTouchTarget(binding.ivSort, expandPx)
         expandTouchTarget(binding.ivSetting, expandPx)
+        expandTouchTarget(binding.ivMultiChoice, expandPx)
     }
 
     /**
