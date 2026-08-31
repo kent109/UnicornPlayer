@@ -22,8 +22,8 @@
 
         <ImageView
             android:id="@+id/ivArtistIcon"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:src="@drawable/ic_artist"
             app:tint="@color/onSurfaceVariant"
             app:layout_constraintBottom_toBottomOf="parent"

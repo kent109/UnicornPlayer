@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -16,10 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayoutMediator
 import com.unicorn.player.databinding.ActivityMainBinding
 import com.unicorn.player.model.Playlist
@@ -30,17 +28,26 @@ import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.AlbumFragment
 import com.unicorn.player.ui.ArtistFragment
 import com.unicorn.player.ui.MainPagerAdapter
+import com.unicorn.player.ui.MultiChoiceFragment
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongsFragment
 import com.unicorn.player.util.UpdateHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
+import com.unicorn.player.viewmodel.PlaylistViewModel
+import com.unicorn.player.viewmodel.PlaylistViewModelFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MusicViewModel
+
+    private lateinit var playlistViewModel: PlaylistViewModel
     private lateinit var songInfoHelper: SongInfoHelper
 
     // SongListHost 接口实现：暴露给 SongsFragment 使用
@@ -56,6 +63,11 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
     // 底部播放栏控制器，封装底部播放栏的按钮事件、观察者与 UI 更新
     private lateinit var bottomPlayerController: BottomPlayerController
+
+    // 多选相关
+    private var multiChoiceFragment: MultiChoiceFragment? = null
+    private var currentMultiChoiceType: Int = 0
+    private var currentSelectedIds = mutableSetOf<Long>()
 
     // 自动检查更新的延迟任务（用于在 onDestroy 时取消，避免内存泄漏）
     private var autoUpdateCheckRunnable: Runnable? = null
@@ -217,9 +229,11 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
         // 切换标签页时，仅在"歌曲"页显示排序按钮
         binding.viewPager.registerOnPageChangeCallback(object :
-            androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
+            ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 updateSortButtonVisibility(position)
+                dismissMultiChoiceFragment()
+                showMultiChoiceButton(position)
             }
 
             /**
@@ -257,6 +271,18 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
      */
     private fun updateSortButtonVisibility(position: Int) {
         binding.ivSort.visibility = android.view.View.VISIBLE
+    }
+
+    private fun updateMultiChoiceVisibility(visible : Boolean) {
+        binding.ivMultiChoice.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    private fun showMultiChoiceButton(position: Int) {
+        if (position != 3) {
+            updateMultiChoiceVisibility(viewModel.allSongs.value!!.isNotEmpty())
+        } else {
+            updateMultiChoiceVisibility(playlistViewModel.playlists.value!!.isNotEmpty())
+        }
     }
 
     /**
@@ -303,6 +329,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
                     if (!binding.searchView.isIconified) {
                         // 处于搜索模式，先退出搜索模式
                         exitSearchMode()
+                    } else if (multiChoiceFragment != null) {
+                        dismissMultiChoiceFragment()
                     } else {
                         // 非搜索模式，执行默认返回行为
                         isEnabled = false
@@ -353,11 +381,27 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         val factory = MusicViewModelFactory(repository, this)
         viewModel = ViewModelProvider(this, factory)[MusicViewModel::class.java]
 
+        val playlistFactory = PlaylistViewModelFactory(repository, this.application)
+        playlistViewModel =
+            ViewModelProvider(this, playlistFactory)[PlaylistViewModel::class.java]
+
         // 监听完整歌曲列表变化，当服务已绑定时自动同步排序后的列表到 MusicService
         // 这确保应用重启后，MusicService 的播放顺序与 UI 显示的排序一致
         viewModel.fullSongs.observe(this) { songs ->
             if (songs.isNotEmpty() && isServiceBound) {
                 updateServiceSongList()
+            }
+        }
+
+        viewModel.allSongs.observe(this) { songs ->
+            if (currentMultiChoiceType != 3)  {
+                updateMultiChoiceVisibility(songs.isNotEmpty())
+            }
+        }
+
+        playlistViewModel.playlists.observe(this) { playlists ->
+            if (currentMultiChoiceType == 3)  {
+                updateMultiChoiceVisibility(playlists.isNotEmpty())
             }
         }
     }
@@ -552,6 +596,19 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
             startActivity(intent)
         }
 
+        // 多选按钮点击事件
+        binding.ivMultiChoice.setOnClickListener {
+            val currentPosition = binding.viewPager.currentItem
+            currentMultiChoiceType = when (currentPosition) {
+                0 -> 0
+                1 -> 1
+                2 -> 2
+                3 -> 3
+                else -> return@setOnClickListener
+            }
+            showMultiChoiceFragment(currentMultiChoiceType!!)
+        }
+
         // 增大ivSort和ivSetting的点击范围
         setupTouchDelegate()
     }
@@ -562,6 +619,189 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         expandTouchTarget(binding.ivSort, expandPx)
         expandTouchTarget(binding.ivSetting, expandPx)
         expandTouchTarget(binding.ivMultiChoice, expandPx)
+    }
+
+    // ==================== MultiChoiceFragment 相关 ====================
+
+    private fun setupMultiChoiceFragment(fragmentType: Int) {
+        multiChoiceFragment = MultiChoiceFragment()
+        val args = Bundle()
+        args.putInt("type", fragmentType)
+        multiChoiceFragment?.arguments = args
+        multiChoiceFragment?.setActionListener(object :
+            MultiChoiceFragment.OnMultiChoiceActionListener {
+            override fun onSelectionChanged(selectedIds: Set<Long>) {
+                currentSelectedIds.clear()
+                currentSelectedIds.addAll(selectedIds)
+            }
+
+            override fun onDeleteSelected() {
+                showDeleteConfirmDialog()
+            }
+
+            override fun onAddToPlaylist(selectedIds: Set<Long>) {
+                handleAddToPlaylist(selectedIds)
+            }
+
+            override fun onCancel() {
+                dismissMultiChoiceFragment()
+            }
+        })
+    }
+
+    private fun showMultiChoiceFragment(fragmentType: Int) {
+        bottomPlayerController.hide()
+        currentMultiChoiceType = fragmentType
+        setupMultiChoiceFragment(fragmentType)
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.multiChoiceFragmentContainer, multiChoiceFragment!!)
+            .commitNow()
+    }
+
+    private fun dismissMultiChoiceFragment() {
+        if (multiChoiceFragment == null) {
+            return
+        }
+        supportFragmentManager.beginTransaction()
+            .remove(multiChoiceFragment!!)
+            .commitNow()
+        bottomPlayerController.show()
+        resetMultiChoice()
+    }
+
+    private fun resetMultiChoice() {
+        multiChoiceFragment = null
+        currentMultiChoiceType = 0
+        currentSelectedIds.clear()
+    }
+
+    private fun showDeleteConfirmDialog() {
+        var title = ""
+        var message = ""
+        when (currentMultiChoiceType) {
+            0 -> {
+                title = "删除歌曲"
+                message = "确定要从列表中删除所选的歌曲吗？\n\n注意：这不会删除本地文件。"
+            }
+
+            3 -> {
+                title = "删除歌单"
+                message = "确定要删除所选的歌单吗？此操作不可恢复。"
+            }
+        }
+
+        val errorColor = this.getColor(R.color.error)
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("删除") { _, _ ->
+                // 通过回调通知外部处理删除
+                handleDeleteSelected()
+                Toast.makeText(this, "已从列表中删除", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+        // 设置删除按钮文字颜色为红色（error 色）
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(errorColor)
+    }
+
+    private fun handleDeleteSelected() {
+        when (currentMultiChoiceType) {
+            0 -> {
+                lifecycleScope.launch {
+                    val clone = currentSelectedIds.toMutableSet()
+                    for (songId in clone) {
+                        if (musicService?.currentSong?.value?.id == songId) {
+                            musicService?.removeCurrentSong()
+                        }
+                        viewModel.hideSong(songId)
+                    }
+                    currentSelectedIds.clear()
+                    updateServiceSongList()
+                }
+            }
+
+            3 -> {
+                lifecycleScope.launch {
+                    val repository = MusicRepository(this@MainActivity)
+                    val clone = currentSelectedIds.toMutableSet()
+                    for (playlistId in clone) {
+                        repository.deletePlaylistById(playlistId)
+                    }
+                    currentSelectedIds.clear()
+                    PlaylistRefresher.notifyPlaylistsChanged()
+                }
+            }
+
+            else -> {
+                // ArtistFragment 和 AlbumFragment 不支持删除
+            }
+        }
+        dismissMultiChoiceFragment()
+    }
+
+    private fun handleAddToPlaylist(selectedIds: Set<Long>) {
+        lifecycleScope.launch {
+            val repository = MusicRepository(this@MainActivity)
+            val playlists = withContext(Dispatchers.IO) {
+                repository.getAllPlaylists().firstOrNull()
+            } ?: emptyList()
+            if (playlists.isEmpty()) {
+                Toast.makeText(this@MainActivity, "暂无歌单", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            val songCounts = withContext(Dispatchers.IO) {
+                val counts = mutableMapOf<Long, Int>()
+                playlists.forEach { playlist ->
+                    val songs = repository.getPlaylistSongs(playlist.id).firstOrNull()
+                    counts[playlist.id] = songs?.size ?: 0
+                }
+                counts
+            }
+
+            val metrics = resources.displayMetrics
+            val centerX = metrics.widthPixels / 2f
+            val centerY = metrics.heightPixels / 2f
+
+            SelectPlaylistDialog(
+                context = this@MainActivity,
+                triggerX = centerX,
+                triggerY = centerY,
+                allPlaylists = playlists,
+                songCounts = songCounts,
+                onConfirm = { chosenPlaylistIds ->
+                    addSelectedSongsToPlaylists(
+                        selectedIds,
+                        chosenPlaylistIds,
+                        repository
+                    )
+                }
+            ).show()
+        }
+    }
+
+    private fun addSelectedSongsToPlaylists(
+        selectedIds: Set<Long>,
+        playlistIds: List<Long>,
+        repository: MusicRepository
+    ) {
+        if (playlistIds.isEmpty()) return
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                playlistIds.forEach { playlistId ->
+                    repository.addSongsToPlaylist(playlistId, selectedIds.mapNotNull { id ->
+                        viewModel.fullSongs.value?.find { it.id == id }
+                    })
+                }
+            }
+            Toast.makeText(
+                this@MainActivity,
+                "已添加到 ${playlistIds.size} 个歌单",
+                Toast.LENGTH_SHORT
+            ).show()
+            PlaylistRefresher.notifyPlaylistsChanged()
+        }
     }
 
     /**

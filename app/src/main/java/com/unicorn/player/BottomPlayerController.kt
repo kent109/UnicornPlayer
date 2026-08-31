@@ -1,6 +1,7 @@
 package com.unicorn.player
 
 import android.content.Intent
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import com.bumptech.glide.Glide
@@ -148,5 +149,13 @@ class BottomPlayerController(
             .error(R.drawable.ic_music_note)
             .transform(RoundedCorners(20))
             .into(binding.albumArt)
+    }
+
+    fun show() {
+        binding.root.visibility = View.VISIBLE
+    }
+
+    fun hide() {
+        binding.root.visibility = View.GONE
     }
 }

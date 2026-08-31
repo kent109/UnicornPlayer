@@ -113,7 +113,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
     private fun setupViewModel() {
         val repository = MusicRepository(requireContext())
         val factory = PlaylistViewModelFactory(repository, requireActivity().application)
-        viewModel = ViewModelProvider(this, factory)[PlaylistViewModel::class.java]
+        viewModel = ViewModelProvider(requireActivity(), factory)[PlaylistViewModel::class.java]
     }
 
     private fun setupRecyclerView() {
