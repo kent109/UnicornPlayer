@@ -42,7 +42,8 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
+class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
+    MultiChoiceFragment.OnMultiChoiceActionListener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MusicViewModel
@@ -273,7 +274,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         binding.ivSort.visibility = android.view.View.VISIBLE
     }
 
-    private fun updateMultiChoiceVisibility(visible : Boolean) {
+    private fun updateMultiChoiceVisibility(visible: Boolean) {
         binding.ivMultiChoice.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
@@ -394,13 +395,13 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         }
 
         viewModel.allSongs.observe(this) { songs ->
-            if (currentMultiChoiceType != 3)  {
+            if (currentMultiChoiceType != 3) {
                 updateMultiChoiceVisibility(songs.isNotEmpty())
             }
         }
 
         playlistViewModel.playlists.observe(this) { playlists ->
-            if (currentMultiChoiceType == 3)  {
+            if (currentMultiChoiceType == 3) {
                 updateMultiChoiceVisibility(playlists.isNotEmpty())
             }
         }
@@ -628,20 +629,18 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         val args = Bundle()
         args.putInt("type", fragmentType)
         multiChoiceFragment?.arguments = args
-        multiChoiceFragment?.setActionListener(object :
-            MultiChoiceFragment.OnMultiChoiceActionListener {
-            override fun onDeleteSelected(selectedSongIds: Set<Long>) {
-                showDeleteConfirmDialog(selectedSongIds)
-            }
+    }
 
-            override fun onAddToPlaylist(selectedSongIds: Set<Long>) {
-                handleAddToPlaylist(selectedSongIds)
-            }
+    override fun onDeleteSelected(selectedSongIds: Set<Long>) {
+        showDeleteConfirmDialog(selectedSongIds)
+    }
 
-            override fun onCancel() {
-                dismissMultiChoiceFragment()
-            }
-        })
+    override fun onAddToPlaylist(selectedSongIds: Set<Long>) {
+        handleAddToPlaylist(selectedSongIds)
+    }
+
+    override fun onCancel() {
+        dismissMultiChoiceFragment()
     }
 
     private fun showMultiChoiceFragment(fragmentType: Int) {
@@ -649,11 +648,15 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         currentMultiChoiceType = fragmentType
         setupMultiChoiceFragment(fragmentType)
         supportFragmentManager.beginTransaction()
-            .replace(R.id.multiChoiceFragmentContainer, multiChoiceFragment!!)
+            .replace(R.id.multiChoiceFragmentContainer, multiChoiceFragment!!, "MCF")
             .commitNow()
     }
 
     private fun dismissMultiChoiceFragment() {
+        if (multiChoiceFragment == null) {
+            multiChoiceFragment = supportFragmentManager.findFragmentByTag("MCF") as MultiChoiceFragment?
+        }
+
         if (multiChoiceFragment == null) {
             return
         }

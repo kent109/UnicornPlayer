@@ -41,10 +41,6 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
 
     private var actionListener: OnMultiChoiceActionListener? = null
 
-    fun setActionListener(listener: OnMultiChoiceActionListener) {
-        this.actionListener = listener
-    }
-
     private fun selectAll() {
         selectedIds.clear()
         selectedSongIds.clear()
@@ -104,6 +100,9 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
         super.onAttach(context)
         arguments?.let {
             this.currentFragmentType = requireArguments().getInt("type")
+        }
+        if (context is OnMultiChoiceActionListener) {
+            this.actionListener = context
         }
     }
 
