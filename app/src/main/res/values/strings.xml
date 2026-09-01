@@ -34,6 +34,9 @@
     <!-- 歌单 -->
     <string name="playlist_name_exists">歌单「%1$s」已存在</string>
 
+    <!-- 多选 -->
+    <string name="selected_count">已选择 %1$d 项</string>
+
     <!-- 清除缓存 -->
     <string name="clear_cache">清理存储</string>
     <string name="clear_cache_title">清理存储</string>

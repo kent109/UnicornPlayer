@@ -67,7 +67,6 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
     // 多选相关
     private var multiChoiceFragment: MultiChoiceFragment? = null
     private var currentMultiChoiceType: Int = 0
-    private var currentSelectedIds = mutableSetOf<Long>()
 
     // 自动检查更新的延迟任务（用于在 onDestroy 时取消，避免内存泄漏）
     private var autoUpdateCheckRunnable: Runnable? = null
@@ -231,6 +230,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         binding.viewPager.registerOnPageChangeCallback(object :
             ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
+                currentMultiChoiceType = position
                 updateSortButtonVisibility(position)
                 dismissMultiChoiceFragment()
                 showMultiChoiceButton(position)
@@ -606,7 +606,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
                 3 -> 3
                 else -> return@setOnClickListener
             }
-            showMultiChoiceFragment(currentMultiChoiceType!!)
+            showMultiChoiceFragment(currentMultiChoiceType)
         }
 
         // 增大ivSort和ivSetting的点击范围
@@ -630,17 +630,12 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         multiChoiceFragment?.arguments = args
         multiChoiceFragment?.setActionListener(object :
             MultiChoiceFragment.OnMultiChoiceActionListener {
-            override fun onSelectionChanged(selectedIds: Set<Long>) {
-                currentSelectedIds.clear()
-                currentSelectedIds.addAll(selectedIds)
+            override fun onDeleteSelected(selectedSongIds: Set<Long>) {
+                showDeleteConfirmDialog(selectedSongIds)
             }
 
-            override fun onDeleteSelected() {
-                showDeleteConfirmDialog()
-            }
-
-            override fun onAddToPlaylist(selectedIds: Set<Long>) {
-                handleAddToPlaylist(selectedIds)
+            override fun onAddToPlaylist(selectedSongIds: Set<Long>) {
+                handleAddToPlaylist(selectedSongIds)
             }
 
             override fun onCancel() {
@@ -671,11 +666,9 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
 
     private fun resetMultiChoice() {
         multiChoiceFragment = null
-        currentMultiChoiceType = 0
-        currentSelectedIds.clear()
     }
 
-    private fun showDeleteConfirmDialog() {
+    private fun showDeleteConfirmDialog(selectedSongIds: Set<Long>) {
         var title = ""
         var message = ""
         when (currentMultiChoiceType) {
@@ -696,7 +689,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
             .setMessage(message)
             .setPositiveButton("删除") { _, _ ->
                 // 通过回调通知外部处理删除
-                handleDeleteSelected()
+                handleDeleteSelected(selectedSongIds)
                 Toast.makeText(this, "已从列表中删除", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("取消", null)
@@ -705,18 +698,17 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(errorColor)
     }
 
-    private fun handleDeleteSelected() {
+    private fun handleDeleteSelected(selectedSongIds: Set<Long>) {
         when (currentMultiChoiceType) {
             0 -> {
                 lifecycleScope.launch {
-                    val clone = currentSelectedIds.toMutableSet()
+                    val clone = selectedSongIds.toMutableSet()
                     for (songId in clone) {
                         if (musicService?.currentSong?.value?.id == songId) {
                             musicService?.removeCurrentSong()
                         }
                         viewModel.hideSong(songId)
                     }
-                    currentSelectedIds.clear()
                     updateServiceSongList()
                 }
             }
@@ -724,11 +716,10 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
             3 -> {
                 lifecycleScope.launch {
                     val repository = MusicRepository(this@MainActivity)
-                    val clone = currentSelectedIds.toMutableSet()
+                    val clone = selectedSongIds.toMutableSet()
                     for (playlistId in clone) {
                         repository.deletePlaylistById(playlistId)
                     }
-                    currentSelectedIds.clear()
                     PlaylistRefresher.notifyPlaylistsChanged()
                 }
             }
@@ -740,7 +731,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
         dismissMultiChoiceFragment()
     }
 
-    private fun handleAddToPlaylist(selectedIds: Set<Long>) {
+    private fun handleAddToPlaylist(selectedSongIds: Set<Long>) {
         lifecycleScope.launch {
             val repository = MusicRepository(this@MainActivity)
             val playlists = withContext(Dispatchers.IO) {
@@ -772,7 +763,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost {
                 songCounts = songCounts,
                 onConfirm = { chosenPlaylistIds ->
                     addSelectedSongsToPlaylists(
-                        selectedIds,
+                        selectedSongIds,
                         chosenPlaylistIds,
                         repository
                     )

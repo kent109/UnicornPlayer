@@ -14,9 +14,9 @@ import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.scanFiltersDataStore
-import com.unicorn.player.util.PinyinUtil
-import com.unicorn.player.service.applicationDataStore
 import com.unicorn.player.service.DataStoreKeys
+import com.unicorn.player.service.applicationDataStore
+import com.unicorn.player.util.PinyinUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -282,6 +282,7 @@ class MusicViewModel(
         val displayCase = LinkedHashMap<String, String>()
         // 每组维护：歌曲数 与 各歌手出现次数（用于取数量最多的歌手作为副标题）
         val counts = LinkedHashMap<String, Int>()
+        val albumSongIds = LinkedHashMap<String, MutableSet<Long>>()
         val artistCounts = LinkedHashMap<String, LinkedHashMap<String, Int>>()
 
         for (song in songs) {
@@ -290,6 +291,7 @@ class MusicViewModel(
                 displayCase[key] = song.album
             }
             counts[key] = (counts[key] ?: 0) + 1
+            albumSongIds.getOrPut(key) { mutableSetOf() }.add(song.id)
             val groupArtists = artistCounts.getOrPut(key) { LinkedHashMap() }
             groupArtists[song.artist] = (groupArtists[song.artist] ?: 0) + 1
         }
@@ -297,7 +299,13 @@ class MusicViewModel(
         val albums = counts.map { (key, count) ->
             val topArtist = artistCounts[key]?.maxByOrNull { it.value }?.key ?: ""
             val letter = PinyinUtil.getPinyinFirstLetter(displayCase[key] ?: key)
-            Album(displayCase[key] ?: key, topArtist, count, letter)
+            Album(
+                displayCase[key] ?: key,
+                topArtist,
+                count,
+                albumSongIds.getOrDefault(key, emptySet()),
+                letter
+            )
         }
 
         // 按首字母分组：字母 A-Z 顺序，"#" 置于末尾

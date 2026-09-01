@@ -1,6 +1,5 @@
 package com.unicorn.player.ui
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -112,15 +111,17 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
         // 以 lowerCase 名作为分组键，保留首次出现的原始大小写用于显示
         val displayCase = LinkedHashMap<String, String>()
         val counts = LinkedHashMap<String, Int>()
+        val artistSongIds = LinkedHashMap<String, MutableSet<Long>>()
         for (song in songs) {
             val key = song.artist.lowercase()
             if (!displayCase.containsKey(key)) {
                 displayCase[key] = song.artist
             }
             counts[key] = (counts[key] ?: 0) + 1
+            artistSongIds.getOrPut(key) { mutableSetOf() }.add(song.id)
         }
         val artists = counts.map { (key, count) ->
-            Artist(displayCase[key] ?: key, count)
+            Artist(displayCase[key] ?: key, count, artistSongIds.getOrDefault(key, emptySet()))
         }.sortedBy { it.name.lowercase() }
         artistAdapter.submitList(artists)
         updateArtistCount(artists.size)

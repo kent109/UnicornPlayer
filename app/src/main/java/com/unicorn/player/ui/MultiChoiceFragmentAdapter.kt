@@ -14,11 +14,12 @@ import com.unicorn.player.viewmodel.PlaylistViewModel.PlaylistInfo
 
 class MultiChoiceFragmentAdapter(
     private var selectedIds: MutableSet<Long>,
+    private var selectedSongIds: MutableSet<Long>,
     private var fragmentType: Int = 0
 ) : ListAdapter<Any, MultiChoiceFragmentAdapter.ViewHolder>(DiffCallback()) {
 
     interface OnCheckChangedListener {
-        fun onCheckChanged(selectedIds: Set<Long>)
+        fun onCheckChanged()
     }
 
     private var onCheckChangedListener: OnCheckChangedListener? = null
@@ -38,32 +39,6 @@ class MultiChoiceFragmentAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.bind(getItem(position))
-    }
-
-    fun selectAll() {
-        val currentList = currentList
-        for (item in currentList) {
-            when (item) {
-                is Song -> selectedIds.add(item.id)
-                is Album -> selectedIds.add(item.name.hashCode().toLong())
-                is PlaylistInfo -> selectedIds.add(item.id)
-                is Artist -> selectedIds.add(item.name.hashCode().toLong())
-            }
-        }
-        notifyDataSetChanged()
-    }
-
-    fun clearSelection() {
-        selectedIds.clear()
-        notifyDataSetChanged()
-    }
-
-    fun getSelectedIds(): Set<Long> {
-        return selectedIds
-    }
-
-    fun hasSelection(): Boolean {
-        return selectedIds.isNotEmpty()
     }
 
     inner class ViewHolder(
@@ -109,10 +84,17 @@ class MultiChoiceFragmentAdapter(
                 }
             )
 
+            val songIds = getSongIds(item)
+            if (isSelected) {
+                selectedSongIds.addAll(songIds)
+            } else {
+                selectedSongIds.removeAll(songIds)
+            }
+
             // 先移除监听器，避免 setChecked 触发回调污染 selectedPaths
             binding.checkBox.setOnCheckedChangeListener(null)
             binding.checkBox.isChecked = isSelected
-            binding.checkBox.setOnCheckedChangeListener { _, isChecked ->
+            binding.checkBox.setOnCheckedChangeListener { _, _ ->
                 val id = when (item) {
                     is Song -> item.id
                     is Album -> item.name.hashCode().toLong()
@@ -121,16 +103,19 @@ class MultiChoiceFragmentAdapter(
                     else -> -1L
                 }
                 if (id != -1L) {
+                    val songIds = getSongIds(item)
                     if (selectedIds.contains(id)) {
                         selectedIds.remove(id)
+                        selectedSongIds.removeAll(songIds)
                     } else {
                         selectedIds.add(id)
+                        selectedSongIds.addAll(songIds)
                     }
                     notifyItemChanged(bindingAdapterPosition)
                 }
                 // 通知Fragment
                 onCheckChangedListener?.let {
-                    onCheckChangedListener!!.onCheckChanged(selectedIds)
+                    onCheckChangedListener!!.onCheckChanged()
                 }
             }
 
@@ -138,6 +123,16 @@ class MultiChoiceFragmentAdapter(
             itemView.setOnClickListener {
                 binding.checkBox.isChecked = !binding.checkBox.isChecked
             }
+        }
+    }
+
+    private fun getSongIds(item: Any): Set<Long> {
+        return when (item) {
+            is Song -> mutableSetOf(item.id)
+            is Album -> item.songIds
+            is PlaylistInfo -> mutableSetOf(item.id)
+            is Artist -> item.songIds
+            else -> mutableSetOf()
         }
     }
 

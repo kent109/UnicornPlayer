@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.unicorn.player.R
 import com.unicorn.player.databinding.FragmentMultiChoiceBinding
 import com.unicorn.player.model.Album
 import com.unicorn.player.model.Artist
@@ -28,12 +29,13 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
     private lateinit var playlistViewModel: PlaylistViewModel
     private lateinit var adapter: MultiChoiceFragmentAdapter
     private var selectedIds = mutableSetOf<Long>()
+    private var selectedSongIds = mutableSetOf<Long>()
+    private var initList: List<Any> = emptyList()
     private var currentFragmentType: Int = 0
 
     interface OnMultiChoiceActionListener {
-        fun onSelectionChanged(selectedIds: Set<Long>)
-        fun onDeleteSelected()
-        fun onAddToPlaylist(selectedIds: Set<Long>)
+        fun onDeleteSelected(selectedSongIds: Set<Long>)
+        fun onAddToPlaylist(selectedSongIds: Set<Long>)
         fun onCancel()
     }
 
@@ -44,13 +46,29 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
     }
 
     private fun selectAll() {
-        val currentList = getCurrentList()
-        for (item in currentList) {
+        selectedIds.clear()
+        selectedSongIds.clear()
+        for (item in initList) {
             when (item) {
-                is Song -> selectedIds.add(item.id)
-                is Album -> selectedIds.add(item.name.hashCode().toLong())
-                is PlaylistInfo -> selectedIds.add(item.id)
-                is Artist -> selectedIds.add(item.name.hashCode().toLong())
+                is Song -> {
+                    selectedIds.add(item.id)
+                    selectedSongIds.add(item.id)
+                }
+
+                is Album -> {
+                    selectedIds.add(item.name.hashCode().toLong())
+                    selectedSongIds.addAll(item.songIds)
+                }
+
+                is PlaylistInfo -> {
+                    selectedIds.add(item.id)
+                    selectedSongIds.add(item.id)
+                }
+
+                is Artist -> {
+                    selectedIds.add(item.name.hashCode().toLong())
+                    selectedSongIds.addAll(item.songIds)
+                }
             }
         }
         val adapter = binding.recyclerView.adapter as? MultiChoiceFragmentAdapter
@@ -59,11 +77,12 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
 
     private fun unSelectAll() {
         selectedIds.clear()
+        selectedSongIds.clear()
         val adapter = binding.recyclerView.adapter as? MultiChoiceFragmentAdapter
         adapter?.notifyDataSetChanged()
     }
 
-    private fun updateSelectAllUI(allSelected: Boolean) {
+    private fun updateSelectUI(allSelected: Boolean) {
         if (allSelected) {
             binding.tvSelectAll.tag = '1'
             binding.tvSelectAll.text = "取消全选"
@@ -71,6 +90,7 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
             binding.tvSelectAll.tag = null
             binding.tvSelectAll.text = "全选"
         }
+        binding.tvSelectedCount.text = getString(R.string.selected_count, selectedIds.size)
     }
 
     private fun updateButtonStatus(enabled: Boolean) {
@@ -78,18 +98,6 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
         binding.ivDelete.alpha = if (enabled) 1.0f else 0.5f
         binding.ivAddToPlaylist.isEnabled = enabled
         binding.ivAddToPlaylist.alpha = if (enabled) 1.0f else 0.5f
-    }
-
-    fun clearSelection() {
-        selectedIds.clear()
-    }
-
-    fun getSelectedIds(): Set<Long> {
-        return selectedIds
-    }
-
-    fun hasSelection(): Boolean {
-        return selectedIds.isNotEmpty()
     }
 
     override fun onAttach(context: Context) {
@@ -112,6 +120,8 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
         setupViewModel()
         setupRecyclerView()
         setViewModelData()
+        initList = getCurrentList()
+        updateSelectUI(false)
         initButtonLayout()
     }
 
@@ -137,7 +147,7 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
     }
 
     private fun setupRecyclerView() {
-        adapter = MultiChoiceFragmentAdapter(selectedIds, currentFragmentType)
+        adapter = MultiChoiceFragmentAdapter(selectedIds, selectedSongIds, currentFragmentType)
         adapter.setOnCheckChangedListener(this)
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
@@ -154,25 +164,24 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
             val tag = binding.tvSelectAll.tag
             if (tag == null) {
                 selectAll()
-                updateSelectAllUI(true)
+                updateSelectUI(true)
                 updateButtonStatus(true)
             } else {
                 unSelectAll()
                 binding.tvSelectAll.tag = null
-                updateSelectAllUI(false)
+                updateSelectUI(false)
                 updateButtonStatus(false)
             }
-            actionListener?.onSelectionChanged(selectedIds)
         }
 
         binding.ivDelete.isEnabled = false
         binding.ivDelete.setOnClickListener {
-            actionListener?.onDeleteSelected()
+            actionListener?.onDeleteSelected(selectedSongIds)
         }
 
         binding.ivAddToPlaylist.isEnabled = false
         binding.ivAddToPlaylist.setOnClickListener {
-            actionListener?.onAddToPlaylist(getSelectedIds())
+            actionListener?.onAddToPlaylist(selectedSongIds)
         }
 
         when (currentFragmentType) {
@@ -184,9 +193,13 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
     private fun getArtistList(): List<Artist> {
         val songs = viewModel.allSongs.value ?: emptyList()
         val artistMap = mutableMapOf<String, Artist>()
+        val artistSongIds = mutableMapOf<String, MutableSet<Long>>()
         for (song in songs) {
-            val artist = artistMap.getOrPut(song.artist) { Artist(song.artist, 0) }
-            artistMap[song.artist] = Artist(artist.name, artist.songCount + 1)
+            val key = song.artist.lowercase()
+            artistSongIds.getOrPut(key) { mutableSetOf() }.add(song.id)
+            val songIds = artistSongIds.getOrDefault(key, emptySet())
+            val artist = artistMap.getOrPut(key) { Artist(song.artist, 0, songIds) }
+            artistMap[key] = Artist(artist.name, artist.songCount + 1, songIds)
         }
         return artistMap.values.toList().sortedBy { it.name.lowercase() }
     }
@@ -207,10 +220,8 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
         _binding = null
     }
 
-    override fun onCheckChanged(selectedIds: Set<Long>) {
+    override fun onCheckChanged() {
         updateButtonStatus(selectedIds.isNotEmpty())
-        val currentList = getCurrentList()
-        updateSelectAllUI(selectedIds.size >= currentList.size)
-        actionListener?.onSelectionChanged(selectedIds)
+        updateSelectUI(selectedIds.size >= initList.size)
     }
 }
