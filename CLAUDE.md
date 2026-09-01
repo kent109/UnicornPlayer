@@ -172,5 +172,5 @@ MusicService 使用标签 "MusicService" 记录日志。检查 logcat 查看：
 发布构建使用：
 - ProGuard 优化（`proguard-android-optimize.txt`）
 - 启用资源压缩
-- 密钥库: `keystore.jks`，别名 `relkey`
+- 密钥库: `keystore.jks`
 - 输出: `UnicornPlayer_1.0_YYMMDD.apk`

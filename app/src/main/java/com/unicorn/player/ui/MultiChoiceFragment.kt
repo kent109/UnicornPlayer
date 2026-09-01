@@ -96,6 +96,20 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
         binding.ivAddToPlaylist.alpha = if (enabled) 1.0f else 0.5f
     }
 
+    /**
+     * 双击搜索框时滚动到顶部（由宿主 Activity 调用）
+     */
+    fun scrollToTop() {
+        val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
+        if (layoutManager != null && layoutManager.itemCount > 0) {
+            binding.recyclerView.smoothScrollToPosition(0)
+        }
+    }
+
+    fun getClickView(): View {
+        return binding.topButtonsLayout
+    }
+
     override fun onAttach(context: Context) {
         super.onAttach(context)
         arguments?.let {

@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.view.View
+import android.widget.SearchView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -343,38 +344,50 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     }
 
     private var lastSearchTapTime = 0L
-    private val searchViewRect = android.graphics.Rect()
+    private val clickViewRect = android.graphics.Rect()
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
         if (ev?.action == android.view.MotionEvent.ACTION_UP) {
-            // 获取SearchView在屏幕上的区域
-            binding.searchView.getHitRect(searchViewRect)
-            // 将触摸事件坐标转换到SearchView的父坐标系
-            val location = IntArray(2)
-            binding.searchView.getLocationOnScreen(location)
-            val x = ev.rawX.toInt()
-            val y = ev.rawY.toInt()
-            if (searchViewRect.contains(
-                    x - location[0] + searchViewRect.left, y - location[1] + searchViewRect.top
-                )
-            ) {
-                // 点击在SearchView范围内
-                if (binding.searchView.isIconified) {
-                    val currentTime = System.currentTimeMillis()
-                    val doubleTapTimeout = android.view.ViewConfiguration.getDoubleTapTimeout()
-                    if (currentTime - lastSearchTapTime < doubleTapTimeout) {
-                        // 双击检测：滚动当前标签页列表到顶部
-                        scrollCurrentTabToTop()
-                        lastSearchTapTime = 0L
-                    } else {
-                        lastSearchTapTime = currentTime
-                    }
-                } else {
-                    lastSearchTapTime = 0L
-                }
+            if (multiChoiceFragment == null) {
+                scrollToTop(binding.searchView, ev) { scrollCurrentTabToTop() }
+            } else {
+                scrollToTop(
+                    multiChoiceFragment!!.getClickView(), ev
+                ) { multiChoiceFragment!!.scrollToTop() }
             }
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    private fun scrollToTop(clickView: View, ev: android.view.MotionEvent, action: Runnable) {
+        // 获取clickView在屏幕上的区域
+        clickView.getHitRect(clickViewRect)
+        // 将触摸事件坐标转换到clickView的父坐标系
+        val location = IntArray(2)
+        clickView.getLocationOnScreen(location)
+        val x = ev.rawX.toInt()
+        val y = ev.rawY.toInt()
+        if (clickViewRect.contains(
+                x - location[0] + clickViewRect.left, y - location[1] + clickViewRect.top
+            )
+        ) {
+            // 点击在clickView范围内
+            val canTrigger =
+                (clickView is SearchView && clickView.isIconified) || clickView !is SearchView
+            if (canTrigger) {
+                val currentTime = System.currentTimeMillis()
+                val doubleTapTimeout = android.view.ViewConfiguration.getDoubleTapTimeout()
+                if (currentTime - lastSearchTapTime < doubleTapTimeout) {
+                    // 双击检测：滚动当前标签页列表到顶部
+                    action.run()
+                    lastSearchTapTime = 0L
+                } else {
+                    lastSearchTapTime = currentTime
+                }
+            } else {
+                lastSearchTapTime = 0L
+            }
+        }
     }
 
     private fun setupViewModel() {

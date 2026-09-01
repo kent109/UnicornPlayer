@@ -13,7 +13,7 @@ gradle clean                      # 清理构建
 
 **发布 APK 命名**：`UnicornPlayer_1.0.0_YYMMDD.apk`（从 `app/build.gradle:29-37` 自动生成）
 
-**签名**：`keystore.jks`，别名 `relkey`，密码 `Pro_365zm`（见 `app/build.gradle:39-46`）
+**签名**：`keystore.jks`（见 `app/build.gradle:39-46`）
 
 ## 架构
 
@@ -119,7 +119,7 @@ powershell -Command "(Get-Content '文件路径' -Raw) -replace '`r`n', '`r`n'"
 
 **ProGuard**：`proguard-android-optimize.txt`（在 `app/build.gradle:49-54` 中启用）
 **资源压缩**：发布构建中启用
-**签名**：`keystore.jks`（根目录），别名 `relkey`，密码 `Pro_365zm`
+**签名**：`keystore.jks`
 **混淆**：启用
 
 ## 常见陷阱
