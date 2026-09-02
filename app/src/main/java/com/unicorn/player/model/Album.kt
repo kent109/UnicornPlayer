@@ -5,13 +5,13 @@ package com.unicorn.player.model
  * @param name 专辑名
  * @param artist 该专辑下数量最多的歌手名（用于副标题显示）
  * @param songCount 该专辑的歌曲数量
- * @param songIds 该专辑所有歌曲的id
+ * @param songList 该专辑的歌曲列表
  * @param firstLetter 专辑名首字母分组（A-Z / #），由 ViewModel 后台计算后携带，避免 Fragment 重复算拼音
  */
 data class Album(
     val name: String,
     val artist: String,
-    val songCount: Int,
-    val songIds: Set<Long> = mutableSetOf<Long>(),
+    var songCount: Int,
+    val songList: MutableList<Song> = mutableListOf(),
     val firstLetter: String = ""
 )

@@ -6,9 +6,9 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -21,8 +21,11 @@ import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.SelectSongsDialog
+import com.unicorn.player.ui.SongMultiChoiceFragment
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
+import com.unicorn.player.viewmodel.PlaylistViewModel
+import com.unicorn.player.viewmodel.PlaylistViewModelFactory
 
 /**
  * 歌单歌曲列表 Activity
@@ -31,24 +34,15 @@ import com.unicorn.player.viewmodel.MusicViewModelFactory
  * 底部「添加」按钮 → 弹出全量歌曲选择框（SelectSongsDialog），
  * 确定后合并添加（REPLACE 去重）。
  */
-class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreClickListener {
+class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, OnSongMoreClickListener {
 
     private lateinit var binding: ActivityPlaylistSongsBinding
-    private lateinit var viewModel: MusicViewModel
     private lateinit var songAdapter: SongAdapter
     private lateinit var songInfoHelper: SongInfoHelper
-
-    private var playlistId: Long = -1L
     private var playlistName: String = ""
-
-    // 底部播放栏控制器
-    private lateinit var bottomPlayerController: BottomPlayerController
 
     // 当前歌单的歌曲列表（排序后），用于播放时设置给 MusicService
     private var playlistSongs: List<Song> = emptyList()
-
-    // 服务绑定
-    private var musicService: MusicService? = null
     private var isServiceBound = false
 
     private val serviceConnection = object : ServiceConnection {
@@ -104,12 +98,15 @@ class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMo
         // 设置 TitleBar
         binding.titleBar.setTitle(playlistName)
         binding.titleBar.setOnBackClickListener { finish() }
+        multiChoiceView = LayoutInflater.from(this).inflate(R.layout.multi_choice_view, null)
+        binding.titleBar.addViewToRight(multiChoiceView!!)
 
         setupViewModel()
         setupRecyclerView()
         setupSmartRefreshLayout()
         setupBottomPlayer()
         setupAddButton()
+        handleRecreate(savedInstanceState)
 
         bindMusicService()
     }
@@ -174,6 +171,11 @@ class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMo
             binding.bottomPlayer
         ) { musicService }
         bottomPlayerController.setupClickListeners()
+
+        // 多选按钮点击事件
+        multiChoiceView!!.setOnClickListener {
+            showSongMultiChoiceFragment(SongMultiChoiceFragment.FT_PLAYLIST, playlistSongs)
+        }
     }
 
     override fun onResume() {
@@ -207,8 +209,13 @@ class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMo
     }
 
     private fun setupViewModel() {
-        val factory = MusicViewModelFactory(MusicRepository(this), this)
+        val repository = MusicRepository(this)
+        val factory = MusicViewModelFactory(repository, this)
         viewModel = ViewModelProvider(this, factory)[MusicViewModel::class.java]
+
+        val playlistFactory = PlaylistViewModelFactory(repository, this.application)
+        playlistViewModel =
+            ViewModelProvider(this, playlistFactory)[PlaylistViewModel::class.java]
 
         // 加载歌单歌曲
         viewModel.loadPlaylistSongs(playlistId)
@@ -229,6 +236,8 @@ class PlaylistSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMo
         playlistSongs = sorted
         songAdapter.submitList(sorted)
         updateSongCount(sorted.size)
+
+        multiChoiceView?.visibility = if (playlistSongs.isEmpty()) View.GONE else View.VISIBLE
     }
 
     private fun updateSongCount(count: Int) {

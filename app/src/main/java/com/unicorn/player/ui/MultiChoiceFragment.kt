@@ -53,7 +53,7 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
 
                 is Album -> {
                     selectedIds.add(item.name.hashCode().toLong())
-                    selectedSongIds.addAll(item.songIds)
+                    selectedSongIds.addAll(item.songList.mapTo(HashSet()) { it.id })
                 }
 
                 is PlaylistInfo -> {
@@ -63,7 +63,7 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
 
                 is Artist -> {
                     selectedIds.add(item.name.hashCode().toLong())
-                    selectedSongIds.addAll(item.songIds)
+                    selectedSongIds.addAll(item.songList.mapTo(HashSet()) { it.id })
                 }
             }
         }
@@ -206,13 +206,17 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
     private fun getArtistList(): List<Artist> {
         val songs = viewModel.allSongs.value ?: emptyList()
         val artistMap = mutableMapOf<String, Artist>()
-        val artistSongIds = mutableMapOf<String, MutableSet<Long>>()
         for (song in songs) {
             val key = song.artist.lowercase()
-            artistSongIds.getOrPut(key) { mutableSetOf() }.add(song.id)
-            val songIds = artistSongIds.getOrDefault(key, emptySet())
-            val artist = artistMap.getOrPut(key) { Artist(song.artist, 0, songIds) }
-            artistMap[key] = Artist(artist.name, artist.songCount + 1, songIds)
+            // 获取或创建 Artist，并添加歌曲
+            val artist = artistMap.getOrPut(key) {
+                // 只有在 map 中不存在该 key 时才会执行这里
+                Artist(song.artist, 0, mutableListOf())
+            }
+            // 直接将当前歌曲加入列表
+            artist.songList.add(song)
+            // 增加计数
+            artist.songCount++
         }
         return artistMap.values.toList().sortedBy { it.name.lowercase() }
     }

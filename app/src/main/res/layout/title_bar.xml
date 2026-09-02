@@ -52,9 +52,8 @@
     <!-- 右布局 -->
     <LinearLayout
         android:id="@+id/titleBarRight"
-        android:layout_width="0dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
         android:gravity="end"
         android:orientation="horizontal"
         android:visibility="gone" />

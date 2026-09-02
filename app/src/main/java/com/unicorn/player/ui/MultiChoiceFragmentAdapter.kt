@@ -129,9 +129,9 @@ class MultiChoiceFragmentAdapter(
     private fun getSongIds(item: Any): Set<Long> {
         return when (item) {
             is Song -> mutableSetOf(item.id)
-            is Album -> item.songIds
+            is Album -> item.songList.mapTo(HashSet()) { it.id }
             is PlaylistInfo -> mutableSetOf(item.id)
-            is Artist -> item.songIds
+            is Artist -> item.songList.mapTo(HashSet()) { it.id }
             else -> mutableSetOf()
         }
     }

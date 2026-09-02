@@ -146,6 +146,7 @@ class TitleBar @JvmOverloads constructor(
      */
     fun addViewToCenter(view: View) {
         centerContainer.addView(view)
+        centerContainer.visibility = VISIBLE
     }
 
     /**
@@ -153,5 +154,6 @@ class TitleBar @JvmOverloads constructor(
      */
     fun addViewToRight(view: View) {
         rightContainer.addView(view)
+        rightContainer.visibility = VISIBLE
     }
 }

@@ -6,9 +6,9 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -24,6 +24,7 @@ import com.unicorn.player.service.MusicService
 import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
+import com.unicorn.player.ui.SongMultiChoiceFragment
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import kotlinx.coroutines.Dispatchers
@@ -35,23 +36,16 @@ import kotlinx.coroutines.withContext
  * 专辑歌曲列表 Activity
  * 展示某个专辑的全部歌曲，复用 item_song.xml 布局（通过 SongAdapter），底部带播放条。
  */
-class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreClickListener {
+class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, OnSongMoreClickListener {
 
     private lateinit var binding: ActivityAlbumSongsBinding
-    private lateinit var viewModel: MusicViewModel
     private lateinit var songAdapter: SongAdapter
     private lateinit var songInfoHelper: SongInfoHelper
 
     private var albumName: String = ""
 
-    // 底部播放栏控制器，封装播放栏的按钮事件、观察者与 UI 更新
-    private lateinit var bottomPlayerController: BottomPlayerController
-
     // 当前专辑的歌曲列表（排序后），用于播放时设置给 MusicService
     private var albumSongs: List<Song> = emptyList()
-
-    // 服务绑定
-    private var musicService: MusicService? = null
     private var isServiceBound = false
 
     private val serviceConnection = object : ServiceConnection {
@@ -98,11 +92,14 @@ class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreC
         // 设置 TitleBar
         binding.titleBar.setTitle(albumName)
         binding.titleBar.setOnBackClickListener { finish() }
+        multiChoiceView = LayoutInflater.from(this).inflate(R.layout.multi_choice_view, null)
+        binding.titleBar.addViewToRight(multiChoiceView!!)
 
         setupViewModel()
         setupRecyclerView()
         setupSmartRefreshLayout()
         setupBottomPlayer()
+        handleRecreate(savedInstanceState)
 
         bindMusicService()
     }
@@ -116,6 +113,11 @@ class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreC
             binding.bottomPlayer
         ) { musicService }
         bottomPlayerController.setupClickListeners()
+
+        // 多选按钮点击事件
+        multiChoiceView!!.setOnClickListener {
+            showSongMultiChoiceFragment(SongMultiChoiceFragment.FT_ALBUM, albumSongs)
+        }
     }
 
     override fun onResume() {
@@ -388,6 +390,7 @@ class AlbumSongsActivity : AppCompatActivity(), OnSongClickListener, OnSongMoreC
                     }
                 }
             }
+            setResult(RESULT_OK)
         }
     }
 }

@@ -278,33 +278,42 @@ class MusicViewModel(
      * 原 AlbumFragment.submitAccounts 逻辑下沉到 ViewModel，主线程不再做重计算。
      */
     private fun groupAndSortAlbums(songs: List<Song>): List<Album> {
-        // 以 lowerCase 专辑名作为分组键，保留首次出现的原始大小写用于显示
+        // 1. 以 lowerCase 专辑名作为分组键，保留首次出现的原始大小写用于显示
         val displayCase = LinkedHashMap<String, String>()
-        // 每组维护：歌曲数 与 各歌手出现次数（用于取数量最多的歌手作为副标题）
+        // 2. 每组维护：歌曲数
         val counts = LinkedHashMap<String, Int>()
-        val albumSongIds = LinkedHashMap<String, MutableSet<Long>>()
+        // 【修改点】：不再存储 ID，而是直接存储 Song 对象列表
+        val albumSongs = LinkedHashMap<String, MutableList<Song>>()
+        // 3. 每组维护：各歌手出现次数（用于取数量最多的歌手作为副标题）
         val artistCounts = LinkedHashMap<String, LinkedHashMap<String, Int>>()
-
         for (song in songs) {
             val key = song.album.lowercase()
+            // 记录原始专辑名（仅记录第一次出现的）
             if (!displayCase.containsKey(key)) {
                 displayCase[key] = song.album
             }
+            // 计数 +1
             counts[key] = (counts[key] ?: 0) + 1
-            albumSongIds.getOrPut(key) { mutableSetOf() }.add(song.id)
+            // getOrPut: 如果 key 不存在，创建一个空的 mutableListOf 并放入 map，然后返回该列表
+            albumSongs.getOrPut(key) { mutableListOf() }.add(song)
+            // 统计歌手出现次数
             val groupArtists = artistCounts.getOrPut(key) { LinkedHashMap() }
             groupArtists[song.artist] = (groupArtists[song.artist] ?: 0) + 1
         }
-
+        // 4. 构建 Album 列表
         val albums = counts.map { (key, count) ->
+            // 获取出现次数最多的歌手
             val topArtist = artistCounts[key]?.maxByOrNull { it.value }?.key ?: ""
+            // 获取首字母
             val letter = PinyinUtil.getPinyinFirstLetter(displayCase[key] ?: key)
+            // 注意：albumSongs[key] 一定存在，因为 counts 的 key 来源于同样的循环
+            val songList = albumSongs[key] ?: mutableListOf()
             Album(
-                displayCase[key] ?: key,
-                topArtist,
-                count,
-                albumSongIds.getOrDefault(key, emptySet()),
-                letter
+                name = displayCase[key] ?: key,
+                artist = topArtist,
+                songCount = count,
+                songList = songList,
+                firstLetter = letter
             )
         }
 

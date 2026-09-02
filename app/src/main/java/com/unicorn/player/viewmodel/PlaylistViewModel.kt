@@ -6,6 +6,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.unicorn.player.model.Playlist
+import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -30,7 +31,8 @@ class PlaylistViewModel(
         val icon: String,
         val createdAt: Long,
         val updatedAt: Long,
-        val songCount: Int
+        var songCount: Int,
+        val songList: MutableList<Song> = mutableListOf()
     )
 
     private val _playlists = MutableLiveData<List<PlaylistInfo>>(emptyList())
@@ -99,12 +101,22 @@ class PlaylistViewModel(
                 // 对每个歌单取一次快照数量（first() 单次取值后即取消订阅），过滤隐藏歌曲
                 val infos = playlistList.map { pl ->
                     try {
-                        val songs = repository.getPlaylistSongs(pl.id).first()
-                        val visibleCount = if (hiddenIds.isEmpty()) songs.size
-                        else songs.count { it.id !in hiddenIds }
-                        pl.toInfo(visibleCount)
+                        // 1. 获取该歌单下的所有歌曲 (List<Song>)
+                        val allSongs = repository.getPlaylistSongs(pl.id).first()
+                        // 2. 过滤隐藏歌曲并转换为 MutableList
+                        // 如果 hiddenIds 为空，直接转换；否则过滤掉 id 在 hiddenIds 中的歌曲
+                        val visibleSongList = if (hiddenIds.isEmpty()) {
+                            allSongs.toMutableList()
+                        } else {
+                            allSongs.filter { it.id !in hiddenIds }.toMutableList()
+                        }
+                        // 3. 计算可见歌曲数量 (直接使用过滤后列表的大小，避免重复遍历)
+                        val visibleCount = visibleSongList.size
+                        // 4. 构建 PlaylistInfo
+                        pl.toInfo(visibleCount, visibleSongList)
                     } catch (e: Exception) {
-                        pl.toInfo(0)
+                        // 异常情况下，数量为0，列表为空
+                        pl.toInfo(0, mutableListOf())
                     }
                 }
                 _playlists.postValue(infos)
@@ -116,13 +128,14 @@ class PlaylistViewModel(
         }
     }
 
-    private fun Playlist.toInfo(songCount: Int) = PlaylistInfo(
+    private fun Playlist.toInfo(songCount: Int, songList: MutableList<Song>) = PlaylistInfo(
         id = id,
         name = name,
         icon = icon,
         createdAt = createdAt,
         updatedAt = updatedAt,
-        songCount = songCount
+        songCount = songCount,
+        songList = songList
     )
 
     /**

@@ -1,11 +1,15 @@
 package com.unicorn.player.ui
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -17,6 +21,8 @@ import com.unicorn.player.model.Album
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
+import com.unicorn.player.viewmodel.PlaylistViewModel
+import com.unicorn.player.viewmodel.PlaylistViewModelFactory
 
 /**
  * 专辑标签页 Fragment，按专辑名拼音首字母分组展示专辑列表。
@@ -29,6 +35,10 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     private val binding get() = _binding!!
 
     private lateinit var viewModel: MusicViewModel
+
+    private lateinit var playlistViewModel: PlaylistViewModel
+
+    private lateinit var playlistSongsLauncher: ActivityResultLauncher<Intent>
     private lateinit var albumAdapter: AlbumAdapter
 
     /** 延迟恢复 ViewPager 的主线程 Handler，避免在字母选择回调里直接恢复导致手势冲突 */
@@ -65,6 +75,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
 
         setupViewModel()
         setupRecyclerView()
+        setupPlaylistSongsLauncher()
     }
 
     override fun onResume() {
@@ -84,8 +95,13 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     }
 
     private fun setupViewModel() {
-        val factory = MusicViewModelFactory(MusicRepository(requireContext()), requireContext())
+        val repository = MusicRepository(requireContext())
+        val factory = MusicViewModelFactory(repository, requireContext())
         viewModel = ViewModelProvider(requireActivity(), factory)[MusicViewModel::class.java]
+
+        val playlistFactory = PlaylistViewModelFactory(repository, requireActivity().application)
+        playlistViewModel =
+            ViewModelProvider(requireActivity(), playlistFactory)[PlaylistViewModel::class.java]
 
         // 观察 ViewModel 后台预计算好的专辑列表（已分组、已排序），主线程仅做轻量扁平化
         viewModel.albums.observe(viewLifecycleOwner) { albums ->
@@ -109,6 +125,17 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
         }
         setupScrollListener()
         setupWaveSideBar()
+    }
+
+    private fun setupPlaylistSongsLauncher() {
+        playlistSongsLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                // 歌单内歌曲有改动 → 主动刷新列表（更新歌曲数量、更新时间）
+                playlistViewModel.refreshPlaylists()
+            }
+        }
     }
 
     /**
@@ -197,7 +224,10 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     }
 
     override fun onAlbumClick(album: Album, position: Int) {
-        startActivity(AlbumSongsActivity.newIntent(requireContext(), album.name))
+        // 使用 launcher 启动，以便在歌曲改动后（RESULT_OK）触发刷新
+        playlistSongsLauncher.launch(
+            AlbumSongsActivity.newIntent(requireContext(), album.name)
+        )
     }
 
     /**
