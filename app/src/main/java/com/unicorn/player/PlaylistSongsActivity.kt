@@ -108,6 +108,7 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
         setupSmartRefreshLayout()
         setupBottomPlayer()
         setupAddButton()
+        setupBackPressHandler()
         handleRecreate(savedInstanceState)
 
         bindMusicService()

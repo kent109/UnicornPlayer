@@ -101,6 +101,7 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, O
         setupRecyclerView()
         setupSmartRefreshLayout()
         setupBottomPlayer()
+        setupBackPressHandler()
         handleRecreate(savedInstanceState)
 
         bindMusicService()
