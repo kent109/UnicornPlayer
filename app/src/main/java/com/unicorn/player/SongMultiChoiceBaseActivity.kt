@@ -1,11 +1,9 @@
 package com.unicorn.player
 
 import android.content.DialogInterface
-import android.graphics.Rect
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -18,6 +16,7 @@ import com.unicorn.player.service.MusicService
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongMultiChoiceFragment
+import com.unicorn.player.util.ScrollToTopHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.PlaylistViewModel
 import kotlinx.coroutines.Dispatchers
@@ -34,8 +33,7 @@ open class SongMultiChoiceBaseActivity : AppCompatActivity(),
 
     protected var playlistId: Long = -1L
     protected var multiChoiceView: View? = null
-    private var lastTopTapTime = 0L
-    private val clickViewRect = Rect()
+
     protected lateinit var viewModel: MusicViewModel
     protected lateinit var playlistViewModel: PlaylistViewModel
     protected lateinit var bottomPlayerController: BottomPlayerController
@@ -205,42 +203,13 @@ open class SongMultiChoiceBaseActivity : AppCompatActivity(),
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
         if (ev?.action == MotionEvent.ACTION_UP) {
             if (songMultiChoiceFragment != null) {
-                scrollToTop(
-                    songMultiChoiceFragment!!.getClickView(), ev
+                ScrollToTopHelper.scrollToTop(
+                    songMultiChoiceFragment!!.getClickView(),
+                    ev
                 ) { songMultiChoiceFragment!!.scrollToTop() }
             }
         }
         return super.dispatchTouchEvent(ev)
-    }
-
-    private fun scrollToTop(clickView: View, ev: MotionEvent, action: Runnable) {
-        // 获取clickView在屏幕上的区域
-        clickView.getHitRect(clickViewRect)
-        // 将触摸事件坐标转换到clickView的父坐标系
-        val location = IntArray(2)
-        clickView.getLocationOnScreen(location)
-        val x = ev.rawX.toInt()
-        val y = ev.rawY.toInt()
-        if (clickViewRect.contains(
-                x - location[0] + clickViewRect.left, y - location[1] + clickViewRect.top
-            )
-        ) {
-            // 点击在clickView范围内
-            val canTrigger = true
-            if (canTrigger) {
-                val currentTime = System.currentTimeMillis()
-                val doubleTapTimeout = ViewConfiguration.getDoubleTapTimeout()
-                if (currentTime - lastTopTapTime < doubleTapTimeout) {
-                    // 双击检测：滚动当前标签页列表到顶部
-                    action.run()
-                    lastTopTapTime = 0L
-                } else {
-                    lastTopTapTime = currentTime
-                }
-            } else {
-                lastTopTapTime = 0L
-            }
-        }
     }
 
     protected fun setupBackPressHandler() {

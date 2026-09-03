@@ -7,6 +7,7 @@ import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
 import androidx.lifecycle.Observer
@@ -25,6 +26,7 @@ import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongMultiChoiceFragment
+import com.unicorn.player.util.ScrollToTopHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import kotlinx.coroutines.Dispatchers
@@ -391,6 +393,23 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, O
                 }
             }
             setResult(RESULT_OK)
+        }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        if (ev?.action == MotionEvent.ACTION_UP) {
+            ScrollToTopHelper.scrollToTop(
+                binding.titleBar,
+                ev
+            ) { scrollToTop() }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun scrollToTop() {
+        val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
+        if (layoutManager != null && layoutManager.itemCount > 0) {
+            binding.recyclerView.smoothScrollToPosition(0)
         }
     }
 }
