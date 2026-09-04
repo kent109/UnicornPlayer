@@ -299,13 +299,10 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, O
     override fun onMoreClick(song: Song, position: Int) {
         // 先异步查询歌单，再决定是否显示"添加到歌单"选项
         lifecycleScope.launch {
-            val playlists = withContext(Dispatchers.IO) {
-                MusicRepository(this@AlbumSongsActivity).getAllPlaylists().firstOrNull()
-            } ?: emptyList()
             songInfoHelper.showSongInfoDialog(
                 song,
                 showDeleteOption = false,
-                showAddToPlaylist = playlists.isNotEmpty()
+                showAddToPlaylist = true
             )
         }
     }

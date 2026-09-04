@@ -1068,13 +1068,10 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     override fun onMoreClick(song: Song, position: Int) {
         // 先异步查询歌单，再决定是否显示"添加到歌单"选项
         lifecycleScope.launch {
-            val playlists = withContext(Dispatchers.IO) {
-                MusicRepository(this@MainActivity).getAllPlaylists().firstOrNull()
-            } ?: emptyList()
             songInfoHelper.showSongInfoDialog(
                 song,
                 showDeleteOption = true,
-                showAddToPlaylist = playlists.isNotEmpty()
+                showAddToPlaylist = true
             )
         }
     }
