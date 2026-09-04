@@ -131,8 +131,15 @@ public class EqualizerFragment extends Fragment {
             bassBoost.setEnabled(true);
             presetReverb.setEnabled(true);
             mEqualizer.setEnabled(true);
-            BassBoost.Settings bassBoostSettingTemp = bassBoost.getProperties();
-            BassBoost.Settings bassBoostSetting = new BassBoost.Settings(bassBoostSettingTemp.toString());
+            BassBoost.Settings bassBoostSetting;
+            try {
+                BassBoost.Settings bassBoostSettingTemp = bassBoost.getProperties();
+                bassBoostSetting = new BassBoost.Settings(bassBoostSettingTemp.toString());
+            } catch (Exception e) {
+                // 上报日志
+                Log.e(TAG, "bassBoost.getProperties error:" + e.getMessage());
+                bassBoostSetting = new BassBoost.Settings();
+            }
             bassBoostSetting.strength = Settings.equalizerModel.getBassStrength();
             bassBoost.setProperties(bassBoostSetting);
             try {

@@ -131,7 +131,15 @@ public class AudioEffectManager {
             }
 
             if (sBassBoost != null) {
-                BassBoost.Settings bassBoostSetting = sBassBoost.getProperties();
+                BassBoost.Settings bassBoostSetting;
+                try {
+                    BassBoost.Settings bassBoostSettingTemp = sBassBoost.getProperties();
+                    bassBoostSetting = new BassBoost.Settings(bassBoostSettingTemp.toString());
+                } catch (Exception e) {
+                    // 上报日志
+                    Log.e(TAG, "bassBoost.getProperties error:" + e.getMessage());
+                    bassBoostSetting = new BassBoost.Settings();
+                }
                 BassBoost.Settings bassBoostSettingTemp = new BassBoost.Settings(bassBoostSetting.toString());
                 bassBoostSettingTemp.strength = Settings.equalizerModel.getBassStrength();
                 sBassBoost.setProperties(bassBoostSettingTemp);
