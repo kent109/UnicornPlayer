@@ -188,17 +188,19 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
     }
 
     override fun onArtistLongClick(artist: Artist, position: Int) {
-        val service = host?.musicService
-        if (service != null) {
-            val songIds = artist.run {
-                artist.songList.map { it.id }.toSet()
+        ArtistInfoDialog(requireContext(), artist) {
+            val service = host?.musicService
+            if (service != null) {
+                val songIds = artist.run {
+                    artist.songList.map { it.id }.toSet()
+                }
+                PlaylistHelper.addToPlaylist(
+                    songIds, requireActivity() as AppCompatActivity, viewModel, service
+                )
+            } else {
+                Toast.makeText(context, "音乐服务没有运行", Toast.LENGTH_SHORT).show()
             }
-            PlaylistHelper.addToPlaylist(
-                songIds, requireActivity() as AppCompatActivity, viewModel, service
-            )
-        } else {
-            Toast.makeText(context, "音乐服务没有运行", Toast.LENGTH_SHORT).show()
-        }
+        }.show()
     }
 
     override fun onAttach(context: Context) {

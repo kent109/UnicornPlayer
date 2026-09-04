@@ -238,17 +238,19 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     }
 
     override fun onAlbumLongClick(album: Album, position: Int) {
-        val service = host?.musicService
-        if (service != null) {
-            val songIds = album.run {
-                album.songList.map { it.id }.toSet()
+        AlbumInfoDialog(requireContext(), album) {
+            val service = host?.musicService
+            if (service != null) {
+                val songIds = album.run {
+                    album.songList.map { it.id }.toSet()
+                }
+                PlaylistHelper.addToPlaylist(
+                    songIds, requireActivity() as AppCompatActivity, viewModel, service
+                )
+            } else {
+                Toast.makeText(context, "音乐服务没有运行", Toast.LENGTH_SHORT).show()
             }
-            PlaylistHelper.addToPlaylist(
-                songIds, requireActivity() as AppCompatActivity, viewModel, service
-            )
-        } else {
-            Toast.makeText(context, "音乐服务没有运行", Toast.LENGTH_SHORT).show()
-        }
+        }.show()
     }
 
     override fun onAttach(context: Context) {
