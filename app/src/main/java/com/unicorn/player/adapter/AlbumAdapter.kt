@@ -17,6 +17,8 @@ class AlbumAdapter(
 
     interface OnAlbumClickListener {
         fun onAlbumClick(album: Album, position: Int)
+
+        fun onAlbumLongClick(album: Album, position: Int)
     }
 
     private var items: List<AlbumListItem> = emptyList()
@@ -72,6 +74,14 @@ class AlbumAdapter(
                 if (position != RecyclerView.NO_POSITION) {
                     listener.onAlbumClick(album, position)
                 }
+            }
+
+            binding.root.setOnLongClickListener {
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    listener.onAlbumLongClick(album, position)
+                }
+                true
             }
         }
     }

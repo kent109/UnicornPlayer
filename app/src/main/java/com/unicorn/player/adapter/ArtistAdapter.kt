@@ -14,6 +14,8 @@ class ArtistAdapter(
 
     interface OnArtistClickListener {
         fun onArtistClick(artist: Artist, position: Int)
+
+        fun onArtistLongClick(artist: Artist, position: Int)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ArtistViewHolder {
@@ -41,6 +43,14 @@ class ArtistAdapter(
                     if (position != RecyclerView.NO_POSITION) {
                         listener.onArtistClick(artist, position)
                     }
+                }
+
+                root.setOnLongClickListener {
+                    val position = bindingAdapterPosition
+                    if (position != RecyclerView.NO_POSITION) {
+                        listener.onArtistLongClick(artist, position)
+                    }
+                    true
                 }
             }
         }

@@ -1,6 +1,7 @@
 package com.unicorn.player.ui
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -8,8 +9,10 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -19,6 +22,8 @@ import com.unicorn.player.adapter.AlbumAdapter
 import com.unicorn.player.databinding.FragmentAlbumBinding
 import com.unicorn.player.model.Album
 import com.unicorn.player.repository.MusicRepository
+import com.unicorn.player.ui.SongsFragment.SongListHost
+import com.unicorn.player.util.PlaylistHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import com.unicorn.player.viewmodel.PlaylistViewModel
@@ -33,6 +38,8 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
 
     private var _binding: FragmentAlbumBinding? = null
     private val binding get() = _binding!!
+
+    private var host: SongListHost? = null
 
     private lateinit var viewModel: MusicViewModel
 
@@ -228,6 +235,26 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
         playlistSongsLauncher.launch(
             AlbumSongsActivity.newIntent(requireContext(), album.name)
         )
+    }
+
+    override fun onAlbumLongClick(album: Album, position: Int) {
+        val service = host?.musicService
+        if (service != null) {
+            val songIds = album.run {
+                album.songList.map { it.id }.toSet()
+            }
+            PlaylistHelper.addToPlaylist(
+                songIds, requireActivity() as AppCompatActivity, viewModel, service
+            )
+        } else {
+            Toast.makeText(context, "音乐服务没有运行", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onAttach(context: Context) {
+        super.onAttach(context)
+        host = context as? SongListHost
+            ?: throw IllegalStateException("Host activity must implement SongListHost")
     }
 
     /**

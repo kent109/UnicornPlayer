@@ -9,20 +9,14 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.Song
-import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
-import com.unicorn.player.ui.PlaylistRefresher
-import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongMultiChoiceFragment
+import com.unicorn.player.util.PlaylistHelper
 import com.unicorn.player.util.ScrollToTopHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.PlaylistViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 open class SongMultiChoiceBaseActivity : AppCompatActivity(),
     SongMultiChoiceFragment.OnMultiChoiceActionListener {
@@ -118,94 +112,18 @@ open class SongMultiChoiceBaseActivity : AppCompatActivity(),
     }
 
     override fun onAddToPlaylist(selectedSongIds: Set<Long>) {
-        handleAddToPlaylist(selectedSongIds)
+        PlaylistHelper.addToPlaylist(selectedSongIds, this, viewModel, musicService)
     }
 
     override fun onCancel() {
         dismissSongMultiChoiceFragment()
     }
 
-    private fun handleAddToPlaylist(selectedSongIds: Set<Long>) {
-        lifecycleScope.launch {
-            val repository = MusicRepository(this@SongMultiChoiceBaseActivity)
-            val playlists = withContext(Dispatchers.IO) {
-                repository.getAllPlaylists().firstOrNull()
-            } ?: emptyList()
-            if (playlists.isEmpty()) {
-                Toast.makeText(this@SongMultiChoiceBaseActivity, "暂无歌单", Toast.LENGTH_SHORT)
-                    .show()
-                return@launch
-            }
-
-            val songCounts = withContext(Dispatchers.IO) {
-                val counts = mutableMapOf<Long, Int>()
-                playlists.forEach { playlist ->
-                    val songs = repository.getPlaylistSongs(playlist.id).firstOrNull()
-                    counts[playlist.id] = songs?.size ?: 0
-                }
-                counts
-            }
-
-            val metrics = resources.displayMetrics
-            val centerX = metrics.widthPixels / 2f
-            val centerY = metrics.heightPixels / 2f
-
-            SelectPlaylistDialog(
-                context = this@SongMultiChoiceBaseActivity,
-                triggerX = centerX,
-                triggerY = centerY,
-                allPlaylists = playlists,
-                songCounts = songCounts,
-                onConfirm = { chosenPlaylistIds ->
-                    addSelectedSongsToPlaylists(
-                        selectedSongIds, chosenPlaylistIds, playlists, repository
-                    )
-                }).show()
-        }
-    }
-
-    private fun addSelectedSongsToPlaylists(
-        selectedIds: Set<Long>,
-        playlistIds: List<Long>,
-        playlists: List<Playlist>,
-        repository: MusicRepository
-    ) {
-        if (playlistIds.isEmpty()) return
-        lifecycleScope.launch {
-            withContext(Dispatchers.IO) {
-                playlistIds.forEach { playlistId ->
-                    repository.addSongsToPlaylist(playlistId, selectedIds.mapNotNull { id ->
-                        viewModel.fullSongs.value?.find { it.id == id }
-                    })
-                }
-            }
-            Toast.makeText(
-                this@SongMultiChoiceBaseActivity,
-                "已添加到 ${playlistIds.size} 个歌单",
-                Toast.LENGTH_SHORT
-            ).show()
-            PlaylistRefresher.notifyPlaylistsChanged()
-            // 若当前正在播放其中某个歌单，同步更新 MusicService 的歌曲列表
-            withContext(Dispatchers.IO) {
-                playlistIds.forEach { playlistId ->
-                    val playlist = playlists.find { it.id == playlistId }
-                    if (playlist != null) {
-                        val songs =
-                            repository.getPlaylistSongs(playlist.id).firstOrNull() ?: emptyList()
-                        musicService?.syncPlaylistSongList(playlist.name, songs)
-                    }
-                }
-            }
-            setResult(RESULT_OK)
-        }
-    }
-
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
         if (ev?.action == MotionEvent.ACTION_UP) {
             if (songMultiChoiceFragment != null) {
                 ScrollToTopHelper.scrollToTop(
-                    songMultiChoiceFragment!!.getClickView(),
-                    ev
+                    songMultiChoiceFragment!!.getClickView(), ev
                 ) { songMultiChoiceFragment!!.scrollToTop() }
             }
         }
