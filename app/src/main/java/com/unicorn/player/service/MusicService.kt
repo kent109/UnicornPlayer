@@ -49,6 +49,7 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -134,6 +135,8 @@ class MusicService : Service() {
 
     private val _currentPosition = MutableLiveData(0)
     val currentPosition: LiveData<Int> = _currentPosition
+
+    private var playStateFuture: ScheduledFuture<*>? = null
 
     // 文件变化通知
     private val _fileChanged = MutableLiveData<Unit>()
@@ -271,6 +274,9 @@ class MusicService : Service() {
     // 注意：此标志仅在 isTaskRemoved=false 时使用，isTaskRemoved=true 时不应该触发通知显示
     private var pendingNotificationToShow = false
 
+    // 标记Service是否重建
+    private var serviceCreate = false
+
     // 播放模式 - 默认为全部循环
     private var playMode = PlayMode.ALL_LOOP
 
@@ -335,6 +341,8 @@ class MusicService : Service() {
     override fun onCreate() {
         super.onCreate()
 
+        serviceCreate = true
+
         createNotificationChannel()
 
         mediaPlayer = MediaPlayer().apply {
@@ -383,9 +391,6 @@ class MusicService : Service() {
         // 以 MusicService 当前进度为准，避免跳转到过时的位置；
         // 无播放进度时不自动恢复歌曲到底部播放条
           mediaSession.isActive = true
-
-          // 加载播放状态和均衡器设置
-          loadPlaybackState(restorePosition = false)
 
           // 初始化音频管理器（但不请求焦点）
           audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -468,6 +473,9 @@ class MusicService : Service() {
         // 取消注册广播接收器
         unregisterReceiver(notificationButtonReceiver)
 
+        // 关闭线程池
+        shutdownThreadPool()
+
         // 先保存播放状态（协程异步执行，但此时mediaPlayer还未release）
         savePlaybackState()
         // 标记MediaPlayer即将释放，若协程延迟执行到release之后则会跳过
@@ -509,6 +517,8 @@ class MusicService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
+        val isServiceCreate = serviceCreate
+        serviceCreate = false
 
         // 确保MediaPlayer已初始化
         if (!::mediaPlayer.isInitialized) {
@@ -590,10 +600,6 @@ class MusicService : Service() {
             }
 
             else -> {
-                // 如果action为null，尝试加载保存的状态
-                if (_currentSong.value == null) {
-                    loadPlaybackState()
-                }
                 if (intent != null && _currentSong.value != null) {
                     // 用户主动启动服务，显示通知
                     updateNotification()
@@ -604,6 +610,17 @@ class MusicService : Service() {
                     // 用户重新打开应用，但异步加载尚未完成
                     // 设置标志让 loadPlaybackState 完成后显示通知
                     pendingNotificationToShow = true
+                }
+                // 加载进度
+                if (intent != null && intent.getStringExtra(MainActivity.KEY_CREATE) != null) {
+                    val restore =
+                        intent.getIntExtra(MainActivity.KEY_RESTORE, MainActivity.NORMAL_CREATE)
+                    // 完全重建才需要加载历史进度，例如：最近任务划掉(组件全部被杀，进程未死)、强行停止(整个进程被杀)
+                    // 长期在后台灭屏播放，Activity可能被杀，Service未死，重新绑定服务后，不需要加载历史进度(以当前播放进度为准)
+                    // 长期在后台灭屏不播放，跟强行停止类似，重启时好像系统会恢复状态
+                    val restorePosition = isServiceCreate || restore == MainActivity.NORMAL_CREATE
+                    // 加载播放状态和均衡器设置
+                    loadPlaybackState(isServiceCreate, restorePosition)
                 }
             }
         }
@@ -663,6 +680,8 @@ class MusicService : Service() {
             updateMediaSessionPlaybackState()
             // 重置跳过标志
             isSkippingFailedSong = false
+            // 开始监听播放状态
+            startPlayStateObserver()
         } catch (e: IOException) {
             LogWriter.writeError(TAG, "Error playing song: ${e.message}", e)
             e.printStackTrace()
@@ -701,7 +720,7 @@ class MusicService : Service() {
     fun play() {
         // 如果当前没有歌曲，尝试加载或播放当前歌曲
         if (_currentSong.value == null) {
-            loadPlaybackState()
+            loadPlaybackState(serviceCreate)
             return
         }
 
@@ -811,6 +830,8 @@ class MusicService : Service() {
             updateMediaSessionPlaybackState()
             // 保存播放状态
             savePlaybackState()
+            // 停止播放状态监听
+            stopPlayStateObserver()
         }
     }
 
@@ -1186,6 +1207,17 @@ class MusicService : Service() {
     }
 
     private fun stopFileObserver() {
+        try {
+            if (!executorService.awaitTermination(1, TimeUnit.SECONDS)) {
+                executorService.shutdownNow()
+            }
+        } catch (e: InterruptedException) {
+            e.printStackTrace()
+            executorService.shutdownNow()
+        }
+    }
+
+    private fun shutdownThreadPool() {
         executorService.shutdown()
         try {
             if (!executorService.awaitTermination(1, TimeUnit.SECONDS)) {
@@ -1195,6 +1227,25 @@ class MusicService : Service() {
             e.printStackTrace()
             executorService.shutdownNow()
         }
+    }
+
+    private fun startPlayStateObserver() {
+        if (playStateFuture != null) {
+            return
+        }
+        playStateFuture = executorService.scheduleWithFixedDelay({
+            savePlaybackState()
+        }, 0, 5, TimeUnit.SECONDS)
+    }
+
+    private fun stopPlayStateObserver() {
+        if (playStateFuture == null) {
+            return
+        }
+        if (!playStateFuture!!.isDone && !playStateFuture!!.isCancelled) {
+            playStateFuture!!.cancel(false)
+        }
+        playStateFuture = null
     }
 
     private fun checkCurrentSongFile() {
@@ -1504,7 +1555,9 @@ class MusicService : Service() {
           tryInitialize()
       }
 
-      fun loadPlaybackState(restorePosition: Boolean = true) {
+    fun loadPlaybackState(
+        isServiceCreate: Boolean, restorePosition: Boolean = true
+    ) {
         // 如果已经加载过播放状态，不需要重复加载
         if (isPlaybackStateLoaded) {
             Log.i(TAG, "loadPlaybackState: already loaded, skip")
@@ -1575,12 +1628,10 @@ class MusicService : Service() {
                 val songPath = preferences[DataStoreKeys.SONG_PATH] ?: run {
                     return@launch
                 }
-                val currentPosition = preferences[DataStoreKeys.CURRENT_POSITION] ?: 0
+                val currentPosition = preferences[DataStoreKeys.CURRENT_POSITION] ?: -1
 
                 // 无播放进度时不自动恢复歌曲到底部播放条（避免扫描后无进度却自动加载）
-                if (currentPosition == 0) {
-                    // 仍然设置isPlaybackStateLoaded = true，避免重复加载
-                    isPlaybackStateLoaded = true
+                if (currentPosition == -1) {
                     return@launch
                 }
                 Log.d(
@@ -1667,7 +1718,7 @@ class MusicService : Service() {
                         }
                         // 如果之前正在播放且用户没有从最近任务移除，恢复播放
                         // 这用于服务被系统杀死后重启恢复播放的场景（如夜间模式切换）
-                        if (isPlaying == 1 && !isTaskRemoved) {
+                        if (isPlaying == 1 && !isServiceCreate) {
                             play()
                         }
                     } catch (e: IOException) {

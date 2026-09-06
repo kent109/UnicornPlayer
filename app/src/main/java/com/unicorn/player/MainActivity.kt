@@ -92,6 +92,11 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
             autoUpdateHandler = null
             autoUpdatePendingRunnable = null
         }
+
+        const val KEY_CREATE = "create"
+        const val KEY_RESTORE = "restore"
+        const val NORMAL_CREATE: Int = 0
+        const val RESTORE_CREATE: Int = 1
     }
 
     private val multiPermissionLauncher = registerForActivityResult(
@@ -135,9 +140,6 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
             isServiceBound = true
             setupBottomPlayerObservers()  // 服务连接成功后设置观察者
             updateBottomPlayerUI()  // 立即更新UI状态
-            // 服务连接后，将 MusicService 当前进度同步到 DataStore
-            // 确保保存的进度与实际进度一致，避免恢复时跳转到过时的位置
-            musicService?.syncCurrentPositionToDataStore()
             // 服务连接后同步排序后的歌曲列表，确保播放顺序与UI一致
             if (viewModel.fullSongs.value?.isNotEmpty() == true) {
                 updateServiceSongList()
@@ -177,6 +179,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
             }
         }
 
+        val restoreFlag = if (savedInstanceState != null) RESTORE_CREATE else NORMAL_CREATE
+
         setupViewModel()
         setupViewPager()
         setupSearchView()
@@ -184,7 +188,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
         setupBackPressHandler()
 
         checkPermissions()
-        bindMusicService()
+        bindMusicService(restoreFlag)
 
         // 自动检查更新（若用户启用）
         checkUpdateOnStartup()
@@ -961,8 +965,11 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
         viewModel.loadMusic()
     }
 
-    private fun bindMusicService() {
+    private fun bindMusicService(restoreFlag: Int) {
         val intent = Intent(this, MusicService::class.java)
+        intent.putExtra(KEY_CREATE, "1")
+        // 传递是否重建的标记
+        intent.putExtra(KEY_RESTORE, restoreFlag)
         // 先startService确保服务在前台运行
         startService(intent)
         // 再bindService确保能正确绑定
