@@ -105,6 +105,7 @@ class PlayerActivity : AppCompatActivity() {
             val binder = service as MusicService.MusicBinder
             musicService = binder.getService()
             isServiceBound = true
+            musicService?.syncCurrentPositionToDataStore()
             setupViewPager()
             observeCurrentSong()
             observeCurrentPosition()

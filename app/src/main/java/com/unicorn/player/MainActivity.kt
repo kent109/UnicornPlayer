@@ -138,6 +138,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
             val binder = service as MusicService.MusicBinder
             musicService = binder.getService()
             isServiceBound = true
+            musicService?.syncCurrentPositionToDataStore()
             setupBottomPlayerObservers()  // 服务连接成功后设置观察者
             updateBottomPlayerUI()  // 立即更新UI状态
             // 服务连接后同步排序后的歌曲列表，确保播放顺序与UI一致
