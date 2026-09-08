@@ -56,6 +56,19 @@ import kotlin.time.Duration.Companion.milliseconds
 // 使用全局Application Context的DataStore
 val Context.applicationDataStore: DataStore<Preferences> by preferencesDataStore(name = "music_player_state")
 
+// 播放来源变化通知器
+object PlaySourceManager {
+    private val _playSourceTagChanged = MutableLiveData<String>()
+    val playSourceTagChanged: LiveData<String> = _playSourceTagChanged
+
+    private var currentSourceTag = PlaySource.SONGS
+
+    fun notifyPlaySourceChanged(tag: String) {
+        currentSourceTag = tag
+        _playSourceTagChanged.postValue(currentSourceTag)
+    }
+}
+
 object DataStoreKeys {
     val CURRENT_SONG_ID = longPreferencesKey("current_song_id")
     val CURRENT_POSITION = intPreferencesKey("current_position")
@@ -294,6 +307,7 @@ class MusicService : Service() {
      */
     fun setPlaySource(tag: String) {
         playSourceTag = tag
+        PlaySourceManager.notifyPlaySourceChanged(tag)
     }
 
     /**

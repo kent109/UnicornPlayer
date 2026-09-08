@@ -5,9 +5,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AccelerateInterpolator
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ItemPlaylistBinding
 import com.unicorn.player.viewmodel.PlaylistViewModel
 
@@ -34,8 +36,16 @@ class PlaylistAdapter(
     /** 上次量到的操作按钮区宽度（px），作为卡片向左平移的距离 */
     private var actionWidth: Int = 0
 
+    /** 当前正在播放的歌单ID */
+    private var currentPlayingPlaylistId: Long? = null
+
     /** 供 ItemTouchHelper 读取操作按钮区宽度以限制滑动距离，避免过拉 */
     internal val actionWidthPx: Int get() = actionWidth
+
+    fun setPlayingPlaylistId(playlistId: Long?) {
+        currentPlayingPlaylistId = playlistId
+        notifyDataSetChanged()
+    }
 
     interface OnPlaylistClickListener {
         fun onPlaylistClick(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
@@ -148,6 +158,36 @@ class PlaylistAdapter(
         ) {
             binding.tvPlaylistName.text = playlist.name
             binding.tvSongCount.text = "${playlist.songCount} 首"
+
+            if (playlist.id == currentPlayingPlaylistId) {
+                binding.ivPlaylistIcon.isSelected = true
+                binding.tvPlaylistName.setTextColor(
+                    ContextCompat.getColor(
+                        binding.tvSongCount.context,
+                        android.R.color.holo_red_light
+                    )
+                )
+                binding.tvSongCount.setTextColor(
+                    ContextCompat.getColor(
+                        binding.tvSongCount.context,
+                        android.R.color.holo_red_light
+                    )
+                )
+            } else {
+                binding.ivPlaylistIcon.isSelected = false
+                binding.tvPlaylistName.setTextColor(
+                    ContextCompat.getColor(
+                        binding.tvPlaylistName.context,
+                        R.color.onSurface
+                    )
+                )
+                binding.tvSongCount.setTextColor(
+                    ContextCompat.getColor(
+                        binding.tvSongCount.context,
+                        R.color.onSurfaceVariant
+                    )
+                )
+            }
 
             binding.actionContainer.visibility = View.VISIBLE
             // 同步量一次操作按钮区的实际宽度，作为卡片平移距离；

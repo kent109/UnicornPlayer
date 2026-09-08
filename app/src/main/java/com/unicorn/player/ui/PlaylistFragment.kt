@@ -277,6 +277,10 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
                 binding.smartRefreshLayout.finishRefresh()
             }
         }
+
+        viewModel.currentPlayingPlaylistId.observe(viewLifecycleOwner) { playlistId ->
+            adapter.setPlayingPlaylistId(playlistId)
+        }
     }
 
     private fun setupFab() {

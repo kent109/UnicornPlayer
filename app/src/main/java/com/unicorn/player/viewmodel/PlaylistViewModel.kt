@@ -1,6 +1,7 @@
 package com.unicorn.player.viewmodel
 
 import android.app.Application
+import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -8,7 +9,10 @@ import androidx.lifecycle.viewModelScope
 import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
-import kotlinx.coroutines.Dispatchers
+import com.unicorn.player.service.DataStoreKeys
+import com.unicorn.player.service.PlaySource
+import com.unicorn.player.service.PlaySourceManager
+import com.unicorn.player.service.applicationDataStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -38,8 +42,13 @@ class PlaylistViewModel(
     private val _playlists = MutableLiveData<List<PlaylistInfo>>(emptyList())
     val playlists: LiveData<List<PlaylistInfo>> = _playlists
 
+    private val _currentPlayingPlaylistId = MutableLiveData<Long?>(null)
+    val currentPlayingPlaylistId: LiveData<Long?> = _currentPlayingPlaylistId
+
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
+
+    private var playSourceObserver: androidx.lifecycle.Observer<String>? = null
 
     /** 是否已首次加载过（控制懒加载） */
     private var hasLoadedOnce = false
@@ -48,7 +57,12 @@ class PlaylistViewModel(
     private var hiddenRegistryObserver: androidx.lifecycle.Observer<Set<Long>>? = null
 
     init {
+        viewModelScope.launch {
+            val playlistId = getCurrentPlayingPlaylistId()
+            _currentPlayingPlaylistId.value = playlistId
+        }
         observeHiddenRegistry()
+        observePlaySource()
     }
 
     /**
@@ -63,10 +77,22 @@ class PlaylistViewModel(
         HiddenSongRegistry.hiddenSongIds.observeForever(hiddenRegistryObserver!!)
     }
 
+    private fun observePlaySource() {
+        playSourceObserver?.let { PlaySourceManager.playSourceTagChanged.removeObserver(it) }
+        playSourceObserver = androidx.lifecycle.Observer { sourceTag ->
+            viewModelScope.launch {
+                _currentPlayingPlaylistId.value = getCurrentPlayingPlaylistId(sourceTag)
+            }
+        }
+        PlaySourceManager.playSourceTagChanged.observeForever(playSourceObserver!!)
+    }
+
     override fun onCleared() {
         super.onCleared()
         hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
         hiddenRegistryObserver = null
+        playSourceObserver?.let { PlaySourceManager.playSourceTagChanged.removeObserver(it) }
+        playSourceObserver = null
     }
 
     /**
@@ -185,10 +211,35 @@ class PlaylistViewModel(
         viewModelScope.launch {
             try {
                 repository.deletePlaylistById(id)
+                val currentId = _currentPlayingPlaylistId.value
+                if (currentId == id) {
+                    getApplication<Application>().applicationContext.applicationDataStore.edit { preferences ->
+                        preferences.remove(DataStoreKeys.PLAY_SOURCE_TAG)
+                    }
+                    _currentPlayingPlaylistId.value = null
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
             refreshPlaylistsInternal()
+        }
+    }
+
+    private suspend fun getCurrentPlayingPlaylistId(sourceTag: String? = null): Long? {
+        return try {
+            val tag = sourceTag
+                ?: getApplication<Application>().applicationContext.applicationDataStore.data.first()
+                    .let { it[DataStoreKeys.PLAY_SOURCE_TAG] ?: PlaySource.SONGS }
+
+            if (tag.startsWith(PlaySource.PLAYLIST)) {
+                val (_, playlistName) = PlaySource.parse(tag)
+                repository.getAllPlaylists().first()
+                    .find { it.name.equals(playlistName, ignoreCase = true) }?.id
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 }

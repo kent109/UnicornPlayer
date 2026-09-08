@@ -161,7 +161,8 @@
       "Bash(r?)",
       "Bash(powershell -Command \"\\(Get-Content 'D:/workspace/android_studio/UnicornPlayer/app/src/main/res/layout/dialog_update.xml' -Raw\\) -replace \\\\\"`r?`n\\\\\", \\\\\"`r`n\\\\\" | Set-Content 'D:/workspace/android_studio/UnicornPlayer/app/src/main/res/layout/dialog_update.xml' -NoNewline\")",
       "WebFetch(domain:raw.giteeusercontent.com)",
-      "Bash(gradle app:compileReleaseKotlin)"
+      "Bash(gradle app:compileReleaseKotlin)",
+      "Bash(powershell Get-ChildItem -Path \"D:\\\\workspace\\\\android_studio\\\\UnicornPlayer\\\\app\\\\src\\\\main\\\\res\\\\drawable\" -Filter \"*playlist*\" -Recurse)"
     ]
   }
 }
