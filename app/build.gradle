@@ -36,7 +36,7 @@ kapt {
 
 android {
     namespace 'com.unicorn.player'
-    compileSdkVersion 35
+    compileSdkVersion 37
 
     defaultConfig {
         applicationId "com.unicorn.player"
