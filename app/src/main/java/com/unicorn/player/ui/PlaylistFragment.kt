@@ -354,4 +354,12 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
     override fun onSwipedOpened(position: Int) {
         // 占位：如需在此处理滑动打开后的日志或统计可在此扩展
     }
+
+    /**
+     * 关闭当前展开的 item
+     * @return true: 成功关闭item，false: item未展开
+     */
+    fun closeExpandedItem(): Boolean {
+        return adapter.resetSwipedItem()
+    }
 }

@@ -30,6 +30,7 @@ import com.unicorn.player.ui.AlbumFragment
 import com.unicorn.player.ui.ArtistFragment
 import com.unicorn.player.ui.MainPagerAdapter
 import com.unicorn.player.ui.MultiChoiceFragment
+import com.unicorn.player.ui.PlaylistFragment
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongsFragment
@@ -264,6 +265,19 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     }
 
     /**
+     * 关闭歌单页中展开的 item
+     * @return 是否成功关闭了item
+     */
+    fun closeExpandedPlaylistItem(): Boolean {
+        supportFragmentManager.findFragmentByTag("f3")?.let { fragment ->
+            if (fragment is PlaylistFragment) {
+                return fragment.closeExpandedItem()
+            }
+        }
+        return false
+    }
+
+    /**
      * 开关 ViewPager2 的用户滑动。
      *
      * 歌单列表 item 正在侧滑露出「编辑 / 删除」时，需临时禁用 ViewPager2 的切页滑动，
@@ -339,6 +353,9 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
                     } else if (multiChoiceFragment != null) {
                         dismissMultiChoiceFragment()
                     } else {
+                        if (closeExpandedPlaylistItem()) {
+                            return
+                        }
                         // 非搜索模式，执行默认返回行为
                         isEnabled = false
                         onBackPressedDispatcher.onBackPressed()

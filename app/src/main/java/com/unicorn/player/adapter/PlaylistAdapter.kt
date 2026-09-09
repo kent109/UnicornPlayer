@@ -84,11 +84,12 @@ class PlaylistAdapter(
      * 复位当前已滑开项。一律走 notifyItemChanged 驱动 bind() 的平移动画。
 
      */
-    fun resetSwipedItem() {
-        if (swipedPosition == -1) return
+    fun resetSwipedItem(): Boolean {
+        if (swipedPosition == -1) return false
         val prev = swipedPosition
         swipedPosition = -1
         notifyItemChanged(prev)
+        return true
     }
 
     /**
