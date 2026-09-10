@@ -21,34 +21,34 @@
         android:paddingStart="12dp"
         android:paddingEnd="12dp">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnEdit"
-            style="@style/Widget.Material3.Button.TextButton"
+        <ImageView
+            android:id="@+id/btnPlay"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:minWidth="0dp"
+            android:layout_height="wrap_content"
+            android:contentDescription="播放"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
-            android:text="编辑"
-            android:textColor="@color/primary"
-            android:textSize="14sp" />
+            android:src="@drawable/ic_play2" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnDelete"
-            style="@style/Widget.Material3.Button.TextButton"
+        <ImageView
+            android:id="@+id/btnEdit"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:minWidth="0dp"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
-            android:text="删除"
-            android:textColor="@color/design_default_color_error"
-            android:textSize="14sp" />
+            android:contentDescription="编辑"
+            android:src="@drawable/ic_edit" />
+
+        <ImageView
+            android:id="@+id/btnDelete"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:contentDescription="删除"
+            android:src="@drawable/ic_delete" />
 
     </LinearLayout>
 

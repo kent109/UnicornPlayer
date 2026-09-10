@@ -46,6 +46,8 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, O
 
     private var albumName: String = ""
 
+    private var clickPlay: Boolean = false
+
     // 当前专辑的歌曲列表（排序后），用于播放时设置给 MusicService
     private var albumSongs: List<Song> = emptyList()
     private var isServiceBound = false
@@ -57,6 +59,7 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, O
             musicService = binder.getService()
             isServiceBound = true
             observeMusicService()
+            setSongListLocked()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -73,10 +76,12 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, O
     companion object {
         const val TAG = "AlbumSongsActivity"
         const val EXTRA_ALBUM_NAME = "extra_album_name"
+        const val EXTRA_CLICK_PLAY = "extra_click_play"
 
-        fun newIntent(context: Context, albumName: String): Intent {
+        fun newIntent(context: Context, albumName: String, clickPlay: Boolean): Intent {
             return Intent(context, AlbumSongsActivity::class.java).apply {
                 putExtra(EXTRA_ALBUM_NAME, albumName)
+                putExtra(EXTRA_CLICK_PLAY, clickPlay)
             }
         }
     }
@@ -87,6 +92,7 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, O
         setContentView(binding.root)
 
         albumName = intent.getStringExtra(EXTRA_ALBUM_NAME) ?: ""
+        clickPlay = intent.getBooleanExtra(EXTRA_CLICK_PLAY, false)
 
         songInfoHelper = SongInfoHelper(this)
         setupAddToPlaylistListener()
@@ -157,6 +163,27 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, O
         }
     }
 
+    @Synchronized
+    private fun setSongListLocked() {
+        if (albumSongs.isEmpty() || musicService == null) {
+            return
+        }
+        if (!clickPlay) {
+            return
+        }
+        clickPlay = false
+        // 如果外层fragment点击了播放，设置为之前的播放列表和index
+        val currentSongId = musicService?.currentSong?.value?.id
+        val isCurrentSongInPlaylist =
+            currentSongId != null && albumSongs.any { it.id == currentSongId }
+        if (isCurrentSongInPlaylist) {
+            val currentSongIndex = albumSongs.indexOfFirst { it.id == currentSongId }
+            musicService?.setSongList(
+                albumSongs, if (currentSongIndex >= 0) currentSongIndex else 0
+            )
+        }
+    }
+
     private fun setupViewModel() {
         val factory = MusicViewModelFactory(MusicRepository(this), this)
         viewModel = ViewModelProvider(this, factory)[MusicViewModel::class.java]
@@ -184,6 +211,7 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, O
         albumSongs = sorted
         songAdapter.submitList(sorted)
         updateSongCount(sorted.size)
+        setSongListLocked()
     }
 
     private fun updateSongCount(count: Int) {

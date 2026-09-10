@@ -23,6 +23,7 @@ import com.unicorn.player.databinding.FragmentAlbumBinding
 import com.unicorn.player.model.Album
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.ui.SongsFragment.SongListHost
+import com.unicorn.player.util.PlayHelper
 import com.unicorn.player.util.PlaylistHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
@@ -55,6 +56,8 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     /** 每个首字母对应的第一个 Header 在扁平列表中的位置，用于侧边栏快速定位 */
     private var letterIndexMap: Map<String, Int> = emptyMap()
 
+    private var clickPlay: Boolean = false
+
     companion object {
         fun newInstance() = AlbumFragment()
 
@@ -83,6 +86,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
         setupViewModel()
         setupRecyclerView()
         setupPlaylistSongsLauncher()
+        observeCurrentPlaying()
     }
 
     override fun onResume() {
@@ -121,6 +125,12 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
                 binding.emptyView.visibility = View.GONE
                 setWaveSideBarVisible(true)
             }
+        }
+    }
+
+    private fun observeCurrentPlaying() {
+        viewModel.currentPlayingAlbum.observe(viewLifecycleOwner) { albumName ->
+            albumAdapter.setPlayingAlbum(albumName)
         }
     }
 
@@ -233,24 +243,39 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     override fun onAlbumClick(album: Album, position: Int) {
         // 使用 launcher 启动，以便在歌曲改动后（RESULT_OK）触发刷新
         playlistSongsLauncher.launch(
-            AlbumSongsActivity.newIntent(requireContext(), album.name)
+            AlbumSongsActivity.newIntent(requireContext(), album.name, clickPlay)
         )
     }
 
     override fun onAlbumLongClick(album: Album, position: Int) {
-        AlbumInfoDialog(requireContext(), album) {
-            val service = host?.musicService
-            if (service != null) {
-                val songIds = album.run {
-                    album.songList.map { it.id }.toSet()
+        AlbumInfoDialog(
+            requireContext(), album,
+            onAddToPlaylist = {
+                val service = host?.musicService
+                if (service != null) {
+                    val songIds = album.songList.map { it.id }.toSet()
+                    PlaylistHelper.addToPlaylist(
+                        songIds, requireActivity() as AppCompatActivity, viewModel, service
+                    )
+                } else {
+                    Toast.makeText(context, "音乐服务没有运行", Toast.LENGTH_SHORT).show()
                 }
-                PlaylistHelper.addToPlaylist(
-                    songIds, requireActivity() as AppCompatActivity, viewModel, service
+            },
+            onPlay = {
+                val service = host?.musicService
+                // 从全量歌曲列表中过滤并排序，确保与当前排序模式一致
+                val allSongs = viewModel.allSongs.value ?: emptyList()
+                val albumSongs = allSongs.filter { it.album.equals(album.name, ignoreCase = true) }
+                val sortedAlbumSongs = viewModel.sortWithCurrentMode(albumSongs)
+
+                clickPlay = PlayHelper.playAlbum(
+                    context = requireContext(),
+                    service = service,
+                    albumName = album.name,
+                    songs = sortedAlbumSongs
                 )
-            } else {
-                Toast.makeText(context, "音乐服务没有运行", Toast.LENGTH_SHORT).show()
             }
-        }.show()
+        ).show()
     }
 
     override fun onAttach(context: Context) {

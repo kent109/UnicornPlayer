@@ -14,10 +14,13 @@ import java.io.File
 
 /**
  * 专辑信息对话框帮助类
- * 负责显示专辑详细信息、添加到歌单功能
+ * 负责显示专辑详细信息、播放专辑歌曲、添加到歌单功能
  */
 class AlbumInfoDialog(
-    private val context: Context, private val album: Album, private val onAddToPlaylist: () -> Unit
+    private val context: Context,
+    private val album: Album,
+    private val onAddToPlaylist: () -> Unit,
+    private val onPlay: (() -> Unit)? = null
 ) {
 
     companion object {
@@ -51,6 +54,15 @@ class AlbumInfoDialog(
                 itemBinding.tvValue.text = value
                 itemBinding.root.background = null
                 infoContainer.addView(itemBinding.root)
+            }
+
+            if (onPlay != null) {
+                addClickableItem(
+                    infoContainer, "播放", android.R.color.holo_blue_light
+                ) {
+                    bottomSheetDialog.dismiss()
+                    onPlay()
+                }
             }
 
             addClickableItem(

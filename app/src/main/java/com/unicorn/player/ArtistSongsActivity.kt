@@ -47,6 +47,8 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
 
     private var artistName: String = ""
 
+    private var clickPlay: Boolean = false
+
     // 当前歌手的歌曲列表（排序后），用于播放时设置给 MusicService
     private var artistSongs: List<Song> = emptyList()
     private var isServiceBound = false
@@ -58,6 +60,7 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
             musicService = binder.getService()
             isServiceBound = true
             observeMusicService()
+            setSongListLocked()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -74,10 +77,12 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
     companion object {
         const val TAG = "ArtistSongsActivity"
         const val EXTRA_ARTIST_NAME = "extra_artist_name"
+        const val EXTRA_CLICK_PLAY = "extra_click_play"
 
-        fun newIntent(context: Context, artistName: String): Intent {
+        fun newIntent(context: Context, artistName: String, clickPlay: Boolean): Intent {
             return Intent(context, ArtistSongsActivity::class.java).apply {
                 putExtra(EXTRA_ARTIST_NAME, artistName)
+                putExtra(EXTRA_CLICK_PLAY, clickPlay)
             }
         }
     }
@@ -88,6 +93,7 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
         setContentView(binding.root)
 
         artistName = intent.getStringExtra(EXTRA_ARTIST_NAME) ?: ""
+        clickPlay = intent.getBooleanExtra(EXTRA_CLICK_PLAY, false)
 
         songInfoHelper = SongInfoHelper(this)
         setupAddToPlaylistListener()
@@ -158,6 +164,27 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
         }
     }
 
+    @Synchronized
+    private fun setSongListLocked() {
+        if (artistSongs.isEmpty() || musicService == null) {
+            return
+        }
+        if (!clickPlay) {
+            return
+        }
+        clickPlay = false
+        // 如果外层fragment点击了播放，设置为之前的播放列表和index
+        val currentSongId = musicService?.currentSong?.value?.id
+        val isCurrentSongInPlaylist =
+            currentSongId != null && artistSongs.any { it.id == currentSongId }
+        if (isCurrentSongInPlaylist) {
+            val currentSongIndex = artistSongs.indexOfFirst { it.id == currentSongId }
+            musicService?.setSongList(
+                artistSongs, if (currentSongIndex >= 0) currentSongIndex else 0
+            )
+        }
+    }
+
     private fun setupViewModel() {
         val factory = MusicViewModelFactory(MusicRepository(this), this)
         viewModel = ViewModelProvider(this, factory)[MusicViewModel::class.java]
@@ -185,6 +212,7 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
         artistSongs = sorted
         songAdapter.submitList(sorted)
         updateSongCount(sorted.size)
+        setSongListLocked()
     }
 
     private fun updateSongCount(count: Int) {

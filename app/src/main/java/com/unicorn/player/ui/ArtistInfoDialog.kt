@@ -14,12 +14,13 @@ import java.io.File
 
 /**
  * 歌手信息对话框帮助类
- * 负责显示歌手详细信息、添加到歌单功能
+ * 负责显示歌手详细信息、播放歌手歌曲、添加到歌单功能
  */
 class ArtistInfoDialog(
     private val context: Context,
     private val artist: Artist,
-    private val onAddToPlaylist: () -> Unit
+    private val onAddToPlaylist: () -> Unit,
+    private val onPlay: (() -> Unit)? = null
 ) {
 
     companion object {
@@ -53,6 +54,15 @@ class ArtistInfoDialog(
                 itemBinding.tvValue.text = value
                 itemBinding.root.background = null
                 infoContainer.addView(itemBinding.root)
+            }
+
+            if (onPlay != null) {
+                addClickableItem(
+                    infoContainer, "播放", android.R.color.holo_blue_light
+                ) {
+                    bottomSheetDialog.dismiss()
+                    onPlay()
+                }
             }
 
             addClickableItem(

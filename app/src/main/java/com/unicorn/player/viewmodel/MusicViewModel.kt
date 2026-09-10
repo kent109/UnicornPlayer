@@ -15,6 +15,8 @@ import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.scanFiltersDataStore
 import com.unicorn.player.service.DataStoreKeys
+import com.unicorn.player.service.PlaySource
+import com.unicorn.player.service.PlaySourceManager
 import com.unicorn.player.service.applicationDataStore
 import com.unicorn.player.util.PinyinUtil
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +67,14 @@ class MusicViewModel(
 
     private val collator = Collator.getInstance(Locale.CHINA)
 
+    private var playSourceObserver: androidx.lifecycle.Observer<String>? = null
+
+    private var _currentPlayingArtist = MutableLiveData<String?>(null)
+    val currentPlayingArtist: LiveData<String?> = _currentPlayingArtist
+
+    private var _currentPlayingAlbum = MutableLiveData<String?>(null)
+    val currentPlayingAlbum: LiveData<String?> = _currentPlayingAlbum
+
     private var searchJob: Job? = null
 
     // Room DB 中的原始歌曲列表（未过滤），用于检测外部删除
@@ -85,6 +95,7 @@ class MusicViewModel(
     init {
         // 使用 observeForever 因为 ViewModel 本身没有 LifecycleOwner；在 onCleared 中移除
         _allSongs.observeForever(allSongsObserver)
+        observePlaySource()
         restoreSortMode()
     }
 
@@ -256,6 +267,53 @@ class MusicViewModel(
         _allSongs.removeObserver(allSongsObserver)
         hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
         hiddenRegistryObserver = null
+        playSourceObserver?.let { PlaySourceManager.playSourceTagChanged.removeObserver(it) }
+        playSourceObserver = null
+    }
+
+    private fun observePlaySource() {
+        playSourceObserver?.let { PlaySourceManager.playSourceTagChanged.removeObserver(it) }
+        playSourceObserver = androidx.lifecycle.Observer { sourceTag ->
+            viewModelScope.launch {
+                _currentPlayingArtist.value = getCurrentPlayingArtist(sourceTag)
+                _currentPlayingAlbum.value = getCurrentPlayingAlbum(sourceTag)
+            }
+        }
+        PlaySourceManager.playSourceTagChanged.observeForever(playSourceObserver!!)
+    }
+
+    private suspend fun getCurrentPlayingArtist(sourceTag: String? = null): String? {
+        return try {
+            val tag = sourceTag
+                ?: context.applicationDataStore.data.first()
+                    .let { it[DataStoreKeys.PLAY_SOURCE_TAG] ?: PlaySource.SONGS }
+
+            if (tag.startsWith(PlaySource.ARTIST)) {
+                val (_, artistName) = PlaySource.parse(tag)
+                artistName
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private suspend fun getCurrentPlayingAlbum(sourceTag: String? = null): String? {
+        return try {
+            val tag = sourceTag
+                ?: context.applicationDataStore.data.first()
+                    .let { it[DataStoreKeys.PLAY_SOURCE_TAG] ?: PlaySource.SONGS }
+
+            if (tag.startsWith(PlaySource.ALBUM)) {
+                val (_, albumName) = PlaySource.parse(tag)
+                albumName
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**

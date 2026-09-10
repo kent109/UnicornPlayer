@@ -21,6 +21,7 @@ import com.unicorn.player.R
 import com.unicorn.player.adapter.PlaylistAdapter
 import com.unicorn.player.databinding.FragmentPlaylistBinding
 import com.unicorn.player.repository.MusicRepository
+import com.unicorn.player.util.PlayHelper
 import com.unicorn.player.viewmodel.PlaylistViewModel
 import com.unicorn.player.viewmodel.PlaylistViewModelFactory
 import com.unicorn.player.widget.BezierCircleHeader
@@ -36,12 +37,12 @@ import com.unicorn.player.widget.BezierCircleHeader
  *   · 从歌单详情页（PlaylistSongsActivity）返回 → ActivityResult 回调中 refreshPlaylists()
  */
 class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
-
     private var _binding: FragmentPlaylistBinding? = null
     private val binding get() = _binding!!
 
     private lateinit var viewModel: PlaylistViewModel
     private lateinit var adapter: PlaylistAdapter
+    private lateinit var musicViewModel: com.unicorn.player.viewmodel.MusicViewModel
 
     /**
      * 启动歌单详情页的 launcher；返回 RESULT_OK 时表示歌曲有改动，需刷新列表
@@ -114,6 +115,9 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         val repository = MusicRepository(requireContext())
         val factory = PlaylistViewModelFactory(repository, requireActivity().application)
         viewModel = ViewModelProvider(requireActivity(), factory)[PlaylistViewModel::class.java]
+        // 获取 MusicViewModel 用于排序歌单歌曲
+        musicViewModel =
+            ViewModelProvider(requireActivity())[com.unicorn.player.viewmodel.MusicViewModel::class.java]
     }
 
     private fun setupRecyclerView() {
@@ -156,7 +160,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = e.x - downX;
+                    val dx = e.x - downX
                     val dy = e.y - downY
                     if (!dragging && kotlin.math.abs(dx) > TOUCH_SLOP && kotlin.math.abs(dx) >= kotlin.math.abs(
                             dy
@@ -361,5 +365,21 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
      */
     fun closeExpandedItem(): Boolean {
         return adapter.resetSwipedItem()
+    }
+
+    override fun onPlayClicked(
+        playlist: PlaylistViewModel.PlaylistInfo,
+        position: Int
+    ) {
+        val service = (activity as? MainActivity)?.musicService
+        // 按当前排序模式对歌单歌曲排序
+        val sortedSongs = musicViewModel.sortWithCurrentMode(playlist.songList)
+
+        PlayHelper.playPlaylist(
+            context = requireContext(),
+            service = service,
+            playlistName = playlist.name,
+            songs = sortedSongs
+        )
     }
 }

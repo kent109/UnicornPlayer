@@ -2,7 +2,9 @@ package com.unicorn.player.adapter
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ItemAlbumBinding
 import com.unicorn.player.databinding.ItemAlbumHeaderBinding
 import com.unicorn.player.model.Album
@@ -15,13 +17,19 @@ class AlbumAdapter(
     private val listener: OnAlbumClickListener
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
+    private var items: List<AlbumListItem> = emptyList()
+    private var currentPlayingAlbum: String? = null
+
+    fun setPlayingAlbum(albumName: String?) {
+        currentPlayingAlbum = albumName
+        notifyDataSetChanged()
+    }
+
     interface OnAlbumClickListener {
         fun onAlbumClick(album: Album, position: Int)
 
         fun onAlbumLongClick(album: Album, position: Int)
     }
-
-    private var items: List<AlbumListItem> = emptyList()
 
     /**
      * 提交分组后的扁平列表（Header、Item 按展示顺序排列）。
@@ -50,7 +58,7 @@ class AlbumAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = items[position]) {
             is AlbumListItem.Header -> (holder as HeaderHolder).bind(item.letter)
-            is AlbumListItem.Item -> (holder as AlbumHolder).bind(item.album)
+            is AlbumListItem.Item -> (holder as AlbumHolder).bind(item.album, position)
         }
     }
 
@@ -65,23 +73,61 @@ class AlbumAdapter(
     inner class AlbumHolder(
         private val binding: ItemAlbumBinding
     ) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(album: Album) {
-            binding.tvAlbumName.text = album.name
-            binding.tvAlbumSubtitle.text = "${album.artist} - ${album.songCount} 首"
+        private var lastPlaying = false
 
-            binding.root.setOnClickListener {
-                val position = bindingAdapterPosition
-                if (position != RecyclerView.NO_POSITION) {
-                    listener.onAlbumClick(album, position)
-                }
-            }
+        fun bind(album: Album, position: Int) {
+            binding.apply {
+                tvAlbumName.text = album.name
+                tvAlbumSubtitle.text = "${album.artist} - ${album.songCount} 首"
 
-            binding.root.setOnLongClickListener {
-                val position = bindingAdapterPosition
-                if (position != RecyclerView.NO_POSITION) {
-                    listener.onAlbumLongClick(album, position)
+                val isPlaying = album.name == currentPlayingAlbum
+                if (isPlaying != lastPlaying) {
+                    lastPlaying = isPlaying
+                    if (isPlaying) {
+                        ivAlbumIcon.isSelected = true
+                        tvAlbumName.setTextColor(
+                            ContextCompat.getColor(
+                                tvAlbumName.context,
+                                android.R.color.holo_red_light
+                            )
+                        )
+                        tvAlbumSubtitle.setTextColor(
+                            ContextCompat.getColor(
+                                tvAlbumSubtitle.context,
+                                android.R.color.holo_red_light
+                            )
+                        )
+                    } else {
+                        ivAlbumIcon.isSelected = false
+                        tvAlbumName.setTextColor(
+                            ContextCompat.getColor(
+                                tvAlbumName.context,
+                                R.color.onSurface
+                            )
+                        )
+                        tvAlbumSubtitle.setTextColor(
+                            ContextCompat.getColor(
+                                tvAlbumSubtitle.context,
+                                R.color.onSurfaceVariant
+                            )
+                        )
+                    }
                 }
-                true
+
+                root.setOnClickListener {
+                    val position = bindingAdapterPosition
+                    if (position != RecyclerView.NO_POSITION) {
+                        listener.onAlbumClick(album, position)
+                    }
+                }
+
+                root.setOnLongClickListener {
+                    val position = bindingAdapterPosition
+                    if (position != RecyclerView.NO_POSITION) {
+                        listener.onAlbumLongClick(album, position)
+                    }
+                    true
+                }
             }
         }
     }

@@ -24,11 +24,10 @@
             android:id="@+id/ivAlbumIcon"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:src="@drawable/ic_album"
+            android:src="@drawable/album_icon"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:tint="@color/onSurfaceVariant"
             tools:ignore="ContentDescription" />
 
         <TextView

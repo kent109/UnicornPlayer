@@ -49,6 +49,7 @@ class PlaylistAdapter(
 
     interface OnPlaylistClickListener {
         fun onPlaylistClick(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
+        fun onPlayClicked(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
         fun onEditClicked(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
         fun onDeleteClicked(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
         fun onSwipedOpened(position: Int)
@@ -150,6 +151,13 @@ class PlaylistAdapter(
                 resetSwipedItem()
                 listener.onDeleteClicked(getItem(pos), pos)
             }
+
+            binding.btnPlay.setOnClickListener {
+                val pos = bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
+                resetSwipedItem()
+                listener.onPlayClicked(getItem(pos), pos)
+            }
         }
 
         fun bind(
@@ -160,6 +168,7 @@ class PlaylistAdapter(
             binding.tvPlaylistName.text = playlist.name
             binding.tvSongCount.text = "${playlist.songCount} 首"
 
+            // 仅当歌单正在播放时高亮（通过观察当前正在播放的歌单ID）
             if (playlist.id == currentPlayingPlaylistId) {
                 binding.ivPlaylistIcon.isSelected = true
                 binding.tvPlaylistName.setTextColor(

@@ -642,6 +642,11 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
                 3 -> 3
                 else -> return@setOnClickListener
             }
+            // 如果当前是歌单fragment，关闭展开的item
+            if (currentMultiChoiceType == 3) {
+                closeExpandedPlaylistItem()
+            }
+            // 显示多选fragment
             showMultiChoiceFragment(currentMultiChoiceType)
         }
 
