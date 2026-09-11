@@ -74,11 +74,13 @@ class PlayerFragment : Fragment() {
         binding.nextButton.setOnClickListener {
             service.requestAudioFocusAndPlayNext()
             service.updateNotification()
+            (activity as? PlayerActivity)?.applyPageTransformer()
         }
 
         binding.previousButton.setOnClickListener {
             service.requestAudioFocusAndPlayPrevious()
             service.updateNotification()
+            (activity as? PlayerActivity)?.applyPageTransformer()
         }
 
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {

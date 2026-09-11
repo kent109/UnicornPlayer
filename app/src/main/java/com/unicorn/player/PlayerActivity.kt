@@ -18,8 +18,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.toColorInt
+import androidx.core.view.doOnPreDraw
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
 import com.hw.lrcviewlib.LrcRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.service.MusicService
@@ -200,21 +202,9 @@ class PlayerActivity : AppCompatActivity() {
         binding.viewPager.offscreenPageLimit = 2
 
         // 设置页面切换动画，提供更平滑的过渡效果
-        binding.viewPager.setPageTransformer(
-            androidx.viewpager2.widget.CompositePageTransformer().apply {
-                // 添加透明度动画
-                addTransformer { page, position ->
-                    val absPosition = kotlin.math.abs(position)
-                    page.alpha = 1f - absPosition * 0.3f
-                }
-                // 添加缩放动画
-                addTransformer { page, position ->
-                    val absPosition = kotlin.math.abs(position)
-                    val scale = 1f - absPosition * 0.1f
-                    page.scaleX = scale
-                    page.scaleY = scale
-                }
-            })
+        binding.viewPager.setPageTransformer { page, position ->
+            transformPage(page, position)
+        }
 
         // 向下箭头点击收起播放页面
         binding.ivCollapse.setOnClickListener {
@@ -237,6 +227,35 @@ class PlayerActivity : AppCompatActivity() {
         })
 
         bindMusicService()
+    }
+
+    private fun transformPage(page: View, position: Float) {
+        val absPosition = kotlin.math.abs(position)
+        page.alpha = 1f - absPosition * 0.3f
+        val scale = 1f - absPosition * 0.1f
+        page.scaleX = scale
+        page.scaleY = scale
+    }
+
+    fun applyPageTransformer() {
+        binding.viewPager.doOnPreDraw {
+            applyTransformToVisiblePages()
+        }
+    }
+
+    private fun applyTransformToVisiblePages() {
+        val pager = binding.viewPager
+        val rv = pager.getChildAt(0) as? RecyclerView ?: return
+        val currentItem = pager.currentItem
+        for (i in 0 until rv.childCount) {
+            val child = rv.getChildAt(i)
+            val adapterPos = rv.getChildAdapterPosition(child)
+            if (adapterPos != RecyclerView.NO_POSITION) {
+                // ViewPager2 稳定态下 position ≈ adapterPos - currentItem
+                val position = (adapterPos - currentItem).toFloat()
+                transformPage(child, position)
+            }
+        }
     }
 
     /**
