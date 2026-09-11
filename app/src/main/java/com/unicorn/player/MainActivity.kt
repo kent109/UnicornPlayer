@@ -242,6 +242,12 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
                 updateSortButtonVisibility(position)
                 dismissMultiChoiceFragment()
                 showMultiChoiceButton(position)
+                // 关闭歌单展开的item
+                if (position != 3) {
+                    binding.viewPager.postDelayed({
+                        closeExpandedPlaylistItem()
+                    }, 100)
+                }
             }
 
             /**
