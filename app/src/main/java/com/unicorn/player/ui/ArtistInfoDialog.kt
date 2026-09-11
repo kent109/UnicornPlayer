@@ -58,7 +58,7 @@ class ArtistInfoDialog(
 
             if (onPlay != null) {
                 addClickableItem(
-                    infoContainer, "播放", android.R.color.holo_blue_light
+                    infoContainer, "播放", R.color.blue_500
                 ) {
                     bottomSheetDialog.dismiss()
                     onPlay()

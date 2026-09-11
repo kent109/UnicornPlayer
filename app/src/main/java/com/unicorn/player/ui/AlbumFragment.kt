@@ -242,6 +242,8 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
 
     override fun onAlbumClick(album: Album, position: Int) {
         // 使用 launcher 启动，以便在歌曲改动后（RESULT_OK）触发刷新
+        val playingAlbum = albumAdapter.getPlayingAlbum()
+        clickPlay = playingAlbum != null && playingAlbum == album.name
         playlistSongsLauncher.launch(
             AlbumSongsActivity.newIntent(requireContext(), album.name, clickPlay)
         )

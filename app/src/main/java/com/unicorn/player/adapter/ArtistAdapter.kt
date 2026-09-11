@@ -21,6 +21,10 @@ class ArtistAdapter(
         notifyDataSetChanged()
     }
 
+    fun getPlayingArtist(): String? {
+        return currentPlayingArtist
+    }
+
     interface OnArtistClickListener {
         fun onArtistClick(artist: Artist, position: Int)
 

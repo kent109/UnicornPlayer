@@ -25,6 +25,10 @@ class AlbumAdapter(
         notifyDataSetChanged()
     }
 
+    fun getPlayingAlbum(): String? {
+        return currentPlayingAlbum
+    }
+
     interface OnAlbumClickListener {
         fun onAlbumClick(album: Album, position: Int)
 

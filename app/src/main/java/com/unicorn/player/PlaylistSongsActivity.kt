@@ -241,6 +241,17 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
         updateSongCount(sorted.size)
 
         multiChoiceView?.visibility = if (playlistSongs.isEmpty()) View.GONE else View.VISIBLE
+
+        // 歌曲数量、排序等发生变化
+        val currentSongId = musicService?.currentSong?.value?.id
+        val isCurrentSongInPlaylist =
+            currentSongId != null && playlistSongs.any { it.id == currentSongId }
+        if (isCurrentSongInPlaylist) {
+            val currentSongIndex = playlistSongs.indexOfFirst { it.id == currentSongId }
+            musicService?.setSongList(
+                playlistSongs, if (currentSongIndex >= 0) currentSongIndex else 0
+            )
+        }
     }
 
     private fun updateSongCount(count: Int) {
