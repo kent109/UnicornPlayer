@@ -47,4 +47,13 @@ object PinyinUtil {
             "#"
         }
     }
+
+    fun getPinyinString(str: String): String {
+        if (str.isBlank()) return str
+        return try {
+            PinyinHelper.toHanYuPinyinString(str, outputFormat, "", true)
+        } catch (e: Exception) {
+            str
+        }
+    }
 }

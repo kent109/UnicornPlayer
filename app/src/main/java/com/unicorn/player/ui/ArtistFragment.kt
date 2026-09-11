@@ -21,6 +21,7 @@ import com.unicorn.player.model.Artist
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.ui.SongsFragment.SongListHost
+import com.unicorn.player.util.PinyinUtil
 import com.unicorn.player.util.PlayHelper
 import com.unicorn.player.util.PlaylistHelper
 import com.unicorn.player.viewmodel.MusicViewModel
@@ -177,10 +178,11 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
 
             Artist(
                 name = displayCase[key] ?: key,
+                pinyinName = PinyinUtil.getPinyinString(displayCase[key] ?: key),
                 songCount = count,
                 songList = songList
             )
-        }.sortedBy { it.name.lowercase() }
+        }.sortedBy { it.pinyinName }
         artistAdapter.submitList(artists)
         updateArtistCount(artists.size)
     }

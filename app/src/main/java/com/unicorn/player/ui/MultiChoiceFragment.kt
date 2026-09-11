@@ -14,6 +14,7 @@ import com.unicorn.player.model.Album
 import com.unicorn.player.model.Artist
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
+import com.unicorn.player.util.PinyinUtil
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import com.unicorn.player.viewmodel.PlaylistViewModel
@@ -211,14 +212,14 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
             // 获取或创建 Artist，并添加歌曲
             val artist = artistMap.getOrPut(key) {
                 // 只有在 map 中不存在该 key 时才会执行这里
-                Artist(song.artist, 0, mutableListOf())
+                Artist(song.artist, PinyinUtil.getPinyinString(song.artist), 0, mutableListOf())
             }
             // 直接将当前歌曲加入列表
             artist.songList.add(song)
             // 增加计数
             artist.songCount++
         }
-        return artistMap.values.toList().sortedBy { it.name.lowercase() }
+        return artistMap.values.toList().sortedBy { it.pinyinName }
     }
 
     private fun getCurrentList(): List<Any> {
