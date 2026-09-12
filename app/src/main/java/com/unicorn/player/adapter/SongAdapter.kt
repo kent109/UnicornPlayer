@@ -259,8 +259,7 @@ class SongAdapter(
             binding.apply {
                 songTitle.text = song.title
                 artistName.text = song.artist
-                albumName.text =
-                    if (TextUtils.equals(song.album, "Music")) "<unknown>" else song.album
+                albumName.text = song.album
 
                 // 设置品质标签文字
                 quality.setText(song.quality)

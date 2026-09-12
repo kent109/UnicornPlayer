@@ -150,8 +150,7 @@ class PlayerFragment : Fragment() {
             currentSong = it
             binding.songTitle.text = it.title
             binding.artistName.text = it.artist
-            binding.albumName.text =
-                if (android.text.TextUtils.equals(it.album, "Music")) "<unknown>" else it.album
+            binding.albumName.text = it.album
 
             Log.d("PlayerFragment", "Updating song info: ${it.title} - ${it.artist}")
 

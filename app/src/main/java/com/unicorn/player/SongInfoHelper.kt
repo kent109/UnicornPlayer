@@ -3,7 +3,6 @@ package com.unicorn.player
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
-import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.Window
 import android.widget.Toast
@@ -56,7 +55,7 @@ class SongInfoHelper(private val context: Context) {
         // 添加信息项
         val infoItems = listOf(
             Pair("歌手", song.artist),
-            Pair("专辑", if (TextUtils.equals(song.album, "Music")) "<unknown>" else song.album),
+            Pair("专辑", song.album),
             Pair("时长", durationText),
             Pair("音质", qualityText),
             Pair("文件大小", fileSize),

@@ -13,7 +13,9 @@ import com.unicorn.player.model.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
+import okhttp3.internal.immutableListOf
 import java.io.File
+import java.util.Locale
 
 
 class MusicRepository(private val context: Context) {
@@ -60,16 +62,22 @@ class MusicRepository(private val context: Context) {
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
                 val title = cursor.getString(titleColumn) ?: "Unknown Title"
-                val artist = cursor.getString(artistColumn) ?: "Unknown Artist"
-                val album = cursor.getString(albumColumn) ?: "Unknown Album"
+                var artist = cursor.getString(artistColumn) ?: "Unknown Artist"
+                var album = cursor.getString(albumColumn) ?: "Unknown Album"
                 val duration = cursor.getLong(durationColumn)
                 val path = cursor.getString(pathColumn)
                 val albumId = cursor.getLong(albumIdColumn)
                 val mime = cursor.getString(mimeColumn)
 
-                // 过滤掉小于1MB的音频文件
-                val file = java.io.File(path)
-                if (!file.exists() || file.length() / 1024 < 1024) {
+                if (isUnknownArtist(artist)) {
+                    artist = "<unknown>"
+                }
+                if (isUnknownAlbum(album, path)) {
+                    album = "<unknown>"
+                }
+
+                val file = File(path)
+                if (!file.exists()) {
                     continue
                 }
 
@@ -125,6 +133,45 @@ class MusicRepository(private val context: Context) {
         }
 
         newSongs
+    }
+
+    private fun isUnknownArtist(artist: String?): Boolean {
+        if (artist.isNullOrEmpty()) {
+            return true
+        }
+        val list = immutableListOf("<unknown>", "unknown")
+        return list.contains(artist.lowercase(Locale.getDefault()))
+    }
+
+    private fun isUnknownAlbum(album: String?, filePath: String): Boolean {
+        if (album.isNullOrEmpty()) {
+            return true
+        }
+        val list = immutableListOf("<unknown>", "unknown", "download", "document")
+        if (list.contains(album.lowercase(Locale.getDefault()))) {
+            return true
+        }
+        var externalPath = "/storage/emulated/"
+        val subPath = filePath.substring(externalPath.length)
+        externalPath += subPath.substring(0, subPath.indexOf("/") + 1)
+        var dirName = filePath.substring(externalPath.length)
+        if (dirName.contains("/")) {
+            dirName = dirName.substring(0, dirName.lastIndexOf("/"))
+            if (dirName.contains("/")) {
+                dirName = dirName.substring(dirName.lastIndexOf("/") + 1)
+            }
+        } else {
+            dirName = ""
+        }
+        if (dirName.isEmpty()) {
+            val file = File(externalPath + album)
+            if (file.exists()) {
+                return true
+            }
+        } else if (dirName.equals(album)) {
+            return true
+        }
+        return false
     }
 
     /**
