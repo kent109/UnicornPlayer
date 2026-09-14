@@ -209,14 +209,14 @@ class PlaylistViewModel(
     /**
      * 删除单个歌单。
      *
-     * @param onPlaylistDeleted 删除完成后回调，参数为被删除歌单的名称。
+     * @param onPlaylistDeleted 删除完成后回调，参数为被删除歌单的 ID。
      *   外部可据此通知 MusicService 清理当前播放状态（如果正在播放该歌单）。
      */
-    fun deletePlaylist(id: Long, playlistName: String, onPlaylistDeleted: ((String) -> Unit)? = null) {
+    fun deletePlaylist(id: Long, onPlaylistDeleted: ((Long) -> Unit)? = null) {
         viewModelScope.launch {
             try {
                 repository.deletePlaylistById(id)
-                onPlaylistDeleted?.invoke(playlistName)
+                onPlaylistDeleted?.invoke(id)
                 val currentId = _currentPlayingPlaylistId.value
                 if (currentId == id) {
                     _currentPlayingPlaylistId.value = null
@@ -235,9 +235,8 @@ class PlaylistViewModel(
                     .let { it[DataStoreKeys.PLAY_SOURCE_TAG] ?: PlaySource.SONGS }
 
             if (tag.startsWith(PlaySource.PLAYLIST)) {
-                val (_, playlistName) = PlaySource.parse(tag)
-                repository.getAllPlaylists().first()
-                    .find { it.name.equals(playlistName, ignoreCase = true) }?.id
+                val (_, playlistIdStr) = PlaySource.parse(tag)
+                playlistIdStr.toLongOrNull()
             } else {
                 null
             }

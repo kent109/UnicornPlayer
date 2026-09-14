@@ -735,20 +735,12 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
                 lifecycleScope.launch {
                     val repository = MusicRepository(this@MainActivity)
                     val clone = selectedSongIds.toMutableSet()
-                    // 删除前先获取歌单名称，用于后续通知 MusicService
-                    val playlists = withContext(Dispatchers.IO) {
-                        repository.getAllPlaylists().firstOrNull()
-                    } ?: emptyList()
-                    val deletedNames = playlists
-                        .filter { it.id in clone }
-                        .map { it.name }
-                        .toSet()
                     for (playlistId in clone) {
                         repository.deletePlaylistById(playlistId)
                     }
                     // 如果删除的歌单包含当前正在播放的歌单，清理播放状态
-                    if (deletedNames.isNotEmpty()) {
-                        musicService?.handlePlaylistDeleted(deletedNames)
+                    if (clone.isNotEmpty()) {
+                        musicService?.handlePlaylistDeleted(clone)
                     }
                     PlaylistRefresher.notifyPlaylistsChanged()
                 }
@@ -1220,7 +1212,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
                     val playlist = playlists.find { it.id == playlistId }
                     if (playlist != null) {
                         val songs = repository.getPlaylistSongs(playlist.id).firstOrNull() ?: emptyList()
-                        musicService?.syncPlaylistSongList(playlist.name, songs)
+                        musicService?.syncPlaylistSongList(playlist.id, songs)
                     }
                 }
             }

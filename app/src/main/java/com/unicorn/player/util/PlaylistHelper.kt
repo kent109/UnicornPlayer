@@ -97,7 +97,7 @@ class PlaylistHelper {
                         if (playlist != null) {
                             val songs = repository.getPlaylistSongs(playlist.id).firstOrNull()
                                 ?: emptyList()
-                            musicService?.syncPlaylistSongList(playlist.name, songs)
+                            musicService?.syncPlaylistSongList(playlist.id, songs)
                         }
                     }
                 }

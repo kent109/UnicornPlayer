@@ -125,13 +125,13 @@ object PlayHelper {
      * 播放歌单歌曲
      * @param context 上下文
      * @param service MusicService 实例
-     * @param playlistName 歌单名称
+     * @param playlistId 歌单 ID
      * @param songs 歌单歌曲列表
      */
     fun playPlaylist(
         context: Context,
         service: MusicService?,
-        playlistName: String,
+        playlistId: Long,
         songs: List<Song>
     ): Boolean {
         return playSongs(
@@ -139,7 +139,7 @@ object PlayHelper {
             service = service,
             songs = songs,
             playSource = PlaySource.PLAYLIST,
-            sourceName = playlistName,
+            sourceName = playlistId.toString(),
             emptyMessage = "歌单无歌曲"
         )
     }

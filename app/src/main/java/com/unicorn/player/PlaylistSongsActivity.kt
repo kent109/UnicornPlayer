@@ -226,7 +226,7 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
 
         // 歌曲数量、排序等发生变化时，只有当前正在播放此歌单才同步播放列表
         if (musicService != null) {
-            musicService?.syncPlaylistSongList(playlistName, playlistSongs)
+            musicService?.syncPlaylistSongList(playlistId, playlistSongs)
         }
     }
 
@@ -311,9 +311,9 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
     override fun onSongClick(song: Song, position: Int) {
         val index = playlistSongs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
         musicService?.setSongList(playlistSongs, index)
-        // 歌单详情作为播放入口：来源为 f3$歌单名
+        // 歌单详情作为播放入口：来源为 f3$歌单ID
         musicService?.setPlaySource(
-            PlaySource.build(PlaySource.PLAYLIST, playlistName)
+            PlaySource.build(PlaySource.PLAYLIST, playlistId.toString())
         )
         if (musicService?.currentSong?.value?.id == song.id) {
             if (musicService?.isPlaying?.value != true) {

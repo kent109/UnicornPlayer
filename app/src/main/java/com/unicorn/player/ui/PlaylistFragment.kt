@@ -350,8 +350,8 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
             .setNegativeButton("取消", null)
             .setPositiveButton("删除") { _, _ ->
                 val service = (activity as? MainActivity)?.musicService
-                viewModel.deletePlaylist(playlist.id, playlist.name) { deletedName ->
-                    service?.handlePlaylistDeleted(setOf(deletedName))
+                viewModel.deletePlaylist(playlist.id) { deletedId ->
+                    service?.handlePlaylistDeleted(setOf(deletedId))
                 }
             }
             .show()
@@ -380,7 +380,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         PlayHelper.playPlaylist(
             context = requireContext(),
             service = service,
-            playlistName = playlist.name,
+            playlistId = playlist.id,
             songs = sortedSongs
         )
     }

@@ -322,18 +322,17 @@ class MusicService : Service() {
 
     /**
      * 删除歌单时，检查当前是否正在播放被删除的歌单。
-     * 如果当前播放来源是 f3 且歌单名匹配，则将播放列表替换为全部歌曲（f0），
+     * 如果当前播放来源是 f3 且歌单 ID 匹配，则将播放列表替换为全部歌曲（f0），
      * 但不中断当前正在播放的歌曲。
      *
-     * @param deletedPlaylistNames 被删除的歌单名集合（不区分大小写）
+     * @param deletedPlaylistIds 被删除的歌单 ID 集合
      * @return true 如果当前播放的歌单被删除并执行了切换
      */
-    fun handlePlaylistDeleted(deletedPlaylistNames: Set<String>): Boolean {
+    fun handlePlaylistDeleted(deletedPlaylistIds: Set<Long>): Boolean {
         val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
         if (sourceType != PlaySource.PLAYLIST) return false
-        if (sourceName.isBlank()) return false
-        val matched = deletedPlaylistNames.any { it.equals(sourceName, ignoreCase = true) }
-        if (!matched) return false
+        val currentPlaylistId = sourceName.toLongOrNull()
+        if (currentPlaylistId == null || currentPlaylistId !in deletedPlaylistIds) return false
 
         // 重置播放来源为 f0，通知 UI 更新高亮
         setPlaySource(PlaySource.SONGS)
@@ -966,16 +965,12 @@ class MusicService : Service() {
      *
      * 直接接收歌曲列表而非重新查询数据库，避免异步时序问题导致列表退化为全部歌曲。
      *
-     * @param playlistName 歌单名称
+     * @param playlistId 歌单 ID
      * @param songs 歌单的最新歌曲列表
      */
-    fun syncPlaylistSongList(playlistName: String, songs: List<Song>) {
+    fun syncPlaylistSongList(playlistId: Long, songs: List<Song>) {
         val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
-        if (sourceType == PlaySource.PLAYLIST && sourceName.equals(
-                playlistName,
-                ignoreCase = true
-            )
-        ) {
+        if (sourceType == PlaySource.PLAYLIST && sourceName == playlistId.toString()) {
             if (songs.isEmpty()) return
             val currentSong = _currentSong.value
             val currentIndex = if (currentSong != null) {
@@ -995,7 +990,7 @@ class MusicService : Service() {
             lastManualSyncTime = System.currentTimeMillis()
             Log.d(
                 TAG,
-                "syncPlaylistSongList: updated playlist '$playlistName' with ${songs.size} songs"
+                "syncPlaylistSongList: updated playlist '$playlistId' with ${songs.size} songs"
             )
         }
     }
@@ -1839,11 +1834,14 @@ class MusicService : Service() {
                             songsFromDb.filter { it.album.equals(sourceName, ignoreCase = true) }
 
                         PlaySource.PLAYLIST -> {
-                            // 按歌单名反查歌单，再取其歌曲列表
-                            val playlist = database.playlistDao().getAllPlaylists().first()
-                                .firstOrNull { it.name.equals(sourceName, ignoreCase = true) }
-                            playlist?.let { database.playlistDao().getPlaylistSongs(it.id).first() }
-                                ?: songsFromDb   // 歌单已不存在 → 退化全部歌曲
+                            // sourceName 为歌单 ID，直接按 ID 查询歌曲列表
+                            val playlistId = sourceName.toLongOrNull()
+                            if (playlistId != null) {
+                                database.playlistDao().getPlaylistSongs(playlistId).first()
+                                    .ifEmpty { null } ?: songsFromDb
+                            } else {
+                                songsFromDb
+                            }
                         }
 
                         else -> songsFromDb

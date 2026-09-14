@@ -363,7 +363,7 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
                     val playlist = playlists.find { it.id == playlistId }
                     if (playlist != null) {
                         val songs = repository.getPlaylistSongs(playlist.id).firstOrNull() ?: emptyList()
-                        musicService?.syncPlaylistSongList(playlist.name, songs)
+                        musicService?.syncPlaylistSongList(playlist.id, songs)
                     }
                 }
             }
