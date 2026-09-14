@@ -1,12 +1,8 @@
 package com.unicorn.player
 
-import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.Handler
-import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import android.view.View
@@ -24,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import com.hw.lrcviewlib.LrcRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
+import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.util.DisplayUtil
 import com.unicorn.player.util.LogWriter
@@ -38,11 +35,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class PlayerActivity : AppCompatActivity() {
+class PlayerActivity : AppCompatActivity(), MusicManager.ConnectionCallback {
 
     private lateinit var binding: ActivityPlayerBinding
     private var musicService: MusicService? = null
-    private var isServiceBound = false
     private lateinit var pagerAdapter: PlayerPagerAdapter
     private var isUserScrolling = false
     private val scrollDebounceHandler = Handler(Looper.getMainLooper())
@@ -100,23 +96,6 @@ class PlayerActivity : AppCompatActivity() {
         val seconds = (totalCentis % 6000) / 100
         val centis = totalCentis % 100
         return "[%02d:%02d.%02d]".format(minutes, seconds, centis)
-    }
-
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as MusicService.MusicBinder
-            musicService = binder.getService()
-            isServiceBound = true
-            musicService?.syncCurrentPositionToDataStore()
-            setupViewPager()
-            observeCurrentSong()
-            observeCurrentPosition()
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            musicService = null
-            isServiceBound = false
-        }
     }
 
     // 防止循环调用的标志
@@ -1086,9 +1065,30 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun bindMusicService() {
-        val intent = Intent(this, MusicService::class.java)
-        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-        startService(intent)
+        // 注册服务连接回调，在异步绑定完成时收到通知
+        MusicManager.registerConnectionCallback(this)
+        // 使用MusicManager绑定MusicService
+        val alreadyConnected = MusicManager.bind(this)
+        // 获取MusicService实例（如果服务已绑定则立即返回，否则需等待回调）
+        musicService = MusicManager.getService()
+        if (alreadyConnected && musicService != null) {
+            // 服务已连接（非首次绑定），直接执行初始化
+            onServiceConnected(musicService)
+        }
+    }
+
+    // ==================== MusicManager.ConnectionCallback 实现 ====================
+
+    override fun onServiceConnected(service: MusicService?) {
+        musicService = service ?: return
+        musicService?.syncCurrentPositionToDataStore()
+        setupViewPager()
+        observeCurrentSong()
+        observeCurrentPosition()
+    }
+
+    override fun onServiceDisconnected() {
+        musicService = null
     }
 
     @Suppress("DEPRECATION")
@@ -1109,13 +1109,11 @@ class PlayerActivity : AppCompatActivity() {
         applyFontSize()
         // 恢复时重新同步歌词到当前播放位置
         musicService?.let { service ->
-            if (isServiceBound) {
-                val currentPos = service.getCurrentPosition()
-                binding.lrcView.seekLrcToTime(currentPos.toLong())
-                // 重新应用"显示时间标签"设置，让设置页面修改后即时生效
-                if (LrcFetcher.lyricsEnabled) {
-                    service.currentSong.value?.let { song -> loadAndShowLrc(song.path) }
-                }
+            val currentPos = service.getCurrentPosition()
+            binding.lrcView.seekLrcToTime(currentPos.toLong())
+            // 重新应用"显示时间标签"设置，让设置页面修改后即时生效
+            if (LrcFetcher.lyricsEnabled) {
+                service.currentSong.value?.let { song -> loadAndShowLrc(song.path) }
             }
         }
     }
@@ -1137,10 +1135,9 @@ class PlayerActivity : AppCompatActivity() {
             emptyTextView = null
         }
 
-        if (isServiceBound) {
-            unbindService(serviceConnection)
-            isServiceBound = false
-        }
+        // 使用MusicManager解绑
+        MusicManager.unregisterConnectionCallback(this)
+        MusicManager.unbind(this)
     }
 
     // 提供给Fragment访问Service的方法

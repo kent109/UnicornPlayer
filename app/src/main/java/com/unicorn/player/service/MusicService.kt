@@ -311,12 +311,13 @@ class MusicService : Service() {
     }
 
     /**
-     * 判断当前是否正在播放歌单（playSourceTag 以 f3 开头）。
-     * 用于 MainActivity.updateServiceSongList 判断是否需要跳过覆盖歌曲列表。
+     * 判断当前播放来源是否为全部歌曲（f0）。
+     * 用于 updateServiceSongList 判断是否可以用全部歌曲列表覆盖播放列表。
+     * 只有 f0 时才允许覆盖；f1（歌手）、f2（专辑）、f3（歌单）的列表由各自 Activity 管理。
      */
-    fun isPlayingPlaylist(): Boolean {
+    fun isPlayingFromSongs(): Boolean {
         val (sourceType, _) = PlaySource.parse(playSourceTag)
-        return sourceType == PlaySource.PLAYLIST
+        return sourceType == PlaySource.SONGS
     }
 
     enum class PlayMode {
@@ -531,8 +532,6 @@ class MusicService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        val isServiceCreate = serviceCreate
-        serviceCreate = false
 
         // 确保MediaPlayer已初始化
         if (!::mediaPlayer.isInitialized) {
@@ -627,6 +626,11 @@ class MusicService : Service() {
                 }
                 // 加载进度
                 if (intent != null && intent.getStringExtra(MainActivity.KEY_CREATE) != null) {
+                    // 只在带有 KEY_CREATE 标记的 startService 调用中消费 serviceCreate，
+                    // 避免其他 startService 调用（如 MusicManager.bind 的 startService）
+                    // 提前消费标志导致 isServiceCreate 变为 false
+                    val isServiceCreate = serviceCreate
+                    serviceCreate = false
                     val restore =
                         intent.getIntExtra(MainActivity.KEY_RESTORE, MainActivity.NORMAL_CREATE)
                     // 完全重建才需要加载历史进度，例如：最近任务划掉(组件全部被杀，进程未死)、强行停止(整个进程被杀)
@@ -634,7 +638,8 @@ class MusicService : Service() {
                     // 长期在后台灭屏不播放，跟强行停止类似，重启时好像系统会恢复状态
                     val restorePosition = isServiceCreate || restore == MainActivity.NORMAL_CREATE
                     // 加载播放状态和均衡器设置
-                    loadPlaybackState(isServiceCreate, restorePosition)
+                    // 传入 restore 用于判断是否为 Activity 被回收后恢复（RESTORE_CREATE），此时需要自动恢复播放
+                    loadPlaybackState(isServiceCreate, restorePosition, restore)
                 }
             }
         }
@@ -1570,7 +1575,8 @@ class MusicService : Service() {
       }
 
     fun loadPlaybackState(
-        isServiceCreate: Boolean, restorePosition: Boolean = true
+        isServiceCreate: Boolean, restorePosition: Boolean = true,
+        restoreFlag: Int = 0
     ) {
         // 如果已经加载过播放状态，不需要重复加载
         if (isPlaybackStateLoaded) {
@@ -1627,6 +1633,13 @@ class MusicService : Service() {
                     // 当用户重新打开应用时，onStartCommand 中 intent != null 会触发通知显示
                 }
 
+                // 尽早恢复播放来源标签（f0/f1/f2/f3），避免后续早期 return 时丢失来源
+                val savedSourceTag = preferences[DataStoreKeys.PLAY_SOURCE_TAG] ?: PlaySource.SONGS
+                playSourceTag = savedSourceTag
+                // 通知 PlaySourceManager，让 ViewModel 更新歌手/专辑高亮
+                PlaySourceManager.notifyPlaySourceChanged(savedSourceTag)
+                Log.d(TAG, "loadPlaybackState: restored playSourceTag=$savedSourceTag")
+
                 // 如果用户从最近任务移除了应用，强制恢复保存的进度
                 // 因为 onTaskRemoved() 中已同步保存了正确的进度到 DataStore
                 val shouldRestorePosition = restorePosition || isTaskRemoved
@@ -1658,10 +1671,6 @@ class MusicService : Service() {
                 playMode = PlayMode.entries.getOrElse(savedPlayModeOrdinal) { PlayMode.ALL_LOOP }
                 _playModeLiveData.postValue(playMode)
                 Log.d(TAG, "loadPlaybackState: restored playMode=$playMode")
-
-                // 恢复播放来源标签（f0/f1/f2/f3），默认 f0 全部歌曲
-                val savedSourceTag = preferences[DataStoreKeys.PLAY_SOURCE_TAG] ?: PlaySource.SONGS
-                playSourceTag = savedSourceTag
 
                 Log.d(
                     TAG,
@@ -1730,9 +1739,10 @@ class MusicService : Service() {
                             updateNotification(restoredSong)
                             pendingNotificationToShow = false
                         }
-                        // 如果之前正在播放且用户没有从最近任务移除，恢复播放
-                        // 这用于服务被系统杀死后重启恢复播放的场景（如夜间模式切换）
-                        if (isPlaying == 1 && !isServiceCreate) {
+                        // 仅在「后台播放中 Activity 被系统回收后恢复」时自动恢复播放。
+                        // 判定条件：之前正在播放 && restoreFlag==RESTORE_CREATE（savedInstanceState != null）
+                        // 其他场景（最近任务划掉、杀进程重启、正常启动）都不自动播放。
+                        if (isPlaying == 1 && restoreFlag == MainActivity.RESTORE_CREATE) {
                             play()
                         }
                     } catch (e: IOException) {
