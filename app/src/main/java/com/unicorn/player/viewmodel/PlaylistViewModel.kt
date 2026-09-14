@@ -1,7 +1,6 @@
 package com.unicorn.player.viewmodel
 
 import android.app.Application
-import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -207,15 +206,19 @@ class PlaylistViewModel(
         }
     }
 
-    fun deletePlaylist(id: Long) {
+    /**
+     * 删除单个歌单。
+     *
+     * @param onPlaylistDeleted 删除完成后回调，参数为被删除歌单的名称。
+     *   外部可据此通知 MusicService 清理当前播放状态（如果正在播放该歌单）。
+     */
+    fun deletePlaylist(id: Long, playlistName: String, onPlaylistDeleted: ((String) -> Unit)? = null) {
         viewModelScope.launch {
             try {
                 repository.deletePlaylistById(id)
+                onPlaylistDeleted?.invoke(playlistName)
                 val currentId = _currentPlayingPlaylistId.value
                 if (currentId == id) {
-                    getApplication<Application>().applicationContext.applicationDataStore.edit { preferences ->
-                        preferences.remove(DataStoreKeys.PLAY_SOURCE_TAG)
-                    }
                     _currentPlayingPlaylistId.value = null
                 }
             } catch (e: Exception) {

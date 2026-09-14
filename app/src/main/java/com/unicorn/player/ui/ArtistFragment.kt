@@ -46,8 +46,6 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
     private lateinit var playlistSongsLauncher: ActivityResultLauncher<Intent>
     private lateinit var artistAdapter: ArtistAdapter
 
-    private var clickPlay: Boolean = false
-
     companion object {
         fun newInstance() = ArtistFragment()
     }
@@ -195,9 +193,8 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
     override fun onArtistClick(artist: Artist, position: Int) {
         // 使用 launcher 启动，以便在歌曲改动后（RESULT_OK）触发刷新
         val playingArtist = artistAdapter.getPlayingArtist()
-        clickPlay = playingArtist != null && playingArtist == artist.name
         playlistSongsLauncher.launch(
-            ArtistSongsActivity.newIntent(requireContext(), artist.name, clickPlay)
+            ArtistSongsActivity.newIntent(requireContext(), artist.name)
         )
     }
 
@@ -223,7 +220,7 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
                     allSongs.filter { it.artist.equals(artist.name, ignoreCase = true) }
                 val sortedArtistSongs = viewModel.sortWithCurrentMode(artistSongs)
 
-                clickPlay = PlayHelper.playArtist(
+                PlayHelper.playArtist(
                     context = requireContext(),
                     service = service,
                     artistName = artist.name,

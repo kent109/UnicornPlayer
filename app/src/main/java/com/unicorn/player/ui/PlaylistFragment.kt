@@ -349,8 +349,10 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
             .setMessage("确定要删除歌单「${playlist.name}」吗？此操作不可恢复。")
             .setNegativeButton("取消", null)
             .setPositiveButton("删除") { _, _ ->
-                // ViewModel 内部会在写库完成后自动调用 refreshPlaylistsInternal()
-                viewModel.deletePlaylist(playlist.id)
+                val service = (activity as? MainActivity)?.musicService
+                viewModel.deletePlaylist(playlist.id, playlist.name) { deletedName ->
+                    service?.handlePlaylistDeleted(setOf(deletedName))
+                }
             }
             .show()
     }

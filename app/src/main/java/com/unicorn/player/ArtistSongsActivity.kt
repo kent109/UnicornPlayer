@@ -1,11 +1,8 @@
 package com.unicorn.player
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.os.Bundle
-import android.os.IBinder
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -18,6 +15,7 @@ import com.unicorn.player.adapter.SongAdapter
 import com.unicorn.player.adapter.SongAdapter.OnSongClickListener
 import com.unicorn.player.adapter.SongAdapter.OnSongMoreClickListener
 import com.unicorn.player.databinding.ActivityArtistSongsBinding
+import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
@@ -39,7 +37,7 @@ import kotlinx.coroutines.withContext
  * 展示某个歌手的全部歌曲，复用 item_song.xml 布局（通过 SongAdapter）
  */
 class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, OnSongMoreClickListener,
-    SongMultiChoiceFragment.OnMultiChoiceActionListener  {
+    SongMultiChoiceFragment.OnMultiChoiceActionListener, MusicManager.ConnectionCallback {
 
     private lateinit var binding: ActivityArtistSongsBinding
     private lateinit var songAdapter: SongAdapter
@@ -47,28 +45,8 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
 
     private var artistName: String = ""
 
-    private var clickPlay: Boolean = false
-
     // 当前歌手的歌曲列表（排序后），用于播放时设置给 MusicService
     private var artistSongs: List<Song> = emptyList()
-    private var isServiceBound = false
-
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            if (isDestroyed || isFinishing) return
-            val binder = service as MusicService.MusicBinder
-            musicService = binder.getService()
-            isServiceBound = true
-            observeMusicService()
-            setSongListLocked()
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            musicService = null
-            isServiceBound = false
-            removeMusicServiceObservers()
-        }
-    }
 
     // 服务观察者
     private var currentSongObserver: Observer<Song?>? = null
@@ -77,12 +55,10 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
     companion object {
         const val TAG = "ArtistSongsActivity"
         const val EXTRA_ARTIST_NAME = "extra_artist_name"
-        const val EXTRA_CLICK_PLAY = "extra_click_play"
 
-        fun newIntent(context: Context, artistName: String, clickPlay: Boolean): Intent {
+        fun newIntent(context: Context, artistName: String): Intent {
             return Intent(context, ArtistSongsActivity::class.java).apply {
                 putExtra(EXTRA_ARTIST_NAME, artistName)
-                putExtra(EXTRA_CLICK_PLAY, clickPlay)
             }
         }
     }
@@ -93,7 +69,6 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
         setContentView(binding.root)
 
         artistName = intent.getStringExtra(EXTRA_ARTIST_NAME) ?: ""
-        clickPlay = intent.getBooleanExtra(EXTRA_CLICK_PLAY, false)
 
         songInfoHelper = SongInfoHelper(this)
         setupAddToPlaylistListener()
@@ -158,31 +133,9 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
         songAdapter.stopCurrentSongAnimation()
         // 确保底部播放栏观察者被清理（服务未断开时 onPause 已处理）
         bottomPlayerController.removeObservers()
-        if (isServiceBound) {
-            unbindService(serviceConnection)
-            isServiceBound = false
-        }
-    }
-
-    @Synchronized
-    private fun setSongListLocked() {
-        if (artistSongs.isEmpty() || musicService == null) {
-            return
-        }
-        if (!clickPlay) {
-            return
-        }
-        clickPlay = false
-        // 如果外层fragment点击了播放，设置为之前的播放列表和index
-        val currentSongId = musicService?.currentSong?.value?.id
-        val isCurrentSongInPlaylist =
-            currentSongId != null && artistSongs.any { it.id == currentSongId }
-        if (isCurrentSongInPlaylist) {
-            val currentSongIndex = artistSongs.indexOfFirst { it.id == currentSongId }
-            musicService?.setSongList(
-                artistSongs, if (currentSongIndex >= 0) currentSongIndex else 0
-            )
-        }
+        // 注销服务连接回调并解绑
+        MusicManager.unregisterConnectionCallback(this)
+        MusicManager.unbind(this)
     }
 
     private fun setupViewModel() {
@@ -212,7 +165,6 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
         artistSongs = sorted
         songAdapter.submitList(sorted)
         updateSongCount(sorted.size)
-        setSongListLocked()
     }
 
     private fun updateSongCount(count: Int) {
@@ -237,9 +189,25 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
     }
 
     private fun bindMusicService() {
-        val intent = Intent(this, MusicService::class.java)
-        startService(intent)
-        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        MusicManager.registerConnectionCallback(this)
+        val alreadyConnected = MusicManager.bind(this)
+        musicService = MusicManager.getService()
+        if (alreadyConnected && musicService != null) {
+            onServiceConnected(musicService)
+        }
+    }
+
+    // ==================== MusicManager.ConnectionCallback 实现 ====================
+
+    override fun onServiceConnected(service: MusicService?) {
+        if (isDestroyed || isFinishing) return
+        musicService = service ?: return
+        observeMusicService()
+    }
+
+    override fun onServiceDisconnected() {
+        musicService = null
+        removeMusicServiceObservers()
     }
 
     /**
@@ -286,42 +254,22 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
     // ==================== OnSongClickListener ====================
 
     override fun onSongClick(song: Song, position: Int) {
-        if (isServiceBound) {
-            // 以当前歌手的歌曲列表作为播放列表，确保上下曲仅在歌手内切换
-            val index =
-                artistSongs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
-            musicService?.setSongList(artistSongs, index)
-            // 歌手详情作为播放入口：来源为 f1$歌手名
-            musicService?.setPlaySource(
-                PlaySource.build(PlaySource.ARTIST, artistName)
-            )
-            if (musicService?.currentSong?.value?.id == song.id) {
-                if (musicService?.isPlaying?.value != true) {
-                    musicService?.requestAudioFocusAndPlay()
-                    musicService?.updateNotification()
-                }
-            } else {
-                musicService?.requestAudioFocusAndPlayCurrentSong()
+        // 以当前歌手的歌曲列表作为播放列表，确保上下曲仅在歌手内切换
+        val index =
+            artistSongs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
+        musicService?.setSongList(artistSongs, index)
+        // 歌手详情作为播放入口：来源为 f1$歌手名
+        musicService?.setPlaySource(
+            PlaySource.build(PlaySource.ARTIST, artistName)
+        )
+        if (musicService?.currentSong?.value?.id == song.id) {
+            if (musicService?.isPlaying?.value != true) {
+                musicService?.requestAudioFocusAndPlay()
                 musicService?.updateNotification()
             }
         } else {
-            // 服务未绑定，通过 Intent 启动服务播放
-            val intent = Intent(this, MusicService::class.java).apply {
-                action = MusicService.ACTION_PLAY
-                putExtra("songId", song.id)
-                putExtra("position", position)
-                putExtra("songListSize", artistSongs.size)
-                // 歌手详情作为播放入口：来源为 f1$歌手名
-                putExtra(
-                    "sourceTag",
-                    PlaySource.build(PlaySource.ARTIST, artistName)
-                )
-                val songDataList = artistSongs.map { s ->
-                    "${s.id}|${s.title}|${s.artist}|${s.album}|${s.duration}|${s.path}|${s.albumArt ?: ""}"
-                }
-                putStringArrayListExtra("songList", ArrayList(songDataList))
-            }
-            startService(intent)
+            musicService?.requestAudioFocusAndPlayCurrentSong()
+            musicService?.updateNotification()
         }
     }
 

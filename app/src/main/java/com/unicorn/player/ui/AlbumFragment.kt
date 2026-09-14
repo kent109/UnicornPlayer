@@ -56,8 +56,6 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     /** 每个首字母对应的第一个 Header 在扁平列表中的位置，用于侧边栏快速定位 */
     private var letterIndexMap: Map<String, Int> = emptyMap()
 
-    private var clickPlay: Boolean = false
-
     companion object {
         fun newInstance() = AlbumFragment()
 
@@ -243,9 +241,8 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     override fun onAlbumClick(album: Album, position: Int) {
         // 使用 launcher 启动，以便在歌曲改动后（RESULT_OK）触发刷新
         val playingAlbum = albumAdapter.getPlayingAlbum()
-        clickPlay = playingAlbum != null && playingAlbum == album.name
         playlistSongsLauncher.launch(
-            AlbumSongsActivity.newIntent(requireContext(), album.name, clickPlay)
+            AlbumSongsActivity.newIntent(requireContext(), album.name)
         )
     }
 
@@ -270,7 +267,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
                 val albumSongs = allSongs.filter { it.album.equals(album.name, ignoreCase = true) }
                 val sortedAlbumSongs = viewModel.sortWithCurrentMode(albumSongs)
 
-                clickPlay = PlayHelper.playAlbum(
+                PlayHelper.playAlbum(
                     context = requireContext(),
                     service = service,
                     albumName = album.name,

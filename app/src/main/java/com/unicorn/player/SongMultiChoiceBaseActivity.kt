@@ -54,13 +54,13 @@ open class SongMultiChoiceBaseActivity : AppCompatActivity(),
     }
 
     private fun updateServiceSongList() {
-        // 正在播放歌单时，不覆盖歌单的歌曲列表
-        if (musicService?.isPlayingPlaylist() == true) return
+        // 当前播放来源不是 f0 时，不覆盖播放列表
+        val currentSong = musicService?.currentSong?.value
+        if (currentSong != null && musicService?.isPlayingFromSongs() == false) return
 
         val sortedSongs = viewModel.getSortedFullSongs()
         if (sortedSongs.isEmpty()) return
 
-        val currentSong = musicService?.currentSong?.value
         val currentIndex = if (currentSong != null) {
             sortedSongs.indexOfFirst { it.id == currentSong.id }.takeIf { it != -1 } ?: 0
         } else {

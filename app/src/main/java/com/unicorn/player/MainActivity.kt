@@ -1,14 +1,11 @@
 package com.unicorn.player
 
 import android.Manifest
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.IBinder
 import android.view.View
 import android.widget.SearchView
 import android.widget.Toast
@@ -21,6 +18,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayoutMediator
 import com.unicorn.player.databinding.ActivityMainBinding
+import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
@@ -45,7 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
-    MultiChoiceFragment.OnMultiChoiceActionListener {
+    MusicManager.ConnectionCallback, MultiChoiceFragment.OnMultiChoiceActionListener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MusicViewModel
@@ -53,10 +51,9 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     private lateinit var playlistViewModel: PlaylistViewModel
     private lateinit var songInfoHelper: SongInfoHelper
 
-    // SongListHost 接口实现：暴露给 SongsFragment 使用
+    // SongListHost 接口实现：通过MusicManager获取Service
     override var musicService: MusicService? = null
         private set
-    private var isServiceBound = false
 
     // 将 scrollToContentClick 提升为类级别变量，解决作用域问题
     private var scrollToContentClick = false
@@ -128,35 +125,6 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
         // READ_MEDIA_AUDIO 已授予时加载音乐（用户拒绝时 finish() 已调用）
         if (results[Manifest.permission.READ_MEDIA_AUDIO] == true) {
             loadMusic()
-        }
-    }
-
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            // 检查 Activity 是否已销毁，避免在销毁后操作 UI 导致 crash
-            if (isDestroyed || isFinishing) return
-
-            val binder = service as MusicService.MusicBinder
-            musicService = binder.getService()
-            isServiceBound = true
-            musicService?.syncCurrentPositionToDataStore()
-            setupBottomPlayerObservers()  // 服务连接成功后设置观察者
-            updateBottomPlayerUI()  // 立即更新UI状态
-            // 服务连接后同步排序后的歌曲列表，确保播放顺序与UI一致
-            if (viewModel.fullSongs.value?.isNotEmpty() == true) {
-                updateServiceSongList()
-            }
-            // 通知歌曲 Fragment 服务已连接
-            getSongsFragment()?.onServiceConnected()
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            musicService = null
-            isServiceBound = false
-            // 清理观察者，避免内存泄漏
-            removeBottomPlayerObservers()
-            // 通知歌曲 Fragment 服务已断开
-            getSongsFragment()?.onServiceDisconnected()
         }
     }
 
@@ -430,7 +398,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
         // 监听完整歌曲列表变化，当服务已绑定时自动同步排序后的列表到 MusicService
         // 这确保应用重启后，MusicService 的播放顺序与 UI 显示的排序一致
         viewModel.fullSongs.observe(this) { songs ->
-            if (songs.isNotEmpty() && isServiceBound) {
+            if (songs.isNotEmpty() && musicService != null) {
                 updateServiceSongList()
             }
         }
@@ -451,17 +419,18 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     /**
      * 将排序后的完整列表同步到 MusicService，确保播放顺序与 UI 一致。
      *
-     * 注意：当正在播放歌单（f3$xxx）时，此方法不能覆盖歌单的歌曲列表，
-     * 否则会将播放列表退化为全部歌曲。歌单列表由 syncPlaylistSongList 管理。
+     * 注意：只有当当前播放来源是 f0（全部歌曲）或从未播放过时，才允许覆盖。
+     * f1（歌手）、f2（专辑）、f3（歌单）的播放列表由各自 Activity 管理，
+     * 进入其他界面不点击播放时，不应改变 MusicService 的播放列表。
      */
     private fun updateServiceSongList() {
-        // 正在播放歌单时，不覆盖歌单的歌曲列表
-        if (musicService?.isPlayingPlaylist() == true) return
+        // 当前播放来源不是 f0 时，不覆盖播放列表
+        val currentSong = musicService?.currentSong?.value
+        if (currentSong != null && musicService?.isPlayingFromSongs() == false) return
 
         val sortedSongs = viewModel.getSortedFullSongs()
         if (sortedSongs.isEmpty()) return
 
-        val currentSong = musicService?.currentSong?.value
         val currentIndex = if (currentSong != null) {
             sortedSongs.indexOfFirst { it.id == currentSong.id }.takeIf { it != -1 } ?: 0
         } else {
@@ -766,8 +735,20 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
                 lifecycleScope.launch {
                     val repository = MusicRepository(this@MainActivity)
                     val clone = selectedSongIds.toMutableSet()
+                    // 删除前先获取歌单名称，用于后续通知 MusicService
+                    val playlists = withContext(Dispatchers.IO) {
+                        repository.getAllPlaylists().firstOrNull()
+                    } ?: emptyList()
+                    val deletedNames = playlists
+                        .filter { it.id in clone }
+                        .map { it.name }
+                        .toSet()
                     for (playlistId in clone) {
                         repository.deletePlaylistById(playlistId)
+                    }
+                    // 如果删除的歌单包含当前正在播放的歌单，清理播放状态
+                    if (deletedNames.isNotEmpty()) {
+                        musicService?.handlePlaylistDeleted(deletedNames)
                     }
                     PlaylistRefresher.notifyPlaylistsChanged()
                 }
@@ -995,14 +976,44 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     }
 
     private fun bindMusicService(restoreFlag: Int) {
-        val intent = Intent(this, MusicService::class.java)
-        intent.putExtra(KEY_CREATE, "1")
-        // 传递是否重建的标记
-        intent.putExtra(KEY_RESTORE, restoreFlag)
-        // 先startService确保服务在前台运行
-        startService(intent)
-        // 再bindService确保能正确绑定
-        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        // 注册服务连接回调，在异步绑定完成时收到通知
+        MusicManager.registerConnectionCallback(this)
+        // 使用MusicManager绑定MusicService
+        val alreadyConnected = MusicManager.bind(this)
+        // 获取MusicService实例（如果服务已绑定则立即返回，否则需等待回调）
+        musicService = MusicManager.getService()
+        if (alreadyConnected && musicService != null) {
+            // 服务已连接（非首次绑定），直接执行初始化
+            onServiceConnected(musicService)
+        }
+        // 通过 startService 传递 KEY_CREATE/KEY_RESTORE 标记，
+        // 让 MusicService.onStartCommand 的 else 分支执行 loadPlaybackState
+        val serviceIntent = Intent(this, MusicService::class.java).apply {
+            putExtra(KEY_CREATE, "1")
+            putExtra(KEY_RESTORE, restoreFlag)
+        }
+        startService(serviceIntent)
+    }
+
+    // ==================== MusicManager.ConnectionCallback 实现 ====================
+
+    override fun onServiceConnected(service: MusicService?) {
+        musicService = service ?: return
+        musicService?.syncCurrentPositionToDataStore()
+        setupBottomPlayerObservers()
+        updateBottomPlayerUI()
+        // 服务连接后同步排序后的歌曲列表，确保播放顺序与UI一致
+        if (viewModel.fullSongs.value?.isNotEmpty() == true) {
+            updateServiceSongList()
+        }
+        // 通知歌曲 Fragment 服务已连接
+        getSongsFragment()?.onServiceConnected()
+    }
+
+    override fun onServiceDisconnected() {
+        musicService = null
+        removeBottomPlayerObservers()
+        getSongsFragment()?.onServiceDisconnected()
     }
 
     // ==================== SongListHost 接口实现 ====================
@@ -1015,7 +1026,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
             // 通过song ID查找在列表中的真实位置
             val realPosition =
                 songs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
-            if (isServiceBound) {
+            if (musicService != null) {
                 musicService?.setSongList(songs, realPosition)
                 // 歌曲 tab 作为播放入口：来源为 f0（全部歌曲）
                 musicService?.setPlaySource(PlaySource.SONGS)
@@ -1072,8 +1083,8 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
 
     override fun onResume() {
         super.onResume()
-        // 只更新UI状态，不重新设置观察者或加载播放状态
-        if (isServiceBound && musicService != null) {
+        // 更新UI状态
+        if (musicService != null) {
             updateBottomPlayerUI()
         }
     }
@@ -1093,10 +1104,13 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
 
         // 清理观察者，避免内存泄漏
         removeBottomPlayerObservers()
-        if (isServiceBound) {
-            unbindService(serviceConnection)
-            isServiceBound = false
-        }
+
+        // 注销服务连接回调
+        MusicManager.unregisterConnectionCallback(this)
+
+        // 使用MusicManager解绑
+        MusicManager.unbind(this)
+
         super.onDestroy()
     }
 
