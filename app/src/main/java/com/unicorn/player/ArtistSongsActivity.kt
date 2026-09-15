@@ -2,11 +2,14 @@ package com.unicorn.player
 
 import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -24,6 +27,7 @@ import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongMultiChoiceFragment
+import com.unicorn.player.util.AudioTagEditor
 import com.unicorn.player.util.ScrollToTopHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
@@ -42,6 +46,14 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
     private lateinit var binding: ActivityArtistSongsBinding
     private lateinit var songAdapter: SongAdapter
     private lateinit var songInfoHelper: SongInfoHelper
+
+    private val writePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            songInfoHelper.retryPendingWrite()
+        }
+    }
 
     private var artistName: String = ""
 
@@ -72,6 +84,7 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
 
         songInfoHelper = SongInfoHelper(this)
         setupAddToPlaylistListener()
+        setupWritePermissionCallback()
 
         // 设置 TitleBar
         binding.titleBar.setTitle(artistName)
@@ -291,6 +304,17 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
         songInfoHelper.onAddToPlaylistListener = object : SongInfoHelper.OnAddToPlaylistListener {
             override fun onAddToPlaylist(song: Song) {
                 showSelectPlaylistDialog(song)
+            }
+        }
+    }
+
+    /**
+     * 写入权限请求回调
+     */
+    private fun setupWritePermissionCallback() {
+        songInfoHelper.writePermissionCallback = object : AudioTagEditor.WritePermissionCallback {
+            override fun onRequestWritePermission(intentSender: IntentSender, requestCode: Int) {
+                writePermissionLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
             }
         }
     }

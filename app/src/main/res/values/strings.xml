@@ -58,4 +58,12 @@
     <string name="update_download_failed">下载失败，请重试</string>
     <string name="share_friends">分享好友</string>
     <string name="share_text">给你安利一款体验良好的音乐播放器『轻籁』</string>
+
+    <!-- 歌曲信息编辑 -->
+    <string name="edit_song_info">编辑歌曲信息</string>
+    <string name="done">完成</string>
+    <string name="tag_edit_success">标签修改成功</string>
+    <string name="tag_edit_failed">标签修改失败</string>
+    <string name="tag_edit_permission_pending">请授权后完成修改</string>
+    <string name="tag_no_changes">没有修改内容</string>
 </resources>

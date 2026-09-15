@@ -1,14 +1,15 @@
 package com.unicorn.player
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.SearchView
 import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -32,6 +33,7 @@ import com.unicorn.player.ui.PlaylistFragment
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongsFragment
+import com.unicorn.player.util.AudioTagEditor
 import com.unicorn.player.util.UpdateHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
@@ -50,6 +52,16 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
 
     private lateinit var playlistViewModel: PlaylistViewModel
     private lateinit var songInfoHelper: SongInfoHelper
+
+    // ActivityResultLauncher
+    private val writePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            // 用户授权成功，重试写入
+            songInfoHelper.retryPendingWrite()
+        }
+    }
 
     // SongListHost 接口实现：通过MusicManager获取Service
     override var musicService: MusicService? = null
@@ -136,6 +148,7 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
         // 初始化歌曲信息帮助类
         songInfoHelper = SongInfoHelper(this)
         setupAddToPlaylistListener()
+        setupWritePermissionCallback()
         songInfoHelper.onDeleteListener = object : SongInfoHelper.OnDeleteListener {
             override fun onDelete(song: Song) {
                 // 若删除的是当前播放歌曲，移除该歌曲（停止播放、清空底部播放栏、移除通知）
@@ -1139,6 +1152,17 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
         songInfoHelper.onAddToPlaylistListener = object : SongInfoHelper.OnAddToPlaylistListener {
             override fun onAddToPlaylist(song: Song) {
                 showSelectPlaylistDialog(song)
+            }
+        }
+    }
+
+    /**
+     * 写入权限请求回调
+     */
+    private fun setupWritePermissionCallback() {
+        songInfoHelper.writePermissionCallback = object : AudioTagEditor.WritePermissionCallback {
+            override fun onRequestWritePermission(intentSender: IntentSender, requestCode: Int) {
+                writePermissionLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
             }
         }
     }

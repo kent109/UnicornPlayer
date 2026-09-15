@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingBottom="16dp">
+
+    <!-- 拖动指示条 -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="14dp"
+        android:background="@drawable/drag_handle" />
+
+    <!-- 歌曲标题区域 -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="18dp">
+
+        <!-- 左侧占位（与右侧按钮等宽，保证标题真正居中） -->
+        <View
+            android:id="@+id/titleSpacer"
+            android:layout_width="56dp"
+            android:layout_height="0dp"
+            android:visibility="invisible"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- 歌曲标题（夹在占位与按钮之间，水平居中） -->
+        <TextView
+            android:id="@+id/tvSongTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="marquee"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:maxWidth="180dp"
+            android:singleLine="true"
+            android:textAlignment="center"
+            android:textColor="@color/onSurface"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btnEditContainer"
+            app:layout_constraintStart_toEndOf="@+id/titleSpacer"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <RelativeLayout
+            android:id="@+id/rlSongTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btnEditContainer"
+            app:layout_constraintStart_toEndOf="@+id/titleSpacer"
+            app:layout_constraintTop_toTopOf="parent">
+            <!-- 歌名编辑框（编辑状态下显示） -->
+            <EditText
+                android:id="@+id/etSongTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true"
+                android:background="@android:color/transparent"
+                android:gravity="center"
+                android:importantForAutofill="no"
+                android:includeFontPadding="false"
+                android:inputType="text"
+                android:maxWidth="180dp"
+                android:maxLines="1"
+                android:padding="0dp"
+                android:textColor="@color/onSurface"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- 标题编辑标记（始终占位，编辑状态下可见，紧贴编辑框右侧） -->
+            <TextView
+                android:id="@+id/tvTitleAsterisk"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_toEndOf="@+id/etSongTitle"
+                android:gravity="center_horizontal"
+                android:includeFontPadding="false"
+                android:text="   *"
+                android:textColor="@android:color/holo_red_light"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:visibility="invisible" />
+        </RelativeLayout>
+
+        <!-- 编辑/完成按钮区域（固定宽度，右侧） -->
+        <FrameLayout
+            android:id="@+id/btnEditContainer"
+            android:layout_width="56dp"
+            android:layout_height="wrap_content"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <!-- 编辑按钮 -->
+            <ImageButton
+                android:id="@+id/btnEdit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="@null"
+                android:contentDescription="@string/edit_song_info"
+                android:src="@drawable/ic_edit" />
+
+            <!-- 完成按钮（初始隐藏） -->
+            <TextView
+                android:id="@+id/btnDone"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:gravity="center"
+                android:text="@string/done"
+                android:textColor="@color/primary"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- 信息列表 -->
+    <LinearLayout
+        android:id="@+id/infoContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:orientation="vertical"
+        android:splitMotionEvents="false" />
+
+</LinearLayout>

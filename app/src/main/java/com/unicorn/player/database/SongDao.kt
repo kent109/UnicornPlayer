@@ -31,6 +31,9 @@ interface SongDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertSongsIgnoreExisting(songs: List<Song>): LongArray
 
+    @Update
+    fun updateSong(song: Song)
+
     @Delete
     fun deleteSong(song: Song): Int
 
