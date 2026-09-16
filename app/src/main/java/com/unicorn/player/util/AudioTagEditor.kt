@@ -15,6 +15,7 @@ import com.unicorn.player.model.Song
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.audio.mp3.MP3File
 import org.jaudiotagger.tag.FieldKey
+import org.jaudiotagger.tag.Tag
 import org.jaudiotagger.tag.id3.ID3v24Tag
 import java.io.File
 import java.util.Locale
@@ -118,16 +119,16 @@ class AudioTagEditor(private val context: Context) {
             // MP3 的写入器只认 ID3v2 标签，需单独设置。
             if (audioFile is MP3File) {
                 val id3Tag = audioFile.iD3v2Tag ?: ID3v24Tag()
-                id3Tag.setField(FieldKey.TITLE, newTitle)
-                id3Tag.setField(FieldKey.ARTIST, newArtist)
-                id3Tag.setField(FieldKey.ALBUM, newAlbum)
+                setOrDeleteField(id3Tag, FieldKey.TITLE, newTitle)
+                setOrDeleteField(id3Tag, FieldKey.ARTIST, newArtist)
+                setOrDeleteField(id3Tag, FieldKey.ALBUM, newAlbum)
                 audioFile.setID3v2Tag(id3Tag)
                 audioFile.tag = id3Tag
             } else {
                 val tag = audioFile.tag ?: audioFile.createDefaultTag()
-                tag.setField(FieldKey.TITLE, newTitle)
-                tag.setField(FieldKey.ARTIST, newArtist)
-                tag.setField(FieldKey.ALBUM, newAlbum)
+                setOrDeleteField(tag, FieldKey.TITLE, newTitle)
+                setOrDeleteField(tag, FieldKey.ARTIST, newArtist)
+                setOrDeleteField(tag, FieldKey.ALBUM, newAlbum)
                 audioFile.tag = tag
             }
 
@@ -167,7 +168,12 @@ class AudioTagEditor(private val context: Context) {
             MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
 
             // 同步更新 Room 数据库，使 UI 立即生效
-            val updatedSong = song.copy(title = newTitle, artist = newArtist, album = newAlbum)
+            // 标题为空取文件名（去后缀），歌手/专辑为空取 "<unknown>"
+            val fileName = song.path.substringAfterLast('/').substringBeforeLast('.')
+            val dbTitle = newTitle.ifEmpty { fileName }
+            val dbArtist = newArtist.ifEmpty { "<unknown>" }
+            val dbAlbum = newAlbum.ifEmpty { "<unknown>" }
+            val updatedSong = song.copy(title = dbTitle, artist = dbArtist, album = dbAlbum)
             MusicDatabase.getDatabase(context).songDao().updateSong(updatedSong)
 
             Log.d(TAG, "标签修改成功: ${song.path}")
@@ -215,8 +221,13 @@ class AudioTagEditor(private val context: Context) {
         MediaScannerConnection.scanFile(context, arrayOf(songPath), null, null)
 
         // 在后台线程更新 Room 数据库（retryPendingWrite 可能在主线程调用）
+        // 标题为空取文件名（去后缀），歌手/专辑为空取 "<unknown>"
         if (song != null && newTitle != null && newArtist != null && newAlbum != null) {
-            val updatedSong = song.copy(title = newTitle, artist = newArtist, album = newAlbum)
+            val fileName = song.path.substringAfterLast('/').substringBeforeLast('.')
+            val updatedSong = song.copy(
+                title = newTitle.ifEmpty { fileName },
+                artist = newArtist.ifEmpty { "<unknown>" },
+                album = newAlbum.ifEmpty { "<unknown>" })
             Thread {
                 MusicDatabase.getDatabase(context).songDao().updateSong(updatedSong)
             }.start()
@@ -237,5 +248,20 @@ class AudioTagEditor(private val context: Context) {
         pendingNewTitle = null
         pendingNewArtist = null
         pendingNewAlbum = null
+    }
+
+    /**
+     * 设置或删除标签字段：值为空时删除字段，非空时设置字段
+     */
+    private fun setOrDeleteField(tag: Tag, key: FieldKey, value: String) {
+        if (value.isEmpty()) {
+            try {
+                tag.deleteField(key)
+            } catch (_: Exception) {
+                // 字段不存在时忽略
+            }
+        } else {
+            tag.setField(key, value)
+        }
     }
 }

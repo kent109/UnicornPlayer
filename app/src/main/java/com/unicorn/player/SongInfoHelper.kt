@@ -71,7 +71,7 @@ class SongInfoHelper(private val context: Context) {
         // JAudiotagger 仅支持修改以下格式的标签，不支持的格式隐藏编辑按钮
         val ext = song.path.substringAfterLast('.', "").lowercase(Locale.getDefault())
         if (ext !in listOf("mp3", "flac", "ogg", "wav", "m4a")) {
-            dialogBinding.btnEditContainer.visibility = View.GONE
+            dialogBinding.btnEditContainer.visibility = View.INVISIBLE
         }
 
         // 锁定标题区域高度，避免切换编辑状态时布局抖动
@@ -152,29 +152,44 @@ class SongInfoHelper(private val context: Context) {
 
         // 完成按钮：比较修改并执行
         dialogBinding.btnDone.setOnClickListener {
-            val newTitle = dialogBinding.etSongTitle.text.toString().trim()
-            val newArtist = artistItemBinding.etValue.text.toString().trim()
-            val newAlbum = albumItemBinding.etValue.text.toString().trim()
+            val rawTitle = dialogBinding.etSongTitle.text.toString().trim()
+            val rawArtist = artistItemBinding.etValue.text.toString().trim()
+            val rawAlbum = albumItemBinding.etValue.text.toString().trim()
 
-            // 三个值均未修改，退出编辑状态不做任何处理
-            if (newTitle == originalTitle &&
-                newArtist == originalArtist &&
-                newAlbum == originalAlbum
+            // 空字符串和 "<unknown>" 视为等价，避免无意义的修改
+            fun normalize(v: String) = if (v.isEmpty()) "<unknown>" else v
+            val normOrigTitle = normalize(originalTitle)
+            val normOrigArtist = normalize(originalArtist)
+            val normOrigAlbum = normalize(originalAlbum)
+            val normNewTitle = normalize(rawTitle)
+            val normNewArtist = normalize(rawArtist)
+            val normNewAlbum = normalize(rawAlbum)
+
+            // 三个值均未修改（忽略空/<unknown>差异），退出编辑状态
+            if (normNewTitle == normOrigTitle &&
+                normNewArtist == normOrigArtist &&
+                normNewAlbum == normOrigAlbum
             ) {
                 exitEditMode(dialogBinding, artistItemBinding, albumItemBinding)
                 return@setOnClickListener
             }
 
-            // 有修改，在后台线程执行标签修改
+            // 展示值：标题为空取文件名（去后缀），歌手/专辑为空取 "<unknown>"
+            val fileName = song.path.substringAfterLast('/').substringBeforeLast('.')
+            val displayTitle = rawTitle.ifEmpty { fileName }
+            val displayArtist = normNewArtist
+            val displayAlbum = normNewAlbum
+
+            // 有修改，在后台线程执行标签修改（传原始值，空值由 AudioTagEditor 删除标签）
             Thread {
-                val result = audioTagEditor.modifyAudioTags(song, newTitle, newArtist, newAlbum)
+                val result = audioTagEditor.modifyAudioTags(song, rawTitle, rawArtist, rawAlbum)
                 Handler(Looper.getMainLooper()).post {
                     when (result) {
                         AudioTagEditor.TagEditResult.SUCCESS -> {
                             // 更新展示值并退出编辑状态
-                            dialogBinding.tvSongTitle.text = newTitle
-                            artistItemBinding.tvValue.text = newArtist
-                            albumItemBinding.tvValue.text = newAlbum
+                            dialogBinding.tvSongTitle.text = displayTitle
+                            artistItemBinding.tvValue.text = displayArtist
+                            albumItemBinding.tvValue.text = displayAlbum
                             exitEditMode(dialogBinding, artistItemBinding, albumItemBinding)
                             Toast.makeText(
                                 context,
@@ -188,9 +203,9 @@ class SongInfoHelper(private val context: Context) {
                             pendingDialogBinding = dialogBinding
                             pendingArtistItemBinding = artistItemBinding
                             pendingAlbumItemBinding = albumItemBinding
-                            pendingNewTitle = newTitle
-                            pendingNewArtist = newArtist
-                            pendingNewAlbum = newAlbum
+                            pendingNewTitle = displayTitle
+                            pendingNewArtist = displayArtist
+                            pendingNewAlbum = displayAlbum
                             // 保持编辑状态不变
                             Toast.makeText(
                                 context,
