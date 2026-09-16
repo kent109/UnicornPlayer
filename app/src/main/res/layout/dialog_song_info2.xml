@@ -24,7 +24,7 @@
         <!-- 左侧占位（与右侧按钮等宽，保证标题真正居中） -->
         <View
             android:id="@+id/titleSpacer"
-            android:layout_width="56dp"
+            android:layout_width="36dp"
             android:layout_height="0dp"
             android:visibility="invisible"
             app:layout_constraintBottom_toBottomOf="parent"
@@ -101,7 +101,7 @@
         <!-- 编辑/完成按钮区域（固定宽度，右侧） -->
         <FrameLayout
             android:id="@+id/btnEditContainer"
-            android:layout_width="56dp"
+            android:layout_width="36dp"
             android:layout_height="wrap_content"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
