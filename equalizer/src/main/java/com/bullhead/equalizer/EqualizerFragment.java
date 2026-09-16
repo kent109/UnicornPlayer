@@ -140,10 +140,18 @@ public class EqualizerFragment extends Fragment {
                 Log.e(TAG, "bassBoost.getProperties error:" + e.getMessage());
                 bassBoostSetting = new BassBoost.Settings();
             }
-            bassBoostSetting.strength = Settings.equalizerModel.getBassStrength();
-            bassBoost.setProperties(bassBoostSetting);
+            bassBoostSetting.strength = clampBassStrength(Settings.equalizerModel.getBassStrength());
+            // 同步回 EqualizerModel，确保后续读取也是合法值（修复 bassStrength=-1 导致的 crash）
+            Settings.equalizerModel.setBassStrength(bassBoostSetting.strength);
             try {
-                presetReverb.setPreset(Settings.equalizerModel.getReverbPreset());
+                bassBoost.setProperties(bassBoostSetting);
+            } catch (RuntimeException e) {
+                // setProperties 可能因底层 AudioEffect 状态异常而抛 RuntimeException
+                Log.e(TAG, "bassBoost.setProperties failed, strength=" + bassBoostSetting.strength, e);
+            }
+
+            try {
+                presetReverb.setPreset(clampReverbPreset(Settings.equalizerModel.getReverbPreset()));
             } catch (IllegalArgumentException e) {
                 Log.e(TAG, "Invalid reverb preset value: " + Settings.equalizerModel.getReverbPreset());
                 presetReverb.setPreset(PresetReverb.PRESET_NONE);
@@ -218,6 +226,11 @@ public class EqualizerFragment extends Fragment {
             Settings.isEqualizerEnabled = isChecked;
             Settings.equalizerModel.setEqualizerEnabled(isChecked);
             setControlsEnabled(isChecked);
+            if (isChecked) {
+                // 打开瞬间从 Settings 重新应用全部值：覆盖"开关未开时导入、之后打开开关"的场景，
+                // 否则音效参数和 seekbar/旋钮都停留在 onCreate/onViewCreated 时的旧值
+                refreshFromSettingsOnEnable();
+            }
         });
 
         setControlsEnabled(Settings.isEqualizerEnabled);
@@ -537,6 +550,238 @@ public class EqualizerFragment extends Fragment {
         }
         dataset.updateValues(points);
         chart.notifyDataUpdate();
+    }
+
+    /**
+     * 应用导入的自定义均衡器配置。
+     *
+     * 行为：
+     * 1) 持久化写入 Settings（SharedPreferences）；
+     * 2) 同步 Settings 静态字段和 EqualizerModel；
+     * 3) 若均衡器开关未打开或音效未就绪：仅写数据，不操作 UI（控件本就被遮罩）；
+     *    返回 false；
+     * 4) 若均衡器开关已打开：刷新 mEqualizer / BassBoost / PresetReverb 的实际音效参数，
+     *    切到自定义预设（spinner position=0），并刷新 5 个频段 seekbar、低音/虚拟旋钮、频响曲线；
+     *    返回 true。
+     *
+     * @param bandLevels   5 个频段的电平值（millibels，范围约 -1500 ~ +1500）
+     * @param bassStrength 低音强度（0 ~ 1000）
+     * @param reverbPreset 虚拟音效预设（0 ~ 6）
+     * @return true 表示已应用到运行时音效；false 表示仅写入了持久化数据
+     */
+    public boolean applyImportedConfig(int[] bandLevels, short bassStrength, short reverbPreset) {
+        if (bandLevels == null || bandLevels.length < 5) {
+            Log.e(TAG, "applyImportedConfig: invalid bandLevels");
+            return false;
+        }
+
+        // 1. 持久化写入
+        int[] toSave = new int[5];
+        System.arraycopy(bandLevels, 0, toSave, 0, 5);
+        Settings.saveCustomPreset(ctx, toSave);
+
+        // 反向换算 AnalogController 进度（0~19）用于持久化 + 可视化刷新
+        int bassProgress = (int) Math.round(((float) bassStrength) * 19.0 / 1000.0);
+        if (bassProgress < 0) bassProgress = 0;
+        if (bassProgress > 19) bassProgress = 19;
+        Settings.saveBassProgress(ctx, bassProgress);
+
+        int reverbProgress = (int) Math.round(((float) reverbPreset) * 19.0 / 6.0);
+        if (reverbProgress < 0) reverbProgress = 0;
+        if (reverbProgress > 19) reverbProgress = 19;
+        Settings.saveReverbProgress(ctx, reverbProgress);
+
+        // 2. 同步 Settings 静态字段
+        for (int i = 0; i < 5; i++) {
+            Settings.seekbarpos[i] = toSave[i];
+        }
+        Settings.bassStrength = bassStrength;
+        Settings.reverbPreset = reverbPreset;
+        Settings.presetPos = 0;
+        Settings.savePresetPos(ctx, 0);
+
+        // 同步 EqualizerModel
+        if (Settings.equalizerModel != null) {
+            int[] modelSeek = Settings.equalizerModel.getSeekbarpos();
+            if (modelSeek != null && modelSeek.length >= 5) {
+                for (int i = 0; i < 5; i++) {
+                    modelSeek[i] = toSave[i];
+                }
+            }
+            Settings.equalizerModel.setBassStrength(bassStrength);
+            Settings.equalizerModel.setReverbPreset(reverbPreset);
+            Settings.equalizerModel.setPresetPos(0);
+        }
+
+        // 3. 开关未打开 或 音效未就绪：仅写数据即可
+        if (!isAudioEffectsAvailable ||
+                equalizerSwitch == null || !equalizerSwitch.isChecked()) {
+            Log.d(TAG, "applyImportedConfig: EQ switch off, persisted only");
+            return false;
+        }
+
+        // 4. 开关已打开：刷新运行时音效 + UI
+        // 4.1 切到自定义（spinner position=0）；若已为 0，listener 不会触发，需手动刷新 seekbar + chart
+        if (presetSpinner != null && presetSpinner.getSelectedItemPosition() != 0) {
+            // listener 会从 Settings.loadCustomPreset 加载最新持久化的值
+            presetSpinner.setSelection(0);
+        } else {
+            // 已是自定义或 spinner 未就绪，手动刷新 5 频段 seekbar + chart
+            refreshBandLevelsInternal(toSave);
+        }
+
+        // 4.2 应用低音/虚拟参数到 BassBoost/PresetReverb + 更新 AnalogController 可视化指针
+        applyBassAndReverbInternal(bassStrength, bassProgress, reverbPreset, reverbProgress);
+        return true;
+    }
+
+    /**
+     * 内部：刷新 5 频段 seekbar + chart（不依赖 presetSpinner 的 listener）。
+     * 参考 {@link #discardEq(boolean)} 的实现。
+     */
+    private void refreshBandLevelsInternal(int[] bandLevels) {
+        final short numberOfFreqBands = 5;
+        final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
+        for (short i = 0; i < numberOfFreqBands; i++) {
+            mEqualizer.setBandLevel(i, (short) bandLevels[i]);
+            if (seekBarFinal[i] != null) {
+                seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
+                int id = seekBarFinal[i].getId();
+                if (id >= 0 && id < 5) {
+                    Settings.seekbarpos[id] = bandLevels[i];
+                    if (Settings.equalizerModel != null &&
+                            Settings.equalizerModel.getSeekbarpos() != null &&
+                            id < Settings.equalizerModel.getSeekbarpos().length) {
+                        Settings.equalizerModel.getSeekbarpos()[id] = bandLevels[i];
+                    }
+                }
+            }
+            points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
+        }
+        if (dataset != null && chart != null) {
+            dataset.updateValues(points);
+            chart.notifyDataUpdate();
+        }
+    }
+
+    /**
+     * 内部：将低音/虚拟参数应用到 BassBoost/PresetReverb，并更新 AnalogController 可视化指针。
+     * AnalogController.setProgress 不会触发其 onProgressChangedListener（listener 仅 touch 时触发），
+     * 因此需直接调用底层 API 应用音效参数。
+     */
+    private void applyBassAndReverbInternal(short bassStrength, int bassProgress,
+                                           short reverbPreset, int reverbProgress) {
+        // 直接应用到 BassBoost（强度限制在 [0, 1000]）
+        short safeBassStrength = clampBassStrength(bassStrength);
+        if (bassBoost != null) {
+            try {
+                BassBoost.Settings bassSetting = bassBoost.getProperties();
+                bassSetting.strength = safeBassStrength;
+                bassBoost.setProperties(bassSetting);
+            } catch (RuntimeException e) {
+                Log.e(TAG, "applyBassAndReverb: bassBoost.setProperties failed, strength=" + safeBassStrength, e);
+            }
+        }
+        // 直接应用到 PresetReverb（预设限制在 [0, 6]）
+        short safeReverbPreset = clampReverbPreset(reverbPreset);
+        if (presetReverb != null) {
+            try {
+                presetReverb.setPreset(safeReverbPreset);
+            } catch (IllegalArgumentException e) {
+                Log.e(TAG, "applyBassAndReverb: invalid reverb preset " + safeReverbPreset, e);
+                presetReverb.setPreset(PresetReverb.PRESET_NONE);
+            }
+        }
+        // AnalogController 仅更新可视化指针位置（其 listener 只在 touch 时触发，不会重复写入）。
+        // 进度为 0 时沿用 onViewCreated 的约定：setProgress(-2) 表示指针垂直向下（中立位）。
+        if (bassController != null) {
+            bassController.setProgress(bassProgress == 0 ? -2 : bassProgress);
+            bassController.invalidate();
+        }
+        if (reverbController != null) {
+            reverbController.setProgress(reverbProgress == 0 ? -2 : reverbProgress);
+            reverbController.invalidate();
+        }
+    }
+
+    /**
+     * 开关打开时从 Settings 重新应用全部值到音效和控件。
+     *
+     * 背景：onCreate/onViewCreated 已经用当时的 Settings 值初始化了音效参数和控件，
+     * 若用户在开关未打开时执行导入（applyImportedConfig 走"仅持久化"分支），
+     * 之后在同一页面打开开关，则必须在此处重新应用，否则：
+     * - mEqualizer 各频段电平仍是旧值（onCreate 设置的）
+     * - BassBoost/PresetReverb 仍是旧值
+     * - seekbar / 低音旋钮 / 虚拟旋钮的 UI 不显示导入的数据
+     */
+    private void refreshFromSettingsOnEnable() {
+        if (!isAudioEffectsAvailable) {
+            return;
+        }
+
+        // 1) 5 频段：写入 mEqualizer + 刷新 seekbar + 频响曲线
+        refreshBandLevelsInternal(Settings.seekbarpos);
+
+        // 2) 预设选择同步到"自定义"（导入写入的就是自定义预设）
+        //    若已为 0 则不触发 listener；若不为 0，listener 异步回调 position=0 分支，
+        //    会再次从持久化存储加载同一份自定义数据（幂等，无副作用）
+        if (presetSpinner != null && presetSpinner.getSelectedItemPosition() != 0) {
+            presetSpinner.setSelection(0);
+        }
+
+        // 3) 低音：优先用持久化的旋钮进度，缺失时从 Settings.bassStrength 反推
+        int bassProgress = Settings.loadBassProgress(ctx);
+        if (bassProgress < 0) {
+            bassProgress = (int) Math.round(((float) Settings.bassStrength) * 19.0 / 1000.0);
+        }
+        if (bassProgress < 0) bassProgress = 0;
+        if (bassProgress > 19) bassProgress = 19;
+        short bassStrength = (short) Math.round(((float) bassProgress) * 1000.0 / 19.0);
+
+        // 4) 虚拟：优先用持久化的旋钮进度，缺失时从 Settings.reverbPreset 反推
+        int reverbProgress = Settings.loadReverbProgress(ctx);
+        if (reverbProgress < 0) {
+            reverbProgress = (int) Math.round(((float) clampReverbPreset(Settings.reverbPreset)) * 19.0 / 6.0);
+        }
+        if (reverbProgress < 0) reverbProgress = 0;
+        if (reverbProgress > 19) reverbProgress = 19;
+        short reverbPreset = (short) ((reverbProgress * 6) / 19);
+
+        // 5) 将最终应用的值同步回 Settings / EqualizerModel / 持久化，保持三方一致
+        Settings.bassStrength = bassStrength;
+        if (Settings.equalizerModel != null) {
+            Settings.equalizerModel.setBassStrength(bassStrength);
+            Settings.equalizerModel.setReverbPreset(reverbPreset);
+        }
+        Settings.saveBassProgress(ctx, bassProgress);
+        Settings.reverbPreset = reverbPreset;
+        Settings.saveReverbProgress(ctx, reverbProgress);
+
+        // 6) 应用到 BassBoost/PresetReverb + 刷新旋钮指针
+        applyBassAndReverbInternal(bassStrength, bassProgress, reverbPreset, reverbProgress);
+    }
+
+    /**
+     * 将 BassBoost 强度限制在系统合法范围 [0, 1000] 内。
+     * 越界值（如 EqualizerModel 默认构造的 -1）会被映射为安全默认值 0，
+     * 防止 {@link BassBoost#setProperties(BassBoost.Settings)} 抛 RuntimeException。
+     */
+    private static short clampBassStrength(short value) {
+        if (value < 0 || value > 1000) {
+            return 0;
+        }
+        return value;
+    }
+
+    /**
+     * 将 PresetReverb 预设值限制在系统合法范围 [0, 6] 内。
+     * 越界值（如 EqualizerModel 默认构造的 -1）会被映射为 PRESET_NONE(0)。
+     */
+    private static short clampReverbPreset(short value) {
+        if (value < 0 || value > 6) {
+            return PresetReverb.PRESET_NONE;
+        }
+        return value;
     }
 
     public void equalizeSound() {

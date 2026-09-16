@@ -141,15 +141,32 @@ public class AudioEffectManager {
                     bassBoostSetting = new BassBoost.Settings();
                 }
                 BassBoost.Settings bassBoostSettingTemp = new BassBoost.Settings(bassBoostSetting.toString());
-                bassBoostSettingTemp.strength = Settings.equalizerModel.getBassStrength();
-                sBassBoost.setProperties(bassBoostSettingTemp);
+                // 强度限制在 [0, 1000]，并同步回 EqualizerModel，防止 -1 等非法值导致 crash
+                short safeBassStrength = Settings.equalizerModel.getBassStrength();
+                if (safeBassStrength < 0 || safeBassStrength > 1000) {
+                    Log.w(TAG, "Invalid bassStrength=" + safeBassStrength + ", clamping to 0");
+                    safeBassStrength = 0;
+                    Settings.equalizerModel.setBassStrength(safeBassStrength);
+                }
+                bassBoostSettingTemp.strength = safeBassStrength;
+                try {
+                    sBassBoost.setProperties(bassBoostSettingTemp);
+                } catch (RuntimeException e) {
+                    Log.e(TAG, "sBassBoost.setProperties failed, strength=" + safeBassStrength, e);
+                }
             }
 
             if (sPresetReverb != null) {
+                short safeReverbPreset = Settings.equalizerModel.getReverbPreset();
+                if (safeReverbPreset < 0 || safeReverbPreset > 6) {
+                    Log.w(TAG, "Invalid reverbPreset=" + safeReverbPreset + ", clamping to PRESET_NONE");
+                    safeReverbPreset = PresetReverb.PRESET_NONE;
+                    Settings.equalizerModel.setReverbPreset(safeReverbPreset);
+                }
                 try {
-                    sPresetReverb.setPreset(Settings.equalizerModel.getReverbPreset());
+                    sPresetReverb.setPreset(safeReverbPreset);
                 } catch (IllegalArgumentException e) {
-                    Log.e(TAG, "Invalid reverb preset value: " + Settings.equalizerModel.getReverbPreset());
+                    Log.e(TAG, "Invalid reverb preset value: " + safeReverbPreset);
                     sPresetReverb.setPreset(PresetReverb.PRESET_NONE);
                 }
             }

@@ -1548,8 +1548,11 @@ class MusicService : Service() {
                           preferences[DataStoreKeys.IS_EQUALIZER_ENABLED] = if (Settings.isEqualizerEnabled) 1 else 0
                           preferences[DataStoreKeys.EQUALIZER_BAND_LEVELS] = Settings.seekbarpos.joinToString(",")
                           preferences[DataStoreKeys.EQUALIZER_PRESET_POS] = Settings.presetPos
-                          preferences[DataStoreKeys.BASS_STRENGTH] = Settings.bassStrength.toInt()
-                          preferences[DataStoreKeys.REVERB_PRESET] = Settings.reverbPreset.toInt()
+                          // 防御：避免把越界值（如旧版本残留的 -1）写入 DataStore 形成脏数据循环
+                          val bassToSave = Settings.bassStrength.toInt()
+                          preferences[DataStoreKeys.BASS_STRENGTH] = if (bassToSave in 0..1000) bassToSave else 0
+                          val reverbToSave = Settings.reverbPreset.toInt()
+                          preferences[DataStoreKeys.REVERB_PRESET] = if (reverbToSave in 0..6) reverbToSave else 0
                       } else {
                           // 清除保存的状态（包括上次播放进度、播放入口标签）
                           preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
@@ -1629,12 +1632,16 @@ class MusicService : Service() {
                         }
                     }
                     Settings.presetPos = preferences[DataStoreKeys.EQUALIZER_PRESET_POS] ?: 0
-                    Settings.bassStrength = preferences[DataStoreKeys.BASS_STRENGTH]?.toShort() ?: 0
-                    val reverbPreset = preferences[DataStoreKeys.REVERB_PRESET]?.toShort() ?: (-1).toShort()
+                    // 兜底：DataStore 可能残留旧版本写入的 -1，强制收敛到合法范围 [0, 1000]
+                    val rawBass = preferences[DataStoreKeys.BASS_STRENGTH]?.toShort() ?: 0
+                    Settings.bassStrength = if (rawBass < 0 || rawBass > 1000) 0 else rawBass
+                    // 兜底：reverbPreset 合法范围 [0, 6]，-1 视为未设置 → PRESET_NONE
+                    val rawReverb = preferences[DataStoreKeys.REVERB_PRESET]?.toShort() ?: 0
+                    val reverbPreset = if (rawReverb < 0 || rawReverb > 6) 0 else rawReverb
 
                     if (Settings.equalizerModel == null) {
                         Settings.equalizerModel = EqualizerModel()
-                        Settings.equalizerModel.reverbPreset = if (reverbPreset == (-1).toShort()) PresetReverb.PRESET_NONE else reverbPreset
+                        Settings.equalizerModel.reverbPreset = reverbPreset
                         Settings.equalizerModel.bassStrength = Settings.bassStrength
                     }
                 }

@@ -12,8 +12,12 @@ public class Settings {
     public static boolean isEqualizerReloaded = true;
     public static int[] seekbarpos = new int[5];
     public static int presetPos;
-    public static short reverbPreset = -1;
-    public static short bassStrength = -1;
+    // 默认值必须为合法范围 [0, 6] 内的 PRESET_NONE(0)，
+    // 否则在用户开 EQ 但未触摸虚拟旋钮时，-1 会被 savePlaybackState 持久化进 DataStore，
+    // 下次启动读到 -1 又传给 PresetReverb.setPreset 导致 crash。
+    public static short reverbPreset = 0;
+    // 同上，BassBoost 合法范围 [0, 1000]，默认 0 而非 -1。
+    public static short bassStrength = 0;
     public static EqualizerModel equalizerModel;
     public static double ratio = 1.0;
     public static boolean isEditing = false;
