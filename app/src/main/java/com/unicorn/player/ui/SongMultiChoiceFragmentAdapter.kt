@@ -6,7 +6,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.unicorn.player.databinding.ItemMultiChoiceBinding
+import com.unicorn.player.databinding.ItemSongMultiChoiceBinding
 import com.unicorn.player.model.Song
 
 class SongMultiChoiceFragmentAdapter(
@@ -24,7 +24,7 @@ class SongMultiChoiceFragmentAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val binding = ItemMultiChoiceBinding.inflate(
+        val binding = ItemSongMultiChoiceBinding.inflate(
             LayoutInflater.from(parent.context), parent, false
         )
         return ViewHolder(binding)
@@ -35,7 +35,7 @@ class SongMultiChoiceFragmentAdapter(
     }
 
     inner class ViewHolder(
-        private val binding: ItemMultiChoiceBinding
+        private val binding: ItemSongMultiChoiceBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(item: Any) {
