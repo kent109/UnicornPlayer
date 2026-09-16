@@ -19,7 +19,7 @@ import com.example.equalizer.R;
 public class AnalogController extends View {
 
     float midx, midy;
-    Paint textPaint, circlePaint, circlePaint2, linePaint;
+    Paint textPaint, pctPaint, circlePaint, circlePaint2, linePaint;
     String angle;
     float currdeg, deg = 3, downdeg;
 
@@ -70,6 +70,13 @@ public class AnalogController extends View {
         linePaint.setColor(EqualizerFragment.themeColor);
 //        linePaint.setColor(Color.parseColor("#FFA036"));
         linePaint.setStrokeWidth(7);
+        pctPaint = new Paint();
+        pctPaint.setColor(getResources().getColor(R.color.text_color, getContext().getTheme()));
+        pctPaint.setStyle(Paint.Style.FILL);
+        pctPaint.setTextSize(36);
+        pctPaint.setFakeBoldText(true);
+        pctPaint.setAntiAlias(true);
+        pctPaint.setTextAlign(Paint.Align.CENTER);
         angle = "0.0";
         label = "Label";
     }
@@ -111,6 +118,20 @@ public class AnalogController extends View {
         canvas.drawCircle(midx, midy, radius * ((float) 11 / 15), circlePaint);
         canvas.drawText(label, midx, midy + (float) (radius * 1.15), textPaint);
         canvas.drawLine(x1, y1, x2, y2, linePaint);
+
+        // 旋钮中心显示百分比（progress/19），滑动时随 invalidate 实时刷新；
+        // progress <= 0（指针垂直向下，效果关闭）时不显示
+        int progress = (int) (deg - 2);
+        if (progress > 0) {
+            int pct = Math.round(progress * 100f / 19);
+            if (pct > 100) {
+                pct = 100;
+            }
+            // 颜色与边缘已点亮的小圆点（主题色）保持一致，每次绘制时实时读取以同步主题变化
+            pctPaint.setColor(circlePaint2.getColor());
+            float textY = midy - ((pctPaint.ascent() + pctPaint.descent()) / 2);
+            canvas.drawText(pct + "%", midx, textY, pctPaint);
+        }
 
     }
 
@@ -154,8 +175,8 @@ public class AnalogController extends View {
                 downdeg = currdeg;
             } else if (currdeg == 23 && downdeg == 0) {
                 deg--;
-                if (deg < 3) {
-                    deg = 3;
+                if (deg < 0) {
+                    deg = 0;
                 }
                 downdeg = currdeg;
             } else {
@@ -163,8 +184,9 @@ public class AnalogController extends View {
                 if (deg > 21) {
                     deg = 21;
                 }
-                if (deg < 3) {
-                    deg = 3;
+                // 下限 0 = 指针垂直向下（中立位，progress=-2），允许滑回关闭状态
+                if (deg < 0) {
+                    deg = 0;
                 }
                 downdeg = currdeg;
             }

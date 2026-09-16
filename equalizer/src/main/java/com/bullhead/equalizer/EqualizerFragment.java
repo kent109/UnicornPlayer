@@ -309,26 +309,32 @@ public class EqualizerFragment extends Fragment {
         }
 
         bassController.setOnProgressChangedListener(progress -> {
-            Settings.bassStrength = (short) (((float) 1000 / 19) * (progress));
+            // progress 可能为负（-2 = 指针垂直向下，效果关闭），换算前归一化为 0，
+            // 避免负 strength 传入 BassBoost.setStrength 抛 RuntimeException
+            int p = Math.max(progress, 0);
+            Settings.bassStrength = (short) (((float) 1000 / 19) * (p));
             try {
                 bassBoost.setStrength(Settings.bassStrength);
                 Settings.equalizerModel.setBassStrength(Settings.bassStrength);
-                Settings.saveBassProgress(ctx, progress);
+                Settings.saveBassProgress(ctx, p);
             } catch (Exception e) {
                 e.printStackTrace();
             }
         });
 
         reverbController.setOnProgressChangedListener(progress -> {
-            Settings.reverbPreset = (short) ((progress * 6) / 19);
+            // 同上：负 progress（垂直向下）归一化为 0 = PRESET_NONE，
+            // 持久化保存 0，恢复路径（onViewCreated/refreshFromSettingsOnEnable）会把 0 显示为垂直向下
+            int p = Math.max(progress, 0);
+            Settings.reverbPreset = (short) ((p * 6) / 19);
             Settings.equalizerModel.setReverbPreset(Settings.reverbPreset);
             try {
                 presetReverb.setPreset(Settings.reverbPreset);
-                Settings.saveReverbProgress(ctx, progress);
+                Settings.saveReverbProgress(ctx, p);
             } catch (Exception e) {
                 e.printStackTrace();
             }
-            y = progress;
+            y = p;
         });
 
         mLinearLayout = view.findViewById(R.id.equalizerContainer);

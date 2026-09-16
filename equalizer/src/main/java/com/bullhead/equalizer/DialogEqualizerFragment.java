@@ -225,13 +225,13 @@ public class DialogEqualizerFragment extends DialogFragment {
             }
 
             if (x == 0) {
-                bassController.setProgress(1);
+                bassController.setProgress(-2);  // 指针垂直向下（中立位）
             } else {
                 bassController.setProgress(x);
             }
 
             if (y == 0) {
-                reverbController.setProgress(1);
+                reverbController.setProgress(-2);  // 指针垂直向下（中立位）
             } else {
                 reverbController.setProgress(y);
             }
@@ -239,13 +239,13 @@ public class DialogEqualizerFragment extends DialogFragment {
             int x = ((Settings.bassStrength * 19) / 1000);
             y = (Settings.reverbPreset * 19) / 6;
             if (x == 0) {
-                bassController.setProgress(1);
+                bassController.setProgress(-2);  // 指针垂直向下（中立位）
             } else {
                 bassController.setProgress(x);
             }
 
             if (y == 0) {
-                reverbController.setProgress(1);
+                reverbController.setProgress(-2);  // 指针垂直向下（中立位）
             } else {
                 reverbController.setProgress(y);
             }
@@ -254,7 +254,9 @@ public class DialogEqualizerFragment extends DialogFragment {
         bassController.setOnProgressChangedListener(new AnalogController.onProgressChangedListener() {
             @Override
             public void onProgressChanged(int progress) {
-                Settings.bassStrength = (short) (((float) 1000 / 19) * (progress));
+                // progress 可能为负（-2 = 指针垂直向下），归一化为 0 防止 setStrength 抛异常
+                int p = Math.max(progress, 0);
+                Settings.bassStrength = (short) (((float) 1000 / 19) * (p));
                 try {
                     bassBoost.setStrength(Settings.bassStrength);
                     Settings.equalizerModel.setBassStrength(Settings.bassStrength);
@@ -267,14 +269,16 @@ public class DialogEqualizerFragment extends DialogFragment {
         reverbController.setOnProgressChangedListener(new AnalogController.onProgressChangedListener() {
             @Override
             public void onProgressChanged(int progress) {
-                Settings.reverbPreset = (short) ((progress * 6) / 19);
+                // 同上：负 progress（垂直向下）归一化为 0 = PRESET_NONE
+                int p = Math.max(progress, 0);
+                Settings.reverbPreset = (short) ((p * 6) / 19);
                 Settings.equalizerModel.setReverbPreset(Settings.reverbPreset);
                 try {
                     presetReverb.setPreset(Settings.reverbPreset);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-                y = progress;
+                y = p;
             }
         });
 
