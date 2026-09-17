@@ -75,6 +75,7 @@
                 android:includeFontPadding="false"
                 android:inputType="text"
                 android:maxWidth="180dp"
+                android:maxLength="30"
                 android:maxLines="1"
                 android:padding="0dp"
                 android:textColor="@color/onSurface"

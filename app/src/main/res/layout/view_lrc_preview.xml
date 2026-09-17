@@ -39,6 +39,7 @@
             android:gravity="top|start"
             android:inputType="textMultiLine"
             android:lineSpacingMultiplier="1.4"
+            android:maxLength="1000"
             android:textColor="@color/onSurface"
             android:textIsSelectable="false"
             android:textSize="14sp"
