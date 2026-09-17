@@ -142,6 +142,20 @@ public class AnalogController extends View {
             return false;
         }
 
+        // 圆心与圆弧半径（与 onDraw 一致；onTouchEvent 中独立计算，避免依赖 onDraw 的赋值时序）
+        float cx = (float) getWidth() / 2;
+        float cy = (float) getHeight() / 2 - 8;
+        int radius = (int) (Math.min(cx, cy) * ((float) 14.5 / 16));
+
+        // 只有手指沿圆弧滑动时才响应；中心区域（dist < radius*0.5）不响应，避免误触导致指针滑动
+        float touchDx = e.getX() - cx;
+        float touchDy = e.getY() - cy;
+        float touchDist = (float) Math.sqrt(touchDx * touchDx + touchDy * touchDy);
+        if (touchDist < radius * 0.5f) {
+            // ACTION_DOWN 时不消费事件让父视图接管；其他动作消费但不处理（保持手势不中断）
+            return e.getAction() != MotionEvent.ACTION_DOWN;
+        }
+
         if (mListener != null) {
             mListener.onProgressChanged((int) (deg - 2));
         }
@@ -167,6 +181,9 @@ public class AnalogController extends View {
             }
             currdeg = (float) Math.floor(currdeg / 15);
 
+            // 记录修改前的 deg，用于跳过无效区间 (0, 3) 时的方向判断
+            int prevDeg = (int) deg;
+
             if (currdeg == 0 && downdeg == 23) {
                 deg++;
                 if (deg > 21) {
@@ -189,6 +206,18 @@ public class AnalogController extends View {
                     deg = 0;
                 }
                 downdeg = currdeg;
+            }
+
+            // 跳过无效区间 (0, 3) 中的 1、2 位（对应 progress=-1、0）
+            // 这两个位置视觉上偏离关闭态、但 strength/preset 仍为 0，无实际作用
+            // 从关闭位（prevDeg<=0）向上滑 -> 直接跳到最小有效位 deg=3（progress=1）
+            // 从有效位（prevDeg>=3）向下滑 -> 直接跳回关闭位 deg=0（progress=-2）
+            if (deg > 0 && deg < 3) {
+                if (prevDeg <= 0) {
+                    deg = 3;
+                } else {
+                    deg = 0;
+                }
             }
 
             angle = String.valueOf(deg);

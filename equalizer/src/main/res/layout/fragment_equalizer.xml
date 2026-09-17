@@ -2,9 +2,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_equalizer_rounded"
-    android:clickable="true"
-    android:focusable="true">
+    android:background="@drawable/bg_equalizer_rounded">
 
     <RelativeLayout
         android:id="@+id/equalizer_action_container"
@@ -110,16 +108,22 @@
             android:orientation="horizontal"
             android:padding="3dp">
 
-            <LinearLayout
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="2"
+                android:layout_weight="2">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_marginTop="8dp"
+                android:layout_height="match_parent"
                 android:orientation="vertical">
 
                 <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="8"
+                    android:clipChildren="false"
                     android:layoutDirection="ltr">
 
                     <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBar
@@ -127,7 +131,10 @@
                         android:layout_width="0dp"
                         android:layout_height="0dp"
                         android:layout_marginTop="20dp"
-                        android:padding="10dp"
+                        android:paddingLeft="10dp"
+                        android:paddingTop="10dp"
+                        android:paddingRight="4dp"
+                        android:paddingBottom="10dp"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>
@@ -137,19 +144,36 @@
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="1"
-                    android:textSize="10dp" />
+                    android:textSize="10sp" />
             </LinearLayout>
 
-            <LinearLayout
+                <TextView
+                    android:id="@+id/textValue1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal|top"
+                    android:gravity="center"
+                    android:padding="4dp"
+                    android:textColor="@color/text_color"
+                    android:textSize="10sp" />
+            </FrameLayout>
+
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="2"
-                android:orientation="vertical">
+                android:layout_weight="2">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginTop="8dp"
+                    android:orientation="vertical">
 
                 <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="8"
+                    android:clipChildren="false"
                     android:layoutDirection="ltr">
 
                     <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBar
@@ -157,7 +181,10 @@
                         android:layout_width="0dp"
                         android:layout_height="0dp"
                         android:layout_marginTop="20dp"
-                        android:padding="10dp"
+                        android:paddingLeft="10dp"
+                        android:paddingTop="10dp"
+                        android:paddingRight="4dp"
+                        android:paddingBottom="10dp"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>
@@ -167,19 +194,35 @@
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="1"
-                    android:textSize="10dp" />
+                    android:textSize="10sp" />
             </LinearLayout>
 
-            <LinearLayout
+                <TextView
+                    android:id="@+id/textValue2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:padding="4dp"
+                    android:textColor="@color/text_color"
+                    android:textSize="10sp" />
+            </FrameLayout>
+
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="2"
+                android:layout_weight="2">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="8dp"
+                android:layout_height="match_parent"
                 android:orientation="vertical">
 
                 <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="8"
+                    android:clipChildren="false"
                     android:layoutDirection="ltr">
 
                     <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBar
@@ -187,7 +230,10 @@
                         android:layout_width="0dp"
                         android:layout_height="0dp"
                         android:layout_marginTop="20dp"
-                        android:padding="10dp"
+                        android:paddingLeft="10dp"
+                        android:paddingTop="10dp"
+                        android:paddingRight="4dp"
+                        android:paddingBottom="10dp"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>
@@ -197,19 +243,35 @@
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="1"
-                    android:textSize="10dp" />
+                    android:textSize="10sp" />
             </LinearLayout>
 
-            <LinearLayout
+                <TextView
+                    android:id="@+id/textValue3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:padding="4dp"
+                    android:textColor="@color/text_color"
+                    android:textSize="10sp" />
+            </FrameLayout>
+
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="2"
+                android:layout_weight="2">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_marginTop="8dp"
+                android:layout_height="match_parent"
                 android:orientation="vertical">
 
                 <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="8"
+                    android:clipChildren="false"
                     android:layoutDirection="ltr">
 
                     <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBar
@@ -217,7 +279,10 @@
                         android:layout_width="0dp"
                         android:layout_height="0dp"
                         android:layout_marginTop="20dp"
-                        android:padding="10dp"
+                        android:paddingLeft="10dp"
+                        android:paddingTop="10dp"
+                        android:paddingRight="4dp"
+                        android:paddingBottom="10dp"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>
@@ -227,19 +292,35 @@
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="1"
-                    android:textSize="10dp" />
+                    android:textSize="10sp" />
             </LinearLayout>
 
-            <LinearLayout
+                <TextView
+                    android:id="@+id/textValue4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:padding="4dp"
+                    android:textColor="@color/text_color"
+                    android:textSize="10sp" />
+            </FrameLayout>
+
+            <FrameLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="2"
+                android:layout_weight="2">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_marginTop="8dp"
+                android:layout_height="match_parent"
                 android:orientation="vertical">
 
                 <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="8"
+                    android:clipChildren="false"
                     android:layoutDirection="ltr">
 
                     <com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBar
@@ -247,7 +328,10 @@
                         android:layout_width="0dp"
                         android:layout_height="0dp"
                         android:layout_marginTop="20dp"
-                        android:padding="10dp"
+                        android:paddingLeft="10dp"
+                        android:paddingTop="10dp"
+                        android:paddingRight="4dp"
+                        android:paddingBottom="10dp"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>
@@ -257,8 +341,18 @@
                     android:layout_width="match_parent"
                     android:layout_height="0dp"
                     android:layout_weight="1"
-                    android:textSize="10dp" />
+                    android:textSize="10sp" />
             </LinearLayout>
+
+                <TextView
+                    android:id="@+id/textValue5"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:padding="4dp"
+                    android:textColor="@color/text_color"
+                    android:textSize="10sp" />
+            </FrameLayout>
 
         </LinearLayout>
 

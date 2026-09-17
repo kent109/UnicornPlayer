@@ -387,26 +387,32 @@ public class EqualizerFragment extends Fragment {
 
             SeekBar seekBar = new SeekBar(getContext());
             TextView textView = new TextView(getContext());
+            TextView valueTextView = new TextView(getContext());
             switch (i) {
                 case 0:
                     seekBar = view.findViewById(R.id.seekBar1);
                     textView = view.findViewById(R.id.textView1);
+                    valueTextView = view.findViewById(R.id.textValue1);
                     break;
                 case 1:
                     seekBar = view.findViewById(R.id.seekBar2);
                     textView = view.findViewById(R.id.textView2);
+                    valueTextView = view.findViewById(R.id.textValue2);
                     break;
                 case 2:
                     seekBar = view.findViewById(R.id.seekBar3);
                     textView = view.findViewById(R.id.textView3);
+                    valueTextView = view.findViewById(R.id.textValue3);
                     break;
                 case 3:
                     seekBar = view.findViewById(R.id.seekBar4);
                     textView = view.findViewById(R.id.textView4);
+                    valueTextView = view.findViewById(R.id.textValue4);
                     break;
                 case 4:
                     seekBar = view.findViewById(R.id.seekBar5);
                     textView = view.findViewById(R.id.textView5);
+                    valueTextView = view.findViewById(R.id.textValue5);
                     break;
             }
             seekBarFinal[i] = seekBar;
@@ -432,6 +438,11 @@ public class EqualizerFragment extends Fragment {
                 Settings.isEqualizerReloaded = true;
             }
 
+            // 顶部显示当前频段增益值（dB）：初始赋值一次，
+            // 之后 setProgress（预设切换/导入/刷新）会触发 onProgressChanged 自动更新
+            final TextView bandValueTextView = valueTextView;
+            bandValueTextView.setText(formatBandLevelDb(seekBar.getProgress() + lowerEqualizerBandLevel));
+
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -441,6 +452,7 @@ public class EqualizerFragment extends Fragment {
                     Settings.equalizerModel.getSeekbarpos()[seekBar.getId()] = (progress + lowerEqualizerBandLevel);
                     dataset.updateValues(points);
                     chart.notifyDataUpdate();
+                    bandValueTextView.setText(formatBandLevelDb(progress + lowerEqualizerBandLevel));
                     if (fromUser) {
                         customModifyFlag = true;
                     }
@@ -728,11 +740,12 @@ public class EqualizerFragment extends Fragment {
         // 1) 5 频段：写入 mEqualizer + 刷新 seekbar + 频响曲线
         refreshBandLevelsInternal(Settings.seekbarpos);
 
-        // 2) 预设选择同步到"自定义"（导入写入的就是自定义预设）
-        //    若已为 0 则不触发 listener；若不为 0，listener 异步回调 position=0 分支，
-        //    会再次从持久化存储加载同一份自定义数据（幂等，无副作用）
-        if (presetSpinner != null && presetSpinner.getSelectedItemPosition() != 0) {
-            presetSpinner.setSelection(0);
+        // 2) 预设选择恢复为 Settings.presetPos（保留关闭前的预设）
+        //    - 导入场景：applyImportedConfig 已把 presetPos 写为 0（自定义），此处恢复为 0
+        //    - 普通开关场景：保留关闭前的预设（如"流行"），不强制改为自定义
+        //    若当前 spinner 位置已与 presetPos 一致，不触发 listener（避免重复加载）
+        if (presetSpinner != null && presetSpinner.getSelectedItemPosition() != Settings.presetPos) {
+            presetSpinner.setSelection(Settings.presetPos);
         }
 
         // 3) 低音：优先用持久化的旋钮进度，缺失时从 Settings.bassStrength 反推
@@ -788,6 +801,14 @@ public class EqualizerFragment extends Fragment {
             return PresetReverb.PRESET_NONE;
         }
         return value;
+    }
+
+    /**
+     * 将频段电平（毫贝）格式化为带符号的 dB 字符串，如 "+2dB"、"0dB"、"-3dB"。
+     */
+    private static String formatBandLevelDb(int levelMb) {
+        int db = levelMb / 100;
+        return (db > 0 ? "+" : "") + db + "dB";
     }
 
     public void equalizeSound() {
