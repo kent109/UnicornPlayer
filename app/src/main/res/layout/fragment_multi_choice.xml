@@ -128,6 +128,23 @@
                     android:padding="8dp"
                     android:src="@drawable/ic_add_to_play" />
             </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/flExport"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1">
+
+                <ImageView
+                    android:id="@+id/ivExport"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:alpha="0.5"
+                    android:contentDescription="导出"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_export" />
+            </FrameLayout>
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 

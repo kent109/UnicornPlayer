@@ -37,6 +37,7 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
     interface OnMultiChoiceActionListener {
         fun onDeleteSelected(selectedSongIds: Set<Long>)
         fun onAddToPlaylist(selectedSongIds: Set<Long>)
+        fun onExportSelected(selectedPlaylistIds: Set<Long>)
         fun onCancel()
     }
 
@@ -95,6 +96,16 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
         binding.ivDelete.alpha = if (enabled) 1.0f else 0.5f
         binding.ivAddToPlaylist.isEnabled = enabled
         binding.ivAddToPlaylist.alpha = if (enabled) 1.0f else 0.5f
+        binding.ivExport.isEnabled = enabled
+        binding.ivExport.alpha = if (enabled) 1.0f else 0.5f
+    }
+
+    /**
+     * 批量导出进行中置灰导出按钮 / 结束后恢复（由宿主 Activity 调用）
+     */
+    fun setExportButtonsEnabled(enabled: Boolean) {
+        binding.ivExport.isEnabled = enabled
+        binding.ivExport.alpha = if (enabled) 1.0f else 0.5f
     }
 
     /**
@@ -198,9 +209,19 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
             actionListener?.onAddToPlaylist(selectedSongIds)
         }
 
+        binding.ivExport.isEnabled = false
+        binding.ivExport.setOnClickListener {
+            // type=3 时 selectedSongIds 即选中的歌单 id 集合
+            actionListener?.onExportSelected(selectedSongIds)
+        }
+
         when (currentFragmentType) {
-            1, 2 -> binding.flDelete.visibility = View.GONE
+            1, 2 -> {
+                binding.flDelete.visibility = View.GONE
+                binding.flExport.visibility = View.GONE
+            }
             3 -> binding.flAddToPlaylist.visibility = View.GONE
+            else -> binding.flExport.visibility = View.GONE
         }
     }
 

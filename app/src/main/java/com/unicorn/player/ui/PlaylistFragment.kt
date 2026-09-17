@@ -10,8 +10,10 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -19,12 +21,18 @@ import com.unicorn.player.MainActivity
 import com.unicorn.player.PlaylistSongsActivity
 import com.unicorn.player.R
 import com.unicorn.player.adapter.PlaylistAdapter
+import com.unicorn.player.adapter.SelectableImportPlaylistAdapter
+import com.unicorn.player.databinding.DialogPlaylistImportBinding
 import com.unicorn.player.databinding.FragmentPlaylistBinding
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.util.PlayHelper
+import com.unicorn.player.util.PlaylistFileManager
 import com.unicorn.player.viewmodel.PlaylistViewModel
 import com.unicorn.player.viewmodel.PlaylistViewModelFactory
 import com.unicorn.player.widget.BezierCircleHeader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 歌单标签页
@@ -48,6 +56,29 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
      * 启动歌单详情页的 launcher；返回 RESULT_OK 时表示歌曲有改动，需刷新列表
      */
     private lateinit var playlistSongsLauncher: ActivityResultLauncher<Intent>
+
+    /** SAF 授权完成后的待执行操作；NONE 表示没有挂起的操作。 */
+    private var pendingAction: PendingAction = PendingAction.NONE
+
+    private enum class PendingAction { NONE, EXPORT_ONE, IMPORT }
+
+    /** 挂起的单个导出歌单 id（EXPORT_ONE 时使用） */
+    private var pendingExportPlaylistId: Long = -1L
+
+    /** SAF 目录选择器：授权后持久化树 URI -> 确保目录存在 -> 执行挂起操作 */
+    private val openDocumentTreeLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        if (treeUri != null) {
+            PlaylistFileManager.saveTreeUri(requireContext(), treeUri)
+            ensurePermissionAndDir(pendingAction, pendingExportPlaylistId)
+        } else {
+            // 用户取消授权
+            pendingAction = PendingAction.NONE
+            pendingExportPlaylistId = -1L
+            restoreImportFab()
+        }
+    }
 
     companion object {
         fun newInstance() = PlaylistFragment()
@@ -291,6 +322,152 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         binding.fabAddPlaylist.setOnClickListener {
             showNewPlaylistDialog()
         }
+        binding.fabImportPlaylist.setOnClickListener {
+            // 立即置灰防连点，所有结束分支恢复可用
+            binding.fabImportPlaylist.isEnabled = false
+            ensurePermissionAndDir(PendingAction.IMPORT)
+        }
+    }
+
+    /**
+     * 检查 SAF 权限 + 确保目录存在。
+     * 已授权：异步确保目录存在后执行挂起动作；
+     * 未授权：启动 SAF 选择器，授权后回到 [openDocumentTreeLauncher] 继续执行。
+     */
+    private fun ensurePermissionAndDir(action: PendingAction, playlistId: Long = -1L) {
+        pendingAction = action
+        pendingExportPlaylistId = playlistId
+        if (!PlaylistFileManager.hasPermission(requireContext())) {
+            openDocumentTreeLauncher.launch(PlaylistFileManager.getInitialUri())
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            val ready = PlaylistFileManager.ensureSaveDirExists(requireContext())
+            withContext(Dispatchers.Main) {
+                if (ready) {
+                    when (pendingAction) {
+                        PendingAction.EXPORT_ONE ->
+                            checkExportLimitAndExport(pendingExportPlaylistId)
+                        PendingAction.IMPORT -> startImportFlow()
+                        PendingAction.NONE -> {}
+                    }
+                } else {
+                    Toast.makeText(requireContext(), "授权目录创建失败", Toast.LENGTH_SHORT).show()
+                    restoreImportFab()
+                }
+                pendingAction = PendingAction.NONE
+                pendingExportPlaylistId = -1L
+            }
+        }
+    }
+
+    private fun restoreImportFab() {
+        _binding?.fabImportPlaylist?.isEnabled = true
+    }
+
+    /** 导入流程入口：读取导出文件列表后弹出导入弹窗（空列表也弹窗，确定禁用） */
+    private fun startImportFlow() {
+        if (view == null) return
+        viewModel.loadImportItems { items ->
+            if (view != null) {
+                showImportPlaylistDialog(items)
+            } else {
+                restoreImportFab()
+            }
+        }
+    }
+
+    /** 导入弹窗：复选框多选导出文件，确定后执行导入 */
+    private fun showImportPlaylistDialog(items: List<PlaylistViewModel.PlaylistImportItem>) {
+        val dialogBinding = DialogPlaylistImportBinding.inflate(layoutInflater)
+        val dialog = AlertDialog.Builder(requireContext())
+            .setView(dialogBinding.root)
+            .setCancelable(true)
+            .create()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val adapter = SelectableImportPlaylistAdapter { selectedCount ->
+            dialogBinding.btnConfirm.isEnabled = selectedCount > 0
+        }
+        dialogBinding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
+        dialogBinding.recyclerView.adapter = adapter
+        adapter.submitList(items)
+        dialogBinding.btnConfirm.isEnabled = false
+        if (items.isEmpty()) {
+            dialogBinding.recyclerView.visibility = View.GONE
+            dialogBinding.tvEmpty.visibility = View.VISIBLE
+        } else {
+            dialogBinding.tvEmpty.visibility = View.GONE
+        }
+
+        // 确认后由导入回调恢复 FAB；取消/直接关闭弹窗时在 dismiss 监听恢复
+        var confirmed = false
+        dialog.setOnDismissListener {
+            if (!confirmed) restoreImportFab()
+        }
+        dialogBinding.btnConfirm.setOnClickListener {
+            val selected = adapter.getSelectedFiles()
+            if (selected.isEmpty()) return@setOnClickListener
+            confirmed = true
+            dialog.dismiss()
+            _binding?.fabImportPlaylist?.isEnabled = false
+            viewModel.importPlaylists(selected) { created, merged, failed, droppedSongs ->
+                restoreImportFab()
+                if (view == null) return@importPlaylists
+                if (created + merged > 0) {
+                    var msg = "导入完成：新建 $created 个，合并 $merged 个"
+                    if (failed > 0) {
+                        msg += "，失败 $failed 个"
+                    }
+                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                    if (droppedSongs > 0) {
+                        Toast.makeText(
+                            requireContext(),
+                            "$droppedSongs 首歌曲已不在曲库，未导入",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                } else {
+                    Toast.makeText(requireContext(), "导入失败", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        dialogBinding.btnCancel.setOnClickListener { dialog.dismiss() }
+        dialog.show()
+    }
+
+    /**
+     * 单个导出前的数量上限检查（参照均衡器）：
+     * 目标文件已存在（覆盖导出）不受限；否则达到上限时弹清理弹窗，
+     * 删除后不自动继续导出，用户需重新点击导出。
+     */
+    private fun checkExportLimitAndExport(playlistId: Long) {
+        val context = requireContext()
+        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+            val files = PlaylistFileManager.listExportFiles(context)
+            val targetExists = files.contains(PlaylistFileManager.fileNameForPlaylist(playlistId))
+            withContext(Dispatchers.Main) {
+                if (view == null) return@withContext
+                if (!targetExists && files.size >= PlaylistFileManager.MAX_EXPORT_COUNT) {
+                    PlaylistExportCleanupDialog.show(context, viewLifecycleOwner.lifecycleScope)
+                } else {
+                    exportSinglePlaylist(playlistId)
+                }
+            }
+        }
+    }
+
+    /** 单个歌单导出（item 滑开按钮触发，滑开项已合拢，无需禁用按钮） */
+    private fun exportSinglePlaylist(playlistId: Long) {
+        if (playlistId <= 0L) return
+        viewModel.exportPlaylists(listOf(playlistId)) { success, failed ->
+            if (view == null) return@exportPlaylists
+            if (success > 0) {
+                Toast.makeText(requireContext(), "已导出", Toast.LENGTH_SHORT).show()
+            } else if (failed > 0) {
+                Toast.makeText(requireContext(), "导出失败", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun showNewPlaylistDialog(initialName: String = "", editId: Long = -1L) {
@@ -359,6 +536,13 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
 
     override fun onSwipedOpened(position: Int) {
         // 占位：如需在此处理滑动打开后的日志或统计可在此扩展
+    }
+
+    override fun onExportClicked(
+        playlist: PlaylistViewModel.PlaylistInfo,
+        position: Int
+    ) {
+        ensurePermissionAndDir(PendingAction.EXPORT_ONE, playlist.id)
     }
 
     /**

@@ -19,6 +19,12 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE title LIKE :query OR artist LIKE :query OR album LIKE :query")
     fun searchSongs(query: String): Flow<List<Song>>
 
+    /**
+     * 按文件路径批量查询歌曲（用于歌单导出/导入的路径匹配）
+     */
+    @Query("SELECT * FROM songs WHERE path IN (:paths)")
+    fun getSongsByPaths(paths: List<String>): List<Song>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertSong(song: Song): Long
 

@@ -10,6 +10,7 @@ import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.PlaylistSong
 import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
+import com.unicorn.player.util.PlaylistFileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
@@ -302,6 +303,33 @@ class MusicRepository(private val context: Context) {
         playlistDao.insertPlaylist(Playlist(name = name))
     }
 
+    /**
+     * 按歌单名查询歌单（大小写无关），找不到返回 null
+     */
+    suspend fun findPlaylistByName(name: String): Playlist? = withContext(Dispatchers.IO) {
+        playlistDao.findPlaylistByName(name)
+    }
+
+    /**
+     * 刷新歌单更新时间
+     */
+    suspend fun touchPlaylist(id: Long) = withContext(Dispatchers.IO) {
+        playlistDao.touchPlaylist(id, System.currentTimeMillis())
+    }
+
+    /**
+     * 按文件路径批量查询歌曲；路径按每批 900 个分片查询，规避 SQLite 参数上限
+     */
+    suspend fun getSongsByPaths(paths: List<String>): List<Song> = withContext(Dispatchers.IO) {
+        val distinct = paths.filter { it.isNotBlank() }.distinct()
+        if (distinct.isEmpty()) return@withContext emptyList()
+        val result = mutableListOf<Song>()
+        distinct.chunked(900).forEach { batch ->
+            result.addAll(songDao.getSongsByPaths(batch))
+        }
+        result
+    }
+
     suspend fun renamePlaylist(id: Long, name: String) = withContext(Dispatchers.IO) {
         playlistDao.updatePlaylistName(id, name, System.currentTimeMillis())
     }
@@ -312,6 +340,8 @@ class MusicRepository(private val context: Context) {
         // 需要完整 Playlist 对象供 @Delete，此处先取再删
         val pl = getPlaylistById(id) ?: return@withContext
         playlistDao.deletePlaylist(pl)
+        // 同步删除该歌单的导出文件（无授权/文件不存在时静默跳过）
+        PlaylistFileManager.deleteExport(context, id)
     }
 
     fun getPlaylistSongIds(playlistId: Long) = playlistDao.getPlaylistSongIds(playlistId)

@@ -29,11 +29,13 @@ import com.unicorn.player.ui.AlbumFragment
 import com.unicorn.player.ui.ArtistFragment
 import com.unicorn.player.ui.MainPagerAdapter
 import com.unicorn.player.ui.MultiChoiceFragment
+import com.unicorn.player.ui.PlaylistExportCleanupDialog
 import com.unicorn.player.ui.PlaylistFragment
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongsFragment
 import com.unicorn.player.util.AudioTagEditor
+import com.unicorn.player.util.PlaylistFileManager
 import com.unicorn.player.util.UpdateHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
@@ -79,6 +81,25 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     // 多选相关
     private var multiChoiceFragment: MultiChoiceFragment? = null
     private var currentMultiChoiceType: Int = 0
+
+    // 歌单批量导出相关
+    /** 挂起批量导出的歌单 id 集合（SAF 授权后继续） */
+    private var pendingExportPlaylistIds: Set<Long> = emptySet()
+
+    /** 防连点标志：批量导出进行中 */
+    private var isExportingPlaylists = false
+
+    /** SAF 目录选择器：授权后持久化树 URI -> 确保目录存在 -> 执行批量导出 */
+    private val playlistExportTreeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+            if (treeUri != null) {
+                PlaylistFileManager.saveTreeUri(this, treeUri)
+                ensurePlaylistExportDirAndExport()
+            } else {
+                // 用户取消授权：停留多选页，恢复导出按钮
+                finishPlaylistExportState()
+            }
+        }
 
     // 自动检查更新的延迟任务（用于在 onDestroy 时取消，避免内存泄漏）
     private var autoUpdateCheckRunnable: Runnable? = null
@@ -665,6 +686,84 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
 
     override fun onAddToPlaylist(selectedSongIds: Set<Long>) {
         handleAddToPlaylist(selectedSongIds)
+    }
+
+    override fun onExportSelected(selectedPlaylistIds: Set<Long>) {
+        if (selectedPlaylistIds.isEmpty() || isExportingPlaylists) return
+        isExportingPlaylists = true
+        multiChoiceFragment?.setExportButtonsEnabled(false)
+        pendingExportPlaylistIds = selectedPlaylistIds
+        ensurePlaylistExportDirAndExport()
+    }
+
+    /** 检查 SAF 权限 + 确保目录存在，随后执行批量导出 */
+    private fun ensurePlaylistExportDirAndExport() {
+        if (!PlaylistFileManager.hasPermission(this)) {
+            playlistExportTreeLauncher.launch(PlaylistFileManager.getInitialUri())
+            return
+        }
+        lifecycleScope.launch(Dispatchers.IO) {
+            val ready = PlaylistFileManager.ensureSaveDirExists(this@MainActivity)
+            withContext(Dispatchers.Main) {
+                if (ready) {
+                    checkExportLimitAndExport(pendingExportPlaylistIds)
+                } else {
+                    Toast.makeText(this@MainActivity, "授权目录创建失败", Toast.LENGTH_SHORT).show()
+                    finishPlaylistExportState()
+                }
+            }
+        }
+    }
+
+    /**
+     * 批量导出前的数量上限检查（参照均衡器）：
+     * 覆盖导出（文件已存在）不占新名额，只统计新增数量；
+     * 现有数 + 新增数超过上限时弹清理弹窗，删除后不自动继续导出，用户需重新点击导出。
+     */
+    private fun checkExportLimitAndExport(ids: Set<Long>) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val files = PlaylistFileManager.listExportFiles(this@MainActivity)
+            val existing = files.toSet()
+            val newCount = ids.count {
+                PlaylistFileManager.fileNameForPlaylist(it) !in existing
+            }
+            withContext(Dispatchers.Main) {
+                if (files.size + newCount > PlaylistFileManager.MAX_EXPORT_COUNT) {
+                    finishPlaylistExportState()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "导出文件已达上限 ${PlaylistFileManager.MAX_EXPORT_COUNT} 个，请先清理",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    PlaylistExportCleanupDialog.show(this@MainActivity, lifecycleScope)
+                } else {
+                    performPlaylistExport()
+                }
+            }
+        }
+    }
+
+    private fun performPlaylistExport() {
+        val ids = pendingExportPlaylistIds
+        if (ids.isEmpty()) return
+        playlistViewModel.exportPlaylists(ids) { success, failed ->
+            val msg = if (failed == 0) {
+                "已导出 $success 个歌单"
+            } else {
+                "成功 $success 个，失败 $failed 个"
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            // 无论成败退出多选页，并重置防连点状态
+            dismissMultiChoiceFragment()
+            finishPlaylistExportState()
+        }
+    }
+
+    /** 恢复导出可点状态（停留多选页时使用） */
+    private fun finishPlaylistExportState() {
+        isExportingPlaylists = false
+        pendingExportPlaylistIds = emptySet()
+        multiChoiceFragment?.setExportButtonsEnabled(true)
     }
 
     override fun onCancel() {

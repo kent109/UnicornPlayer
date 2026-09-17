@@ -39,6 +39,19 @@
 
     </com.scwang.smart.refresh.layout.SmartRefreshLayout>
 
+    <!-- 左下角：导入歌单按钮（与右下角新建按钮对称） -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabImportPlaylist"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:src="@drawable/ic_import"
+        app:fabCustomSize="42dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:maxImageSize="24dp"
+        tools:ignore="ContentDescription" />
+
     <!-- 右下角：新建歌单按钮 -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabAddPlaylist"

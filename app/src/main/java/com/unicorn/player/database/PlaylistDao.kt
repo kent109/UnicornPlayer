@@ -16,6 +16,18 @@ interface PlaylistDao {
     fun getPlaylistById(id: Long): Flow<Playlist?>
 
     /**
+     * 按歌单名查询歌单（大小写无关），用于歌单导入时的同名合并判断
+     */
+    @Query("SELECT * FROM playlists WHERE name = :name COLLATE NOCASE LIMIT 1")
+    fun findPlaylistByName(name: String): Playlist?
+
+    /**
+     * 刷新歌单更新时间（导入合并新增歌曲后调用）
+     */
+    @Query("UPDATE playlists SET updatedAt = :time WHERE id = :id")
+    fun touchPlaylist(id: Long, time: Long): Int
+
+    /**
      * 按歌单名精确计数（大小写无关），用于新建/重命名时校验同名。
      * 重命名场景需排除当前自身的 id（调用方传入 [excludeId]）。
      */

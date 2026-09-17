@@ -1,19 +1,26 @@
 package com.unicorn.player.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
 import com.unicorn.player.model.Playlist
+import com.unicorn.player.model.PlaylistExportData
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.DataStoreKeys
 import com.unicorn.player.service.PlaySource
 import com.unicorn.player.service.PlaySourceManager
 import com.unicorn.player.service.applicationDataStore
+import com.unicorn.player.ui.PlaylistRefresher
+import com.unicorn.player.util.PlaylistFileManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 歌单 Fragment 作用域 ViewModel
@@ -40,6 +47,17 @@ class PlaylistViewModel(
 
     private val _playlists = MutableLiveData<List<PlaylistInfo>>(emptyList())
     val playlists: LiveData<List<PlaylistInfo>> = _playlists
+
+    /** 导入弹窗列表项 */
+    data class PlaylistImportItem(
+        val fileName: String,        // 12.json
+        val playlistId: Long,        // 来自 JSON 内容
+        val displayName: String,     // id 命中取库内当前名，否则取文件内名
+        val songCount: Int,          // 文件内路径数
+        val matchedCount: Int,       // 当前曲库能按路径匹配到的数量
+        val targetExists: Boolean,   // id 或同名歌单是否已存在
+        val sameNameMerge: Boolean   // id 不存在、靠同名匹配的情况
+    )
 
     private val _currentPlayingPlaylistId = MutableLiveData<Long?>(null)
     val currentPlayingPlaylistId: LiveData<Long?> = _currentPlayingPlaylistId
@@ -240,6 +258,195 @@ class PlaylistViewModel(
             } else {
                 null
             }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // ==================== 歌单导出 / 导入 ====================
+
+    /**
+     * 导出歌单到 Documents/Unicorn/Playlist/&lt;playlistId&gt;.json
+     *
+     * - 以 repository 实时数据为准（含被隐藏歌曲），不依赖界面缓存的 songList
+     * - 同名旧文件直接覆盖
+     *
+     * @param onResult 回主线程回调 (成功数, 失败数)
+     */
+    fun exportPlaylists(ids: Collection<Long>, onResult: (success: Int, failed: Int) -> Unit) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            var success = 0
+            var failed = 0
+            val gson = Gson()
+            val app = getApplication<Application>()
+            for (id in ids) {
+                try {
+                    val playlist = repository.getPlaylistById(id)
+                    if (playlist == null) {
+                        failed++
+                        continue
+                    }
+                    val songs = repository.getPlaylistSongs(id).first()
+                    val data = PlaylistExportData(
+                        version = 1,
+                        playlistId = id,
+                        playlistName = playlist.name,
+                        exportedAt = System.currentTimeMillis(),
+                        songs = songs.map { it.path }.distinct()
+                    )
+                    val json = gson.toJson(data)
+                    val ok = PlaylistFileManager.writeExport(
+                        app, PlaylistFileManager.fileNameForPlaylist(id), json
+                    )
+                    if (ok) success++ else failed++
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    failed++
+                }
+            }
+            withContext(Dispatchers.Main) { onResult(success, failed) }
+        }
+    }
+
+    /**
+     * 加载导入弹窗数据：读取导出目录下所有 json 文件并解析。
+     * 损坏 / 缺字段 / 版本不符的文件被跳过。
+     *
+     * @param onResult 回主线程回调，参数为导入项列表
+     */
+    fun loadImportItems(onResult: (List<PlaylistImportItem>) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = mutableListOf<PlaylistImportItem>()
+            try {
+                val app = getApplication<Application>()
+                val files = PlaylistFileManager.listExportFiles(app)
+                val parsed = mutableListOf<Triple<String, PlaylistExportData, List<String>>>()
+                val allPaths = mutableSetOf<String>()
+                for (fileName in files) {
+                    val data = parseExportFile(app, fileName) ?: continue
+                    val paths = data.songs.filter { it.isNotBlank() }.distinct()
+                    parsed.add(Triple(fileName, data, paths))
+                    allPaths.addAll(paths)
+                }
+                val existingPaths = repository.getSongsByPaths(allPaths.toList())
+                    .map { it.path }.toSet()
+                for ((fileName, data, paths) in parsed) {
+                    val byId = repository.getPlaylistById(data.playlistId)
+                    val target = byId ?: repository.findPlaylistByName(data.playlistName.trim())
+                    items.add(
+                        PlaylistImportItem(
+                            fileName = fileName,
+                            playlistId = data.playlistId,
+                            displayName = byId?.name ?: data.playlistName,
+                            songCount = paths.size,
+                            matchedCount = paths.count { it in existingPaths },
+                            targetExists = target != null,
+                            sameNameMerge = byId == null && target != null
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            withContext(Dispatchers.Main) { onResult(items) }
+        }
+    }
+
+    /**
+     * 导入歌单
+     *
+     * - 目标歌单判定：playlistId 命中 → 合并；否则同名（大小写无关）命中 → 合并；
+     *   都没有 → 用文件内名称新建
+     * - 文件中的路径按曲库匹配，匹配不到的丢弃（计入 droppedSongs）
+     * - 已存在歌曲不重复添加（REPLACE 去重，天然并集）
+     *
+     * @param onResult 回主线程回调 (新建数, 合并数, 失败数, 丢弃歌曲数)
+     */
+    fun importPlaylists(
+        fileNames: List<String>,
+        onResult: (created: Int, merged: Int, failed: Int, droppedSongs: Int) -> Unit
+    ) {
+        if (fileNames.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            var created = 0
+            var merged = 0
+            var failed = 0
+            var droppedSongs = 0
+            try {
+                val app = getApplication<Application>()
+                for (fileName in fileNames) {
+                    val data = parseExportFile(app, fileName)
+                    if (data == null) {
+                        failed++
+                        continue
+                    }
+                    try {
+                        val byId = repository.getPlaylistById(data.playlistId)
+                        val target = byId
+                            ?: repository.findPlaylistByName(data.playlistName.trim())
+                        val targetId: Long
+                        if (target != null) {
+                            targetId = target.id
+                            merged++
+                        } else {
+                            targetId = repository.createPlaylist(data.playlistName.trim())
+                            if (targetId <= 0L) {
+                                failed++
+                                continue
+                            }
+                            created++
+                        }
+                        val distinctPaths = data.songs.filter { it.isNotBlank() }.distinct()
+                        val matched = if (distinctPaths.isEmpty()) {
+                            emptyList()
+                        } else {
+                            repository.getSongsByPaths(distinctPaths)
+                        }
+                        droppedSongs += distinctPaths.size - matched.size
+                        if (matched.isNotEmpty()) {
+                            // 只添加歌单中尚不存在的歌曲，避免重复 REPLACE
+                            val existingIds =
+                                repository.getPlaylistSongIds(targetId).first().toSet()
+                            val newSongs = matched.filter { it.id !in existingIds }
+                            if (newSongs.isNotEmpty()) {
+                                repository.addSongsToPlaylist(targetId, newSongs)
+                                // 实际有新增才刷新更新时间
+                                repository.touchPlaylist(targetId)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        failed++
+                    }
+                }
+                refreshPlaylistsInternal()
+                PlaylistRefresher.notifyPlaylistsChanged()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            withContext(Dispatchers.Main) { onResult(created, merged, failed, droppedSongs) }
+        }
+    }
+
+    /**
+     * 解析单个导出文件；损坏 / 缺字段 / 版本不符返回 null。
+     * 注意：空歌单的 songs 为 []（合法），不能据此判无效；
+     * Gson 反序列化绕过构造函数默认值，songs 字段缺失时为运行时 null，统一规范化为空列表。
+     */
+    @Suppress("SENSELESS_COMPARISON")
+    private fun parseExportFile(context: Context, fileName: String): PlaylistExportData? {
+        return try {
+            val content = PlaylistFileManager.readExport(context, fileName) ?: return null
+            val data = Gson().fromJson(content, PlaylistExportData::class.java)
+                ?: return null
+            if (data.version != 1 ||
+                data.playlistId <= 0L || data.playlistName.isNullOrBlank()
+            ) {
+                return null
+            }
+            val songs: List<String> = if (data.songs == null) emptyList() else data.songs
+            data.copy(songs = songs)
         } catch (e: Exception) {
             null
         }

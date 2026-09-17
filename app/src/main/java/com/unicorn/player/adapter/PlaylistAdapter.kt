@@ -52,6 +52,7 @@ class PlaylistAdapter(
         fun onPlayClicked(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
         fun onEditClicked(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
         fun onDeleteClicked(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
+        fun onExportClicked(playlist: PlaylistViewModel.PlaylistInfo, position: Int)
         fun onSwipedOpened(position: Int)
     }
 
@@ -150,6 +151,13 @@ class PlaylistAdapter(
                 if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
                 resetSwipedItem()
                 listener.onDeleteClicked(getItem(pos), pos)
+            }
+
+            binding.btnExport.setOnClickListener {
+                val pos = bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
+                resetSwipedItem()
+                listener.onExportClicked(getItem(pos), pos)
             }
 
             binding.btnPlay.setOnClickListener {
