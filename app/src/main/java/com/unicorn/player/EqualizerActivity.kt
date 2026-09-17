@@ -270,7 +270,8 @@ class EqualizerActivity : AppCompatActivity(), MusicManager.ConnectionCallback {
                 return@setOnClickListener
             }
             val fileName = EqualizerConfigManager.normalizeFileName(input)
-            if (existingNames.contains(fileName.lowercase())) {
+            // 勾选"覆盖同名配置"时跳过重名检查直接覆盖；否则走原重名检查逻辑
+            if (!dialogBinding.cbOverwrite.isChecked && existingNames.contains(fileName.lowercase())) {
                 // 重名时在输入框下方显示红色错误提示，用户可修改后再次点击"确定"
                 dialogBinding.tilFileName.error = "已存在同名配置文件，请更换名称"
                 return@setOnClickListener
