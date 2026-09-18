@@ -69,4 +69,5 @@
     <color name="blue_500">#5195EA</color>
 
     <color name="progress_color">#cc49454F</color>
+    <color name="import_playlist">#4CAF50</color>
 </resources>

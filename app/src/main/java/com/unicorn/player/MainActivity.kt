@@ -30,6 +30,7 @@ import com.unicorn.player.ui.ArtistFragment
 import com.unicorn.player.ui.MainPagerAdapter
 import com.unicorn.player.ui.MultiChoiceFragment
 import com.unicorn.player.ui.PlaylistExportCleanupDialog
+import com.unicorn.player.ui.PlaylistExportConflictDialog
 import com.unicorn.player.ui.PlaylistFragment
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
@@ -716,37 +717,53 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     }
 
     /**
-     * 批量导出前的数量上限检查（参照均衡器）：
-     * 覆盖导出（文件已存在）不占新名额，只统计新增数量；
-     * 现有数 + 新增数超过上限时弹清理弹窗，删除后不自动继续导出，用户需重新点击导出。
+     * 批量导出预检（参照均衡器）：
+     * - 存在同名（不同 playlistId）导出文件 → 先弹同名处理弹窗，用户选择
+     *   合并 / 覆盖后继续；取消则停留多选页并恢复导出按钮；
+     * - 解决冲突后仍超上限（或本就超上限）→ 弹清理弹窗，删除后需重新点击导出；
+     * - 覆盖导出（同 playlistId 文件已存在）不占新名额。
      */
     private fun checkExportLimitAndExport(ids: Set<Long>) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val files = PlaylistFileManager.listExportFiles(this@MainActivity)
-            val existing = files.toSet()
-            val newCount = ids.count {
-                PlaylistFileManager.fileNameForPlaylist(it) !in existing
-            }
-            withContext(Dispatchers.Main) {
-                if (files.size + newCount > PlaylistFileManager.MAX_EXPORT_COUNT) {
-                    finishPlaylistExportState()
-                    Toast.makeText(
-                        this@MainActivity,
-                        "导出文件已达上限 ${PlaylistFileManager.MAX_EXPORT_COUNT} 个，请先清理",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    PlaylistExportCleanupDialog.show(this@MainActivity, lifecycleScope)
-                } else {
-                    performPlaylistExport()
+        playlistViewModel.precheckExport(ids) { pre ->
+            if (pre.conflicts.isNotEmpty()) {
+                PlaylistExportConflictDialog.show(
+                    this@MainActivity, pre.conflicts
+                ) { merge ->
+                    if (merge == null) {
+                        // 用户取消同名处理：停留多选页，恢复导出按钮
+                        finishPlaylistExportState()
+                        return@show
+                    }
+                    if (pre.overLimit) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "导出文件已达上限 ${PlaylistFileManager.MAX_EXPORT_COUNT} 个，请先清理",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        finishPlaylistExportState()
+                        PlaylistExportCleanupDialog.show(this@MainActivity, lifecycleScope)
+                    } else {
+                        performPlaylistExport(merge)
+                    }
                 }
+            } else if (pre.overLimit) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "导出文件已达上限 ${PlaylistFileManager.MAX_EXPORT_COUNT} 个，请先清理",
+                    Toast.LENGTH_SHORT
+                ).show()
+                finishPlaylistExportState()
+                PlaylistExportCleanupDialog.show(this@MainActivity, lifecycleScope)
+            } else {
+                performPlaylistExport(false)
             }
         }
     }
 
-    private fun performPlaylistExport() {
+    private fun performPlaylistExport(mergeConflicts: Boolean = false) {
         val ids = pendingExportPlaylistIds
         if (ids.isEmpty()) return
-        playlistViewModel.exportPlaylists(ids) { success, failed ->
+        playlistViewModel.exportPlaylists(ids, mergeConflicts) { success, failed ->
             val msg = if (failed == 0) {
                 "已导出 $success 个歌单"
             } else {

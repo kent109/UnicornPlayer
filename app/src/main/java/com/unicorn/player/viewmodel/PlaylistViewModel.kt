@@ -266,20 +266,129 @@ class PlaylistViewModel(
     // ==================== 歌单导出 / 导入 ====================
 
     /**
+     * 同名导出冲突分组：当前歌单 [playlistName] 与导出文件 [fileNames]
+     *（文件内 playlistId 与当前歌单不同，常见于清除应用数据后重新新建同名歌单）同名。
+     */
+    data class ExportConflict(
+        val playlistId: Long,
+        val playlistName: String,
+        val fileNames: List<String>
+    )
+
+    /**
+     * 导出预检结果
+     *
+     * @property conflicts 同名（不同 playlistId）冲突分组
+     * @property projectedFileCount 按冲突文件被删除、新文件写入后的预计文件总数
+     * @property overLimit 预计总数是否超过 [PlaylistFileManager.MAX_EXPORT_COUNT]
+     */
+    data class ExportPrecheck(
+        val conflicts: List<ExportConflict>,
+        val projectedFileCount: Int,
+        val overLimit: Boolean
+    )
+
+    /**
+     * 导出预检：扫描导出目录，计算同名冲突与解决冲突后的文件总数（供 UI 决定
+     * 弹「同名处理」弹窗还是「上限清理」弹窗）。
+     */
+    fun precheckExport(ids: Collection<Long>, onResult: (ExportPrecheck) -> Unit) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val pre = buildExportPrecheck(getApplication(), ids)
+            withContext(Dispatchers.Main) { onResult(pre) }
+        }
+    }
+
+    /** 已解析的导出文件（文件名 + JSON 数据），冲突匹配 / 合并时复用，避免重复读盘解析 */
+    private data class ParsedFile(val fileName: String, val data: PlaylistExportData)
+
+    private suspend fun loadParsedFiles(context: Context): List<ParsedFile> {
+        val result = mutableListOf<ParsedFile>()
+        for (fileName in PlaylistFileManager.listExportFiles(context)) {
+            parseExportFile(context, fileName)?.let { result.add(ParsedFile(fileName, it)) }
+        }
+        return result
+    }
+
+    /**
+     * 判断导出文件是否与当前歌单构成同名冲突：
+     * - 名称相同（trim + NOCASE）且文件内 playlistId 不同 → 冲突（文件可能来自
+     *   清除应用数据前的同名歌单，或历史遗留文件）；
+     * - playlistId 相同但文件导出时间早于当前歌单创建时间 → 同样冲突。
+     *   清除应用数据后 Room 主键从 1 重新自增，新建同名歌单会与旧文件撞 ID，
+     *   仅靠 ID 无法区分「同一歌单重复导出」，时间倒挂是此时的唯一判别信号。
+     */
+    private fun isConflictFile(pf: ParsedFile, playlist: Playlist): Boolean {
+        if (!pf.data.playlistName.trim().equals(playlist.name.trim(), ignoreCase = true)) {
+            return false
+        }
+        if (pf.data.playlistId != playlist.id) {
+            return true
+        }
+        return pf.data.exportedAt > 0L && pf.data.exportedAt < playlist.createdAt
+    }
+
+    /**
+     * 构建预检结果：
+     * - 同一歌单（含 ID 撞车但时间不倒挂的正常重复导出）的旧文件存在 → 覆盖导出，数量不变；
+     * - 同名冲突文件无论覆盖 / 合并都会被删除后以当前 playlistId 重新写入，
+     *   净增量 = 1 - 冲突文件数（撞 ID 时冲突文件就是自身旧文件，数量不变）。
+     */
+    private suspend fun buildExportPrecheck(
+        context: Context,
+        ids: Collection<Long>
+    ): ExportPrecheck {
+        val allFiles = PlaylistFileManager.listExportFiles(context)
+        val parsed = loadParsedFiles(context)
+        val conflicts = mutableListOf<ExportConflict>()
+        var projected = allFiles.size
+        for (id in ids) {
+            val playlist = repository.getPlaylistById(id) ?: continue
+            val ownFileName = PlaylistFileManager.fileNameForPlaylist(id)
+            val ownExists = allFiles.contains(ownFileName)
+            val conflictFiles = parsed
+                .filter { isConflictFile(it, playlist) }
+                .map { it.fileName }
+            if (conflictFiles.isNotEmpty()) {
+                conflicts.add(ExportConflict(id, playlist.name, conflictFiles))
+            }
+            if (!ownExists) {
+                // 撞 ID 时冲突文件就是自身（ownExists 必为 true），不会走到这里
+                projected += 1 - conflictFiles.size
+            }
+        }
+        return ExportPrecheck(
+            conflicts = conflicts,
+            projectedFileCount = projected,
+            overLimit = projected > PlaylistFileManager.MAX_EXPORT_COUNT
+        )
+    }
+
+    /**
      * 导出歌单到 Documents/Unicorn/Playlist/&lt;playlistId&gt;.json
      *
      * - 以 repository 实时数据为准（含被隐藏歌曲），不依赖界面缓存的 songList
-     * - 同名旧文件直接覆盖
+     * - 同一 playlistId 的旧文件直接覆盖
+     * - 同名（不同 playlistId）冲突文件：[mergeConflicts] 为 true 时将旧文件中的
+     *   歌曲路径与当前歌单取并集后保存；false 时仅保存当前歌单；冲突文件均删除，
+     *   结果统一以当前 playlistId 重新写入
      *
+     * @param mergeConflicts 同名冲突的处理方式（由 UI 弹窗用户选择）
      * @param onResult 回主线程回调 (成功数, 失败数)
      */
-    fun exportPlaylists(ids: Collection<Long>, onResult: (success: Int, failed: Int) -> Unit) {
+    fun exportPlaylists(
+        ids: Collection<Long>,
+        mergeConflicts: Boolean = false,
+        onResult: (success: Int, failed: Int) -> Unit
+    ) {
         if (ids.isEmpty()) return
         viewModelScope.launch(Dispatchers.IO) {
             var success = 0
             var failed = 0
             val gson = Gson()
             val app = getApplication<Application>()
+            val parsed = loadParsedFiles(app)
             for (id in ids) {
                 try {
                     val playlist = repository.getPlaylistById(id)
@@ -288,17 +397,27 @@ class PlaylistViewModel(
                         continue
                     }
                     val songs = repository.getPlaylistSongs(id).first()
+                    val ownFileName = PlaylistFileManager.fileNameForPlaylist(id)
+                    val conflicts = parsed.filter { isConflictFile(it, playlist) }
+                    var paths: List<String> = songs.map { it.path }
+                    if (mergeConflicts && conflicts.isNotEmpty()) {
+                        // 合并：当前歌单路径 + 旧导出文件路径取并集
+                        val oldPaths = conflicts.flatMap { it.data.songs }
+                        paths = (paths + oldPaths).filter { it.isNotBlank() }.distinct()
+                    }
+                    // 无论覆盖 / 合并，冲突旧文件都删除，结果以当前 playlistId 保存
+                    conflicts.forEach {
+                        PlaylistFileManager.deleteFile(app, it.fileName)
+                    }
                     val data = PlaylistExportData(
                         version = 1,
                         playlistId = id,
                         playlistName = playlist.name,
                         exportedAt = System.currentTimeMillis(),
-                        songs = songs.map { it.path }.distinct()
+                        songs = paths
                     )
                     val json = gson.toJson(data)
-                    val ok = PlaylistFileManager.writeExport(
-                        app, PlaylistFileManager.fileNameForPlaylist(id), json
-                    )
+                    val ok = PlaylistFileManager.writeExport(app, ownFileName, json)
                     if (ok) success++ else failed++
                 } catch (e: Exception) {
                     e.printStackTrace()

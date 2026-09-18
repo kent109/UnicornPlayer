@@ -5,14 +5,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.gson.Gson
 import com.unicorn.player.adapter.MultiSelectableEqConfigAdapter
 import com.unicorn.player.databinding.DialogPlaylistCleanupBinding
+import com.unicorn.player.databinding.DialogPlaylistConflictBinding
 import com.unicorn.player.model.PlaylistExportData
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.util.PlaylistFileManager
+import com.unicorn.player.viewmodel.PlaylistViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -154,6 +155,62 @@ object PlaylistExportCleanupDialog {
             }
         }
         dialogBinding.btnCancel.setOnClickListener { dialog.dismiss() }
+        dialog.show()
+    }
+}
+
+/**
+ * 同名歌单导出冲突弹窗（PlaylistFragment 单个导出与 MainActivity 批量导出共用）。
+ *
+ * 当导出歌单与已有导出文件同名但 playlistId 不同时弹出（常见于清除应用数据后
+ * 重新新建同名歌单），提供：
+ * - 合并：旧文件中的歌曲与当前歌单取并集后保存；
+ * - 覆盖：仅保存当前歌单。
+ * 两种选择都会删除旧文件并以当前 playlistId 重新保存；取消则中止导出。
+ */
+object PlaylistExportConflictDialog {
+
+    /**
+     * @param onChoose 用户选择回调：true = 合并，false = 覆盖，null = 取消
+     */
+    fun show(
+        context: Context,
+        conflicts: List<PlaylistViewModel.ExportConflict>,
+        onChoose: (merge: Boolean?) -> Unit
+    ) {
+        val message = buildString {
+            if (conflicts.size == 1) {
+                append("已存在名为「${conflicts[0].playlistName}」的导出文件")
+            } else {
+                val names = conflicts.take(3).joinToString("、") { it.playlistName }
+                append("存在 ${conflicts.size} 组同名导出文件（$names）")
+            }
+            append("，可能是清除数据后创建的同名歌单。\n\n")
+            append("合并：旧文件与当前歌单合并后保存\n")
+            append("覆盖：仅保存当前歌单\n\n")
+            append("旧文件都会被删除，以当前歌单重新保存。")
+        }
+        val dialogBinding = DialogPlaylistConflictBinding.inflate(LayoutInflater.from(context))
+        val dialog = AlertDialog.Builder(context)
+            .setView(dialogBinding.root)
+            .setCancelable(true)
+            .create()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        // 返回键 / 点击外部关闭视为取消
+        dialog.setOnCancelListener { onChoose(null) }
+        dialogBinding.tvMessage.text = message
+        dialogBinding.btnMerge.setOnClickListener {
+            dialog.dismiss()
+            onChoose(true)
+        }
+        dialogBinding.btnOverwrite.setOnClickListener {
+            dialog.dismiss()
+            onChoose(false)
+        }
+        dialogBinding.btnCancel.setOnClickListener {
+            dialog.dismiss()
+            onChoose(null)
+        }
         dialog.show()
     }
 }

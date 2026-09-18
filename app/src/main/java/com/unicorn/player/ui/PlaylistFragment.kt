@@ -347,7 +347,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
                 if (ready) {
                     when (pendingAction) {
                         PendingAction.EXPORT_ONE ->
-                            checkExportLimitAndExport(pendingExportPlaylistId)
+                            precheckAndExport(pendingExportPlaylistId)
                         PendingAction.IMPORT -> startImportFlow()
                         PendingAction.NONE -> {}
                     }
@@ -437,30 +437,44 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
     }
 
     /**
-     * 单个导出前的数量上限检查（参照均衡器）：
-     * 目标文件已存在（覆盖导出）不受限；否则达到上限时弹清理弹窗，
-     * 删除后不自动继续导出，用户需重新点击导出。
+     * 导出预检与执行（单个歌单）：
+     * - 存在同名（不同 playlistId）导出文件 → 先弹同名处理弹窗，用户选择
+     *   合并 / 覆盖后继续；取消则中止；
+     * - 解决冲突后仍超上限（或本就超上限）→ 弹清理弹窗，删除后用户需重新点击导出；
+     * - 否则直接导出。
      */
-    private fun checkExportLimitAndExport(playlistId: Long) {
-        val context = requireContext()
-        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-            val files = PlaylistFileManager.listExportFiles(context)
-            val targetExists = files.contains(PlaylistFileManager.fileNameForPlaylist(playlistId))
-            withContext(Dispatchers.Main) {
-                if (view == null) return@withContext
-                if (!targetExists && files.size >= PlaylistFileManager.MAX_EXPORT_COUNT) {
-                    PlaylistExportCleanupDialog.show(context, viewLifecycleOwner.lifecycleScope)
-                } else {
-                    exportSinglePlaylist(playlistId)
+    private fun precheckAndExport(playlistId: Long) {
+        viewModel.precheckExport(listOf(playlistId)) { pre ->
+            if (view == null) return@precheckExport
+            if (pre.conflicts.isNotEmpty()) {
+                PlaylistExportConflictDialog.show(
+                    requireContext(), pre.conflicts
+                ) { merge ->
+                    if (view == null || merge == null) return@show
+                    if (pre.overLimit) {
+                        PlaylistExportCleanupDialog.show(
+                            requireContext(), viewLifecycleOwner.lifecycleScope
+                        )
+                    } else {
+                        exportSinglePlaylist(playlistId, merge)
+                    }
                 }
+            } else if (pre.overLimit) {
+                PlaylistExportCleanupDialog.show(
+                    requireContext(), viewLifecycleOwner.lifecycleScope
+                )
+            } else {
+                exportSinglePlaylist(playlistId, false)
             }
         }
     }
 
     /** 单个歌单导出（item 滑开按钮触发，滑开项已合拢，无需禁用按钮） */
-    private fun exportSinglePlaylist(playlistId: Long) {
+    private fun exportSinglePlaylist(playlistId: Long, mergeConflicts: Boolean = false) {
         if (playlistId <= 0L) return
-        viewModel.exportPlaylists(listOf(playlistId)) { success, failed ->
+        viewModel.exportPlaylists(
+            listOf(playlistId), mergeConflicts
+        ) { success, failed ->
             if (view == null) return@exportPlaylists
             if (success > 0) {
                 Toast.makeText(requireContext(), "已导出", Toast.LENGTH_SHORT).show()

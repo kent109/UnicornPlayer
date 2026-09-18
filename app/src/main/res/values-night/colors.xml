@@ -52,6 +52,7 @@
     <color name="divider">#080808</color>
 
     <color name="quality_sq">#FFD700</color>   <!-- 金色 -->
+    <color name="import_playlist">#78C57C</color>
 
     <!-- 歌词控件颜色 - 夜间模式 -->
     <color name="lrc_normal_row">@color/onSurface</color>    <!-- 默认行颜色 -->
