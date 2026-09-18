@@ -72,7 +72,7 @@ class SelectableImportPlaylistAdapter(
                 append(
                     when {
                         item.targetExists && !item.sameNameMerge -> "将合并到当前歌单"
-                        item.sameNameMerge -> "同名歌单已存在，将合并"
+                        item.sameNameMerge -> "存在同名歌单，将合并"
                         else -> "将新建歌单"
                     }
                 )
