@@ -13,7 +13,6 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
-import android.media.audiofx.PresetReverb
 import android.os.Binder
 import android.os.IBinder
 import android.os.SystemClock
@@ -510,6 +509,16 @@ class MusicService : Service() {
 
         // 取消注册广播接收器
         unregisterReceiver(notificationButtonReceiver)
+        // 修复：注销 audioDeviceReceiver，防止 IntentReceiverLeaked
+        // 之前遗漏导致 service 销毁时 receiver 泄露，系统重建 service 时
+        // onCreate 中的 ContextCompat.registerReceiver 抛出 IntentReceiverLeaked，
+        // service 无法正常初始化，onTaskRemoved/loadPlaybackState 等状态恢复链路
+        // 全部失效，引发播放状态错乱（如：划掉应用重开后自动播放下一首）
+        try {
+            unregisterReceiver(audioDeviceReceiver)
+        } catch (e: IllegalArgumentException) {
+            LogWriter.writeError(TAG, "onDestroy: audioDeviceReceiver not registered", e)
+        }
 
         // 关闭线程池
         shutdownThreadPool()
@@ -1330,7 +1339,14 @@ class MusicService : Service() {
     fun syncCurrentPositionToDataStore() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                if (isMediaPlayerReleased) return@launch
+                if (isMediaPlayerReleased) {
+                    Log.d(TAG, "syncCurrentPositionToDataStore: skipped, mediaPlayer released")
+                    return@launch
+                }
+                // 注意：之前曾加过 isPlaybackStateLoaded 守卫，但该标志在 loadPlaybackState
+                // 的 prepare 前就已设置为 true，无法防止 prepare-seekTo 期间写入脏数据，
+                // 反而会阻止"清除数据后点击播放、划掉应用重新打开"场景下 songId/title 保存，
+                // 导致重新打开应用时底部播放条空白。已移除。
                 val currentSong = _currentSong.value ?: return@launch
                 applicationDataStore.edit { preferences ->
                     preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
@@ -1338,8 +1354,14 @@ class MusicService : Service() {
                     preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
                     preferences[DataStoreKeys.SONG_PATH] = currentSong.path
                     try {
-                        preferences[DataStoreKeys.CURRENT_POSITION] = mediaPlayer.currentPosition
-                        preferences[DataStoreKeys.IS_PLAYING] = if (mediaPlayer.isPlaying) 1 else 0
+                        val position = mediaPlayer.currentPosition
+                        val isPlaying = if (mediaPlayer.isPlaying) 1 else 0
+                        preferences[DataStoreKeys.CURRENT_POSITION] = position
+                        preferences[DataStoreKeys.IS_PLAYING] = isPlaying
+                        Log.d(
+                            TAG,
+                            "syncCurrentPositionToDataStore: songId=${currentSong.id}, position=$position, isPlaying=$isPlaying"
+                        )
                     } catch (e: IllegalStateException) {
                         LogWriter.writeError(
                             TAG,
@@ -1351,10 +1373,6 @@ class MusicService : Service() {
                     // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
                     preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
                 }
-                Log.d(
-                    TAG,
-                    "syncCurrentPositionToDataStore: position=${mediaPlayer.currentPosition}"
-                )
             } catch (e: Exception) {
                 LogWriter.writeError(TAG, "syncCurrentPositionToDataStore failed", e)
             }
@@ -1517,6 +1535,9 @@ class MusicService : Service() {
     fun savePlaybackState() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // 注意：之前曾加过 isPlaybackStateLoaded 守卫，但该标志在 loadPlaybackState
+                // 的 prepare 前就已设置为 true，根本无法防止 prepare-seekTo 期间写入脏数据，
+                // 反而会阻止"清除数据后未播放就配置均衡器并划掉应用"的配置保存。已移除。
                 applicationDataStore.edit { preferences ->
                     if (isMediaPlayerReleased) {
                         Log.w(TAG, "savePlaybackState: MediaPlayer already released, skip")
@@ -1529,51 +1550,59 @@ class MusicService : Service() {
                         preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
                         preferences[DataStoreKeys.SONG_PATH] = currentSong.path
                         try {
-                            preferences[DataStoreKeys.CURRENT_POSITION] =
-                                mediaPlayer.currentPosition
-                            preferences[DataStoreKeys.IS_PLAYING] =
-                                if (mediaPlayer.isPlaying) 1 else 0
+                            val position = mediaPlayer.currentPosition
+                            val isPlaying = if (mediaPlayer.isPlaying) 1 else 0
+                            preferences[DataStoreKeys.CURRENT_POSITION] = position
+                            preferences[DataStoreKeys.IS_PLAYING] = isPlaying
+                            Log.d(
+                                TAG,
+                                "savePlaybackState: songId=${currentSong.id}, position=$position, isPlaying=$isPlaying"
+                            )
                         } catch (e: IllegalStateException) {
                             LogWriter.writeError(
                                 TAG,
                                 "savePlaybackState: MediaPlayer state error",
                                 e
                             )
-                          }
-                          // 保存播放模式
-                          preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
-                          // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
-                          preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
-                          // 保存均衡器设置
-                          preferences[DataStoreKeys.IS_EQUALIZER_ENABLED] = if (Settings.isEqualizerEnabled) 1 else 0
-                          preferences[DataStoreKeys.EQUALIZER_BAND_LEVELS] = Settings.seekbarpos.joinToString(",")
-                          preferences[DataStoreKeys.EQUALIZER_PRESET_POS] = Settings.presetPos
-                          // 防御：避免把越界值（如旧版本残留的 -1）写入 DataStore 形成脏数据循环
-                          val bassToSave = Settings.bassStrength.toInt()
-                          preferences[DataStoreKeys.BASS_STRENGTH] = if (bassToSave in 0..1000) bassToSave else 0
-                          val reverbToSave = Settings.reverbPreset.toInt()
-                          preferences[DataStoreKeys.REVERB_PRESET] = if (reverbToSave in 0..6) reverbToSave else 0
-                      } else {
-                          // 清除保存的状态（包括上次播放进度、播放入口标签）
-                          preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
-                          preferences.remove(DataStoreKeys.SONG_TITLE)
-                          preferences.remove(DataStoreKeys.SONG_ARTIST)
-                          preferences.remove(DataStoreKeys.SONG_PATH)
-                          preferences.remove(DataStoreKeys.CURRENT_POSITION)
-                          preferences.remove(DataStoreKeys.IS_PLAYING)
-                          preferences.remove(DataStoreKeys.PLAY_SOURCE_TAG)
-                          preferences.remove(DataStoreKeys.IS_EQUALIZER_ENABLED)
-                          preferences.remove(DataStoreKeys.EQUALIZER_BAND_LEVELS)
-                          preferences.remove(DataStoreKeys.EQUALIZER_PRESET_POS)
-                          preferences.remove(DataStoreKeys.BASS_STRENGTH)
-                          preferences.remove(DataStoreKeys.REVERB_PRESET)
-                      }
+                        }
+                        // 保存播放模式
+                        preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
+                        // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
+                        preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
+                        // 保存均衡器设置
+                        preferences[DataStoreKeys.IS_EQUALIZER_ENABLED] =
+                            if (Settings.isEqualizerEnabled) 1 else 0
+                        preferences[DataStoreKeys.EQUALIZER_BAND_LEVELS] =
+                            Settings.seekbarpos.joinToString(",")
+                        preferences[DataStoreKeys.EQUALIZER_PRESET_POS] = Settings.presetPos
+                        // 防御：避免把越界值（如旧版本残留的 -1）写入 DataStore 形成脏数据循环
+                        val bassToSave = Settings.bassStrength.toInt()
+                        preferences[DataStoreKeys.BASS_STRENGTH] =
+                            if (bassToSave in 0..1000) bassToSave else 0
+                        val reverbToSave = Settings.reverbPreset.toInt()
+                        preferences[DataStoreKeys.REVERB_PRESET] =
+                            if (reverbToSave in 0..6) reverbToSave else 0
+                    } else {
+                        // 清除保存的状态（包括上次播放进度、播放入口标签）
+                        preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
+                        preferences.remove(DataStoreKeys.SONG_TITLE)
+                        preferences.remove(DataStoreKeys.SONG_ARTIST)
+                        preferences.remove(DataStoreKeys.SONG_PATH)
+                        preferences.remove(DataStoreKeys.CURRENT_POSITION)
+                        preferences.remove(DataStoreKeys.IS_PLAYING)
+                        preferences.remove(DataStoreKeys.PLAY_SOURCE_TAG)
+                        preferences.remove(DataStoreKeys.IS_EQUALIZER_ENABLED)
+                        preferences.remove(DataStoreKeys.EQUALIZER_BAND_LEVELS)
+                        preferences.remove(DataStoreKeys.EQUALIZER_PRESET_POS)
+                        preferences.remove(DataStoreKeys.BASS_STRENGTH)
+                        preferences.remove(DataStoreKeys.REVERB_PRESET)
+                    }
                 }
             } catch (e: Exception) {
                 LogWriter.writeError(TAG, "savePlaybackState failed", e)
-              }
-          }
-      }
+            }
+        }
+    }
 
       fun initializeAudioEffects() {
           if (AudioEffectManager.areEffectsEnabled()) {
@@ -1600,6 +1629,10 @@ class MusicService : Service() {
         isServiceCreate: Boolean, restorePosition: Boolean = true,
         restoreFlag: Int = 0
     ) {
+        Log.d(
+            TAG,
+            "loadPlaybackState: enter, isServiceCreate=$isServiceCreate, restorePosition=$restorePosition, restoreFlag=$restoreFlag, isPlaybackStateLoaded=$isPlaybackStateLoaded"
+        )
         // 如果已经加载过播放状态，不需要重复加载
         if (isPlaybackStateLoaded) {
             Log.i(TAG, "loadPlaybackState: already loaded, skip")
@@ -1751,7 +1784,20 @@ class MusicService : Service() {
                         // 而是以 MusicService 当前进度为准，避免跳转到过时的位置
                         // shouldRestorePosition=true 时（正常启动或任务被移除后重启），恢复到保存的进度
                         if (shouldRestorePosition) {
+                            Log.d(
+                                TAG,
+                                "loadPlaybackState: before seekTo, target=$currentPosition, duration=${mediaPlayer.duration}, currentPosition=${mediaPlayer.currentPosition}"
+                            )
                             seekTo(currentPosition)
+                            Log.d(
+                                TAG,
+                                "loadPlaybackState: after seekTo, currentPosition=${mediaPlayer.currentPosition}"
+                            )
+                        } else {
+                            Log.d(
+                                TAG,
+                                "loadPlaybackState: skip seekTo (shouldRestorePosition=false)"
+                            )
                         }
 
                         // 不再自动恢复播放，只准备媒体播放器
@@ -1768,7 +1814,16 @@ class MusicService : Service() {
                         // 判定条件：之前正在播放 && restoreFlag==RESTORE_CREATE（savedInstanceState != null）
                         // 其他场景（最近任务划掉、杀进程重启、正常启动）都不自动播放。
                         if (isPlaying == 1 && restoreFlag == MainActivity.RESTORE_CREATE) {
+                            Log.d(
+                                TAG,
+                                "loadPlaybackState: auto-resume play, isPlaying=$isPlaying, restoreFlag=$restoreFlag, currentPosition=${mediaPlayer.currentPosition}"
+                            )
                             play()
+                        } else {
+                            Log.d(
+                                TAG,
+                                "loadPlaybackState: no auto-play, isPlaying=$isPlaying, restoreFlag=$restoreFlag"
+                            )
                         }
                     } catch (e: IOException) {
                         LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
@@ -1906,6 +1961,22 @@ class MusicService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Log.d(TAG, "onTaskRemoved")
+        // 修复：先停止 playStateFuture，防止 stopSelf 后到 onDestroy 真正执行前，
+        // playStateFuture 每 5 秒触发的 savePlaybackState 用当前进度/IS_PLAYING=1
+        // 覆盖 onTaskRemoved 保存的快照（导致重新打开应用时状态偏离 onTaskRemoved 时刻）
+        stopPlayStateObserver()
+        // 修复：暂停 mediaPlayer，防止 onDestroy 真正执行前 onCompletionListener
+        // 触发 playNext -> playCurrentSong(B) -> savePlaybackState，导致 currentSong
+        // 切换到下一首且覆盖 A 的状态
+        try {
+            if (isMediaPlayerPlaying()) {
+                mediaPlayer.pause()
+                _isPlaying.value = false
+                Log.d(TAG, "onTaskRemoved: paused mediaPlayer to prevent post-removal state drift")
+            }
+        } catch (e: IllegalStateException) {
+            LogWriter.writeError(TAG, "onTaskRemoved: pause failed", e)
+        }
         // 同步保存播放状态和标志，防止异步保存未完成时服务被停止
         runBlocking {
             applicationDataStore.edit { preferences ->
@@ -1919,8 +1990,15 @@ class MusicService : Service() {
                     preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
                     preferences[DataStoreKeys.SONG_PATH] = currentSong.path
                     try {
-                        preferences[DataStoreKeys.CURRENT_POSITION] = mediaPlayer.currentPosition
-                        preferences[DataStoreKeys.IS_PLAYING] = if (mediaPlayer.isPlaying) 1 else 0
+                        val savedPosition = mediaPlayer.currentPosition
+                        // 修复：强制保存 IS_PLAYING=0，重新打开应用时不应自动播放
+                        // （用户主动从最近任务划掉应用，恢复时应为暂停状态）
+                        preferences[DataStoreKeys.CURRENT_POSITION] = savedPosition
+                        preferences[DataStoreKeys.IS_PLAYING] = 0
+                        Log.d(
+                            TAG,
+                            "onTaskRemoved: saved songId=${currentSong.id}, title=${currentSong.title}, position=$savedPosition, isPlaying=0"
+                        )
                     } catch (e: IllegalStateException) {
                         LogWriter.writeError(TAG, "onTaskRemoved: MediaPlayer state error", e)
                     }
