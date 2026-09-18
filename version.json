@@ -1,5 +1,5 @@
 {
-  "versionCode": 17,
-  "versionName": "1.1.0",
-  "changelog": "新增均衡器导出导入功能"
+  "versionCode": 18,
+  "versionName": "1.1.1",
+  "changelog": "新增歌单导出导入功能\n修复已知问题"
 }
