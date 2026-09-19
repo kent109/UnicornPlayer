@@ -3,7 +3,7 @@
     <!-- 夜间模式背景色：黑色 -->
     <color name="colorWindowBackground">#000000</color>
     <color name="text_color">#CAC4D0</color>
-    <color name="analog_progress_color">#111111</color>
+    <color name="analog_progress_color">#333333</color>
     <color name="analog_ring_color">#222222</color>
     <color name="analog_fill_color">#000000</color>
     <color name="eq_icon_color">#E6E1E5</color>

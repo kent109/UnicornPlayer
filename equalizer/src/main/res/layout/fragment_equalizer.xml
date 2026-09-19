@@ -57,7 +57,7 @@
         android:layout_below="@+id/equalizer_action_container"
         android:orientation="vertical">
 
-        <com.db.chart.view.LineChartView
+        <com.bullhead.equalizer.RoundedLineChartView
             android:id="@+id/lineChart"
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -70,8 +70,8 @@
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginLeft="9dp"
-            android:layout_marginRight="9dp"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
             android:layout_weight="1"
             android:background="#33000000"
             android:layoutDirection="ltr">

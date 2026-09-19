@@ -204,8 +204,6 @@ public class EqualizerFragment extends Fragment {
             }
         });
 
-        updateSpinnerIconColor();
-
         fragTitle = view.findViewById(R.id.equalizer_fragment_title);
 
 
@@ -238,8 +236,6 @@ public class EqualizerFragment extends Fragment {
         spinnerDropDownIcon = view.findViewById(R.id.spinner_dropdown_icon);
         spinnerDropDownIcon.setOnClickListener(v -> presetSpinner.performClick());
 
-        updateSpinnerIconColor();
-
         presetSpinner = view.findViewById(R.id.equalizer_preset_spinner);
 
         equalizerBlocker = view.findViewById(R.id.equalizerBlocker);
@@ -255,12 +251,7 @@ public class EqualizerFragment extends Fragment {
         bassController.setLabel("低音增强");
         reverbController.setLabel("虚拟音效");
 
-        bassController.circlePaint2.setColor(themeColor);
-        bassController.linePaint.setColor(themeColor);
-        bassController.invalidate();
-        reverbController.circlePaint2.setColor(themeColor);
-        bassController.linePaint.setColor(themeColor);
-        reverbController.invalidate();
+        updateComponentColors(Settings.isEqualizerEnabled);
 
         int x;
         if (!Settings.isEqualizerReloaded) {
@@ -494,6 +485,8 @@ public class EqualizerFragment extends Fragment {
 
         chart.addData(dataset);
         chart.show();
+
+        updateComponentColors(Settings.isEqualizerEnabled);
 
         Button mEndButton = new Button(getContext());
         mEndButton.setBackgroundColor(themeColor);
@@ -856,7 +849,7 @@ public class EqualizerFragment extends Fragment {
             }
         }
 
-        updateSpinnerIconColor();
+        updateComponentColors(Settings.isEqualizerEnabled);
 
         presetSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -953,17 +946,10 @@ public class EqualizerFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // 退出前是自定义，保存
-        if (Settings.presetPos == 0) {
+        // 配置变更（如黑白切换）导致的重建不保存，仅退出时保存
+        if (Settings.presetPos == 0 && !requireActivity().isChangingConfigurations()) {
             Log.d(TAG, "Saving current settings before exit");
             Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
-        }
-    }
-
-    private void updateSpinnerIconColor() {
-        if (spinnerDropDownIcon != null) {
-            boolean isDarkMode = getResources().getBoolean(R.bool.is_dark_mode);
-            spinnerDropDownIcon.setColorFilter(isDarkMode ? Color.WHITE : Color.BLACK);
         }
     }
 
@@ -1010,6 +996,50 @@ public class EqualizerFragment extends Fragment {
         for (SeekBar seekBar : seekBarFinal) {
             if (seekBar != null) {
                 seekBar.setEnabled(enabled);
+            }
+        }
+
+        updateComponentColors(enabled);
+    }
+
+    private void updateComponentColors(boolean enabled) {
+        int color = getResources().getColor(
+                enabled ? R.color.eq_enable_color : R.color.eq_disable_color,
+                getContext().getTheme()
+        );
+
+        if (dataset != null) {
+            dataset.setColor(color);
+        }
+        if (chart != null) {
+            chart.notifyDataUpdate();
+        }
+
+        for (SeekBar seekBar : seekBarFinal) {
+            if (seekBar != null) {
+                seekBar.getThumb().setColorFilter(
+                        new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+            }
+        }
+
+        if (bassController != null) {
+            bassController.circlePaint2.setColor(color);
+            bassController.linePaint.setColor(color);
+            bassController.invalidate();
+        }
+        if (reverbController != null) {
+            reverbController.circlePaint2.setColor(color);
+            reverbController.linePaint.setColor(color);
+            reverbController.invalidate();
+        }
+
+        if (spinnerDropDownIcon != null) {
+            spinnerDropDownIcon.setColorFilter(color);
+        }
+        if (presetSpinner != null) {
+            View selectedView = presetSpinner.getSelectedView();
+            if (selectedView instanceof TextView) {
+                ((TextView) selectedView).setTextColor(color);
             }
         }
     }

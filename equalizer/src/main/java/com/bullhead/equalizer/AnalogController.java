@@ -70,6 +70,7 @@ public class AnalogController extends View {
         linePaint.setColor(EqualizerFragment.themeColor);
 //        linePaint.setColor(Color.parseColor("#FFA036"));
         linePaint.setStrokeWidth(7);
+        linePaint.setStrokeCap(Paint.Cap.ROUND);
         pctPaint = new Paint();
         pctPaint.setColor(getResources().getColor(R.color.text_color, getContext().getTheme()));
         pctPaint.setStyle(Paint.Style.FILL);
