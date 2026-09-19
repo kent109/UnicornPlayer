@@ -416,7 +416,7 @@ public class EqualizerFragment extends Fragment {
                     break;
             }
             seekBarFinal[i] = seekBar;
-            seekBar.getProgressDrawable().setColorFilter(new PorterDuffColorFilter(Color.DKGRAY, PorterDuff.Mode.SRC_IN));
+//            seekBar.getProgressDrawable().setColorFilter(new PorterDuffColorFilter(Color.DKGRAY, PorterDuff.Mode.SRC_IN));
             seekBar.getThumb().setColorFilter(new PorterDuffColorFilter(themeColor, PorterDuff.Mode.SRC_IN));
             seekBar.setId(i);
 //            seekBar.setLayoutParams(layoutParams);

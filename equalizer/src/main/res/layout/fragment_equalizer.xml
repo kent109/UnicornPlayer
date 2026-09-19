@@ -135,6 +135,7 @@
                         android:paddingTop="10dp"
                         android:paddingRight="4dp"
                         android:paddingBottom="10dp"
+                        android:progressDrawable="@drawable/eq_seekbar"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>
@@ -185,6 +186,7 @@
                         android:paddingTop="10dp"
                         android:paddingRight="4dp"
                         android:paddingBottom="10dp"
+                        android:progressDrawable="@drawable/eq_seekbar"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>
@@ -234,6 +236,7 @@
                         android:paddingTop="10dp"
                         android:paddingRight="4dp"
                         android:paddingBottom="10dp"
+                        android:progressDrawable="@drawable/eq_seekbar"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>
@@ -283,6 +286,7 @@
                         android:paddingTop="10dp"
                         android:paddingRight="4dp"
                         android:paddingBottom="10dp"
+                        android:progressDrawable="@drawable/eq_seekbar"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>
@@ -332,6 +336,7 @@
                         android:paddingTop="10dp"
                         android:paddingRight="4dp"
                         android:paddingBottom="10dp"
+                        android:progressDrawable="@drawable/eq_seekbar"
                         android:thumb="@drawable/custom_equalizer_thumb"
                         app:seekBarRotation="CW270" />
                 </com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper>

@@ -11,4 +11,7 @@
     <color name="eq_surface">#1C1B1F</color>
     <color name="eq_onSurface">#E6E1E5</color>
     <color name="eq_onSurfaceVariant">#CAC4D0</color>
+
+    <color name="eq_enable_color">#D0BCFF</color>
+    <color name="eq_disable_color">#858385</color>
 </resources>

@@ -10,4 +10,7 @@
     <color name="eq_surface">#FFFBFE</color>
     <color name="eq_onSurface">#1C1B1F</color>
     <color name="eq_onSurfaceVariant">#49454F</color>
+
+    <color name="eq_enable_color">#6750A4</color>
+    <color name="eq_disable_color">#ffc7c3c7</color>
 </resources>
