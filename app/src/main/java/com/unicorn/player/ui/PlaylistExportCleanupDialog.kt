@@ -185,7 +185,7 @@ object PlaylistExportConflictDialog {
                 val names = conflicts.take(3).joinToString("、") { it.playlistName }
                 append("存在 ${conflicts.size} 组同名导出文件（$names）")
             }
-            append("，可能是清除数据后创建的同名歌单。\n\n")
+            append("。\n\n")
             append("合并：旧文件与当前歌单合并后保存\n")
             append("覆盖：仅保存当前歌单\n\n")
             append("旧文件都会被删除，以当前歌单重新保存。")

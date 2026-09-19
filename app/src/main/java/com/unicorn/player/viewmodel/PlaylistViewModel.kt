@@ -313,27 +313,21 @@ class PlaylistViewModel(
 
     /**
      * 判断导出文件是否与当前歌单构成同名冲突：
-     * - 名称相同（trim + NOCASE）且文件内 playlistId 不同 → 冲突（文件可能来自
-     *   清除应用数据前的同名歌单，或历史遗留文件）；
-     * - playlistId 相同但文件导出时间早于当前歌单创建时间 → 同样冲突。
-     *   清除应用数据后 Room 主键从 1 重新自增，新建同名歌单会与旧文件撞 ID，
-     *   仅靠 ID 无法区分「同一歌单重复导出」，时间倒挂是此时的唯一判别信号。
+     * 只要名称相同（trim + NOCASE）即视为冲突 —— 包括：
+     * - 文件内 playlistId 与当前歌单不同（清除应用数据后重建的同名歌单，或历史遗留）；
+     * - playlistId 相同（同一歌单重复导出）。
+     * 重复导出时也弹合并/覆盖弹窗，用户可在「恢复之前导出过的歌曲」与「仅保存当前歌单」之间选择，
+     * 避免静默覆盖丢失历史。结果统一以当前 playlistId 重新写入。
      */
     private fun isConflictFile(pf: ParsedFile, playlist: Playlist): Boolean {
-        if (!pf.data.playlistName.trim().equals(playlist.name.trim(), ignoreCase = true)) {
-            return false
-        }
-        if (pf.data.playlistId != playlist.id) {
-            return true
-        }
-        return pf.data.exportedAt > 0L && pf.data.exportedAt < playlist.createdAt
+        return pf.data.playlistName.trim().equals(playlist.name.trim(), ignoreCase = true)
     }
 
     /**
      * 构建预检结果：
-     * - 同一歌单（含 ID 撞车但时间不倒挂的正常重复导出）的旧文件存在 → 覆盖导出，数量不变；
-     * - 同名冲突文件无论覆盖 / 合并都会被删除后以当前 playlistId 重新写入，
-     *   净增量 = 1 - 冲突文件数（撞 ID 时冲突文件就是自身旧文件，数量不变）。
+     * - 同名文件无论覆盖 / 合并都会被删除后以当前 playlistId 重新写入。
+     *   同 ID 重复导出时冲突文件就是自身旧文件，净增量 = 1 - 1 = 0；
+     *   无同名文件时净增量 = 1；多个同名（不同 ID）时净增量 = 1 - 冲突数。
      */
     private suspend fun buildExportPrecheck(
         context: Context,
@@ -345,16 +339,15 @@ class PlaylistViewModel(
         var projected = allFiles.size
         for (id in ids) {
             val playlist = repository.getPlaylistById(id) ?: continue
-            val ownFileName = PlaylistFileManager.fileNameForPlaylist(id)
-            val ownExists = allFiles.contains(ownFileName)
             val conflictFiles = parsed
                 .filter { isConflictFile(it, playlist) }
                 .map { it.fileName }
             if (conflictFiles.isNotEmpty()) {
                 conflicts.add(ExportConflict(id, playlist.name, conflictFiles))
             }
-            if (!ownExists) {
-                // 撞 ID 时冲突文件就是自身（ownExists 必为 true），不会走到这里
+            // 同 ID 重复导出时 ownFileName 就在 conflictFiles 中，净增 0
+            val ownFileName = PlaylistFileManager.fileNameForPlaylist(id)
+            if (ownFileName !in conflictFiles) {
                 projected += 1 - conflictFiles.size
             }
         }
