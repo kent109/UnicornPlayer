@@ -128,7 +128,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:gravity="center"
                 android:text="@string/done"
-                android:textColor="@color/primary"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 android:visibility="gone" />

@@ -8,7 +8,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.databinding.ActivityDirectoryPickerBinding
@@ -18,7 +17,7 @@ import java.io.File
  * 目录选择页面
  * 列出 sdcard 下一级子目录，供用户选择排除或指定扫描的目录
  */
-class DirectoryPickerActivity : AppCompatActivity() {
+class DirectoryPickerActivity : BaseActivity() {
 
     companion object {
         const val EXTRA_MODE = "extra_mode"

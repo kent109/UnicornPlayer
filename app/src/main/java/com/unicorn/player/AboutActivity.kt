@@ -1,7 +1,6 @@
 package com.unicorn.player
 
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import com.unicorn.player.databinding.ActivityAboutBinding
 import io.noties.markwon.Markwon
 
@@ -9,7 +8,7 @@ import io.noties.markwon.Markwon
  * 关于页面
  * 展示应用信息、用户协议与隐私政策
  */
-class AboutActivity : AppCompatActivity() {
+class AboutActivity : BaseActivity() {
 
     private lateinit var binding: ActivityAboutBinding
 

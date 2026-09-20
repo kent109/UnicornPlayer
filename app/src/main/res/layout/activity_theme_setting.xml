@@ -13,7 +13,7 @@
         android:id="@+id/titleBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:title="主题风格" />
+        app:title="主题样式" />
 
     <!-- 内容容器 -->
     <com.scwang.smart.refresh.layout.SmartRefreshLayout

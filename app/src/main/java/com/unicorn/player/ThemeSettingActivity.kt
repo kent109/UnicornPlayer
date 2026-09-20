@@ -7,12 +7,12 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.PopupWindow
-import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
 import com.unicorn.player.databinding.ActivityThemeSettingBinding
@@ -22,7 +22,7 @@ import kotlinx.coroutines.runBlocking
 
 internal val Context.themeDataStore by preferencesDataStore(name = "theme_settings")
 
-class ThemeSettingActivity : AppCompatActivity() {
+class ThemeSettingActivity : BaseActivity() {
 
     companion object {
         private const val TAG = "ThemeSetting"
@@ -32,6 +32,41 @@ class ThemeSettingActivity : AppCompatActivity() {
         const val MODE_FOLLOW_SYSTEM = 0
         const val MODE_LIGHT = 1
         const val MODE_DARK = 2
+
+        val THEME_COLOR_MODE = intPreferencesKey("theme_color_mode")
+        val THEME_COLOR_INDEX = intPreferencesKey("theme_color_index")
+        val THEME_COLOR_LAST_INDEX = intPreferencesKey("theme_color_last_index")
+        val THEME_COLOR_LAST_SWITCH_DATE = stringPreferencesKey("theme_color_last_switch_date")
+
+        const val COLOR_MODE_SYSTEM = 0
+        const val COLOR_MODE_RANDOM = 1
+        const val COLOR_MODE_FIXED = 2
+
+        const val COLOR_COUNT = 7
+
+        private val COLOR_THEME_RES = intArrayOf(
+            R.style.Theme_UnicornPlayer_Color1,
+            R.style.Theme_UnicornPlayer_Color2,
+            R.style.Theme_UnicornPlayer_Color3,
+            R.style.Theme_UnicornPlayer_Color4,
+            R.style.Theme_UnicornPlayer_Color5,
+            R.style.Theme_UnicornPlayer_Color6,
+            R.style.Theme_UnicornPlayer_Color7
+        )
+
+        val COLOR_VALUES = intArrayOf(
+            0xf800f8,
+            0xf00078,
+            0xf3c832,
+            0x4ab069,
+            0x377eea,
+            0x26fdfd,
+            0x7e3ae4
+        )
+
+        fun getColorThemeRes(index: Int): Int {
+            return if (index in 0 until COLOR_COUNT) COLOR_THEME_RES[index] else 0
+        }
 
         fun applyTheme(mode: Int) {
             val nightMode = when (mode) {
@@ -69,6 +104,13 @@ class ThemeSettingActivity : AppCompatActivity() {
         setupSettingsItems()
     }
 
+    override fun onResume() {
+        super.onResume()
+        binding.settingsContainer
+            .findViewWithTag<android.widget.TextView>("theme_color_summary")
+            ?.text = ThemeColorActivity.getColorModeSummary(this)
+    }
+
     private fun setupSettingsItems() {
         val container = binding.settingsContainer
         val inflater = LayoutInflater.from(this)
@@ -79,13 +121,25 @@ class ThemeSettingActivity : AppCompatActivity() {
             items = listOf(
                 SettingItem(
                     key = "theme_mode",
-                    title = "深色模式",
+                    title = "颜色模式",
                     summary = getThemeSummary(),
                     hasChevron = true,
                     isFirst = true,
-                    isLast = true,
+                    isLast = false,
                     type = SettingItemType.SELECT,
                     onClick = { anchor -> showThemeModeMenu(anchor) }
+                ),
+                SettingItem(
+                    key = "theme_color",
+                    title = "主题色",
+                    summary = ThemeColorActivity.getColorModeSummary(this),
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = true,
+                    type = SettingItemType.NORMAL,
+                    onClick = {
+                        startActivity(android.content.Intent(this, ThemeColorActivity::class.java))
+                    }
                 )
             )
         )
@@ -117,7 +171,7 @@ class ThemeSettingActivity : AppCompatActivity() {
             )
         }
 
-        items.forEachIndexed { index, item ->
+        items.forEachIndexed { _, item ->
             val itemView = createSettingItem(inflater, contentContainer, item)
             contentContainer.addView(itemView)
 

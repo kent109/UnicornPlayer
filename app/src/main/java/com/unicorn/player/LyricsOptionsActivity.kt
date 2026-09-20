@@ -8,7 +8,6 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -46,7 +45,7 @@ internal val Context.lyricsDataStore by preferencesDataStore(name = "lyrics_sett
  * 歌词显示设置页面
  * 配置歌词显示样式和行为
  */
-class LyricsOptionsActivity : AppCompatActivity() {
+class LyricsOptionsActivity : BaseActivity() {
 
     companion object {
         private const val TAG = "LyricsOptions"
