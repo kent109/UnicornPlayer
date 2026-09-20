@@ -73,10 +73,10 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/searchView"
-        app:tabIndicatorColor="@color/primary"
+        app:tabIndicatorColor="?attr/colorPrimary"
         app:tabIndicatorFullWidth="false"
         app:tabMode="fixed"
-        app:tabSelectedTextColor="@color/primary"
+        app:tabSelectedTextColor="?attr/colorPrimary"
         app:tabTextAppearance="@style/TabLayoutText"
         app:tabTextColor="@color/onSurfaceVariant" />
 

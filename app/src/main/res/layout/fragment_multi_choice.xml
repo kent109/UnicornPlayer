@@ -37,7 +37,7 @@
             android:layout_height="wrap_content"
             android:layout_alignParentEnd="true"
             android:text="全选"
-            android:textColor="@color/primary"
+            android:textColor="?attr/colorPrimary"
             android:textSize="17sp"
             android:textStyle="bold" />
 

@@ -11,7 +11,6 @@ import android.widget.SearchView
 import android.widget.Toast
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -48,7 +47,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
+class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     MusicManager.ConnectionCallback, MultiChoiceFragment.OnMultiChoiceActionListener {
 
     private lateinit var binding: ActivityMainBinding

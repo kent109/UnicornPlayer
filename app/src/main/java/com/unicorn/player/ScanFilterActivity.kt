@@ -11,7 +11,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -34,7 +33,7 @@ internal val Context.scanFiltersDataStore by preferencesDataStore(name = "scan_f
  * 扫描过滤设置页面
  * 配置音频扫描时的过滤条件
  */
-class ScanFilterActivity : AppCompatActivity() {
+class ScanFilterActivity : BaseActivity() {
 
     companion object {
         private const val TAG = "ScanFilterActivity"

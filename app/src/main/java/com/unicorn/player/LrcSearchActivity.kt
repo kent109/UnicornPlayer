@@ -8,7 +8,6 @@ import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -29,7 +28,7 @@ import java.io.File
  * 歌词搜索界面
  * 允许用户手动输入歌手/歌名搜索 lrclib.net 并选择下载歌词
  */
-class LrcSearchActivity : AppCompatActivity(),
+class LrcSearchActivity : BaseActivity(),
     LrcSearchResultAdapter.OnResultClickListener,
     LrcSearchResultAdapter.OnResultLongClickListener {
 

@@ -6,7 +6,6 @@ import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -30,7 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class EqualizerActivity : AppCompatActivity(), MusicManager.ConnectionCallback {
+class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     private lateinit var binding: ActivityEqualizerBinding
     private var musicService: MusicService? = null

@@ -6,7 +6,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.model.Song
@@ -18,7 +17,7 @@ import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.PlaylistViewModel
 import kotlinx.coroutines.launch
 
-open class SongMultiChoiceBaseActivity : AppCompatActivity(),
+open class SongMultiChoiceBaseActivity : BaseActivity(),
     SongMultiChoiceFragment.OnMultiChoiceActionListener {
 
     // 服务绑定

@@ -103,6 +103,13 @@
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
+            android:name=".ThemeColorActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.UnicornPlayer"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
+        <activity
             android:name=".ScanFilterActivity"
             android:exported="false"
             android:screenOrientation="portrait"

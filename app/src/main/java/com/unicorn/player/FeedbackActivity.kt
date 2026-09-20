@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.util.Log
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import com.unicorn.player.databinding.ActivityFeedbackBinding
 import com.unicorn.player.util.FeedbackHelper
 
@@ -13,7 +12,7 @@ import com.unicorn.player.util.FeedbackHelper
  * 意见反馈页面
  * 展示反馈邮箱并提供反馈内容输入和提交功能
  */
-class FeedbackActivity : AppCompatActivity() {
+class FeedbackActivity : BaseActivity() {
 
     companion object {
         const val TAG = "FeedbackActivity"

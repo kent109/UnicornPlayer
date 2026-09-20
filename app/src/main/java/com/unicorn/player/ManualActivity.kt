@@ -1,7 +1,6 @@
 package com.unicorn.player
 
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
 import com.unicorn.player.databinding.ActivityManualBinding
 import io.noties.markwon.Markwon
 
@@ -9,7 +8,7 @@ import io.noties.markwon.Markwon
  * 使用指南页面
  * 展示应用使用说明
  */
-class ManualActivity : AppCompatActivity() {
+class ManualActivity : BaseActivity() {
 
     private lateinit var binding: ActivityManualBinding
 

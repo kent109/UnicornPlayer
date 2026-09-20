@@ -12,7 +12,7 @@
             android:scaleGravity="left">
             <shape android:shape="rectangle">
                 <corners android:radius="2dp" />
-                <solid android:color="@color/primary" />
+                <solid android:color="?attr/colorPrimary" />
             </shape>
         </scale>
     </item>

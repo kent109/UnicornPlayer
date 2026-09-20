@@ -11,7 +11,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.graphics.toColorInt
 import androidx.core.view.doOnPreDraw
@@ -35,7 +34,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class PlayerActivity : AppCompatActivity(), MusicManager.ConnectionCallback {
+class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     private lateinit var binding: ActivityPlayerBinding
     private var musicService: MusicService? = null

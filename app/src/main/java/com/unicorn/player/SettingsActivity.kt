@@ -9,7 +9,6 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.content.FileProvider
 import com.google.android.material.switchmaterial.SwitchMaterial
@@ -21,7 +20,7 @@ import java.io.File
  * 设置页面Activity
  * 使用CardView自定义布局实现
  */
-class SettingsActivity : AppCompatActivity() {
+class SettingsActivity : BaseActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
 
@@ -84,7 +83,7 @@ class SettingsActivity : AppCompatActivity() {
         playItems.add(
             SettingItem(
                 key = "theme_style",
-                title = "主题风格",
+                title = "主题样式",
                 hasChevron = true,
                 isFirst = false,
                 isLast = false,
