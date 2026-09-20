@@ -475,6 +475,19 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     }
 
     private fun setupSearchView() {
+        binding.searchView.queryHint = "输入歌曲、歌手、专辑关键字"
+
+        // 设置 SearchView 内部输入框的 hint 文字颜色，确保可见
+        val searchAutoComplete = binding.searchView.findViewById<
+                android.widget.AutoCompleteTextView>(
+            androidx.appcompat.R.id.search_src_text
+        )
+        searchAutoComplete?.setHintTextColor(
+            androidx.core.content.ContextCompat.getColor(
+                this, R.color.secondary
+            )
+        )
+
         binding.searchView.setOnQueryTextListener(object :
             androidx.appcompat.widget.SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean {
@@ -1200,6 +1213,12 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
     private fun updateBottomPlayer(song: Song) {
         // 委托控制器更新标题、艺术家、专辑封面
         bottomPlayerController.updateSongInfo(song)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        // 主题切换导致 Activity 重建时，清除 SearchView 残留的搜索文字
+        exitSearchMode()
     }
 
     override fun onResume() {

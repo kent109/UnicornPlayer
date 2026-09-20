@@ -15,6 +15,7 @@
         android:layout_marginEnd="10dp"
         android:layout_marginBottom="12dp"
         android:queryHint="搜索音乐..."
+        android:saveEnabled="false"
         android:theme="@style/searchStyle"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
