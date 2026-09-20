@@ -160,6 +160,6 @@ dependencies {
     // EQ
     implementation project(':equalizer')
 
-    // Jaudiotagger
-    implementation 'net.jthink:jaudiotagger:3.0.1'
+    // TagLib
+    implementation 'io.github.amanrajaryan:TagLib:1.0.2'
 }

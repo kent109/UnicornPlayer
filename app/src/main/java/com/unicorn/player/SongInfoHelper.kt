@@ -68,12 +68,6 @@ class SongInfoHelper(private val context: Context) {
         dialogBinding.tvSongTitle.text = song.title
         dialogBinding.tvSongTitle.isSelected = true // 激活跑马灯效果
 
-        // JAudiotagger 仅支持修改以下格式的标签，不支持的格式隐藏编辑按钮
-        val ext = song.path.substringAfterLast('.', "").lowercase(Locale.getDefault())
-        if (ext !in listOf("mp3", "flac", "ogg", "wav", "m4a")) {
-            dialogBinding.btnEditContainer.visibility = View.INVISIBLE
-        }
-
         // 锁定标题区域高度，避免切换编辑状态时布局抖动
         dialogBinding.root.post {
             val titleHeight = dialogBinding.tvSongTitle.height
@@ -227,6 +221,23 @@ class SongInfoHelper(private val context: Context) {
             }.start()
         }
 
+        // 点击星号时聚焦对应 EditText，光标置于末尾
+        dialogBinding.tvTitleAsterisk.setOnClickListener {
+            dialogBinding.etSongTitle.requestFocus()
+            dialogBinding.etSongTitle.setSelection(dialogBinding.etSongTitle.text.length)
+            showKeyboard(dialogBinding.etSongTitle)
+        }
+        artistItemBinding.tvAsterisk.setOnClickListener {
+            artistItemBinding.etValue.requestFocus()
+            artistItemBinding.etValue.setSelection(artistItemBinding.etValue.text.length)
+            showKeyboard(artistItemBinding.etValue)
+        }
+        albumItemBinding.tvAsterisk.setOnClickListener {
+            albumItemBinding.etValue.requestFocus()
+            albumItemBinding.etValue.setSelection(albumItemBinding.etValue.text.length)
+            showKeyboard(albumItemBinding.etValue)
+        }
+
         // 添加到歌单（在"文件路径"后面，"分享本地文件"前面，仅当存在歌单时显示）
         if (showAddToPlaylist) {
             addClickableItem(
@@ -322,6 +333,14 @@ class SongInfoHelper(private val context: Context) {
     private fun hideKeyboard(view: View) {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
         imm?.hideSoftInputFromWindow(view.windowToken, 0)
+    }
+
+    /**
+     * 显示输入法键盘
+     */
+    private fun showKeyboard(view: View) {
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
     }
 
     /**

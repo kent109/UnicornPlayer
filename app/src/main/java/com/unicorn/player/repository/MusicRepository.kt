@@ -1,5 +1,6 @@
 package com.unicorn.player.repository
 
+import aman.taglib.TagLib
 import android.content.ContentUris
 import android.content.Context
 import android.media.MediaMetadataRetriever
@@ -15,9 +16,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import okhttp3.internal.immutableListOf
-import org.jaudiotagger.audio.AudioFileIO
-import org.jaudiotagger.tag.FieldKey
-import org.jaudiotagger.tag.Tag
 import java.io.File
 import java.util.Locale
 
@@ -73,18 +71,12 @@ class MusicRepository(private val context: Context) {
                 val albumId = cursor.getLong(albumIdColumn)
                 val mime = cursor.getString(mimeColumn)
 
-                // WAV 文件需要从文件直接读取 ID3v2 标签覆盖 MediaStore 的值。
-                // 原因：JAudioTagger 写入 WAV 的标签是 ID3v2 chunk，而 Android MediaStore
-                // 的 WAV 解析器只读取 RIFF INFO / BWF 块，不解析 ID3v2 chunk。
-                // 导致用户用 App 改完标签后，一旦清除应用数据（Room 缓存被清），
-                // 应用重新从 MediaStore 读取时仍返回旧值，修改丢失。
-                // 此处对 WAV 在扫描时直接读文件标签，保证修改过的元数据可恢复。
-                if (isWavFile(mime, path)) {
-                    val fileTags = readWavTagsFromFile(path)
-                    fileTags.first?.let { title = it }
-                    fileTags.second?.let { artist = it }
-                    fileTags.third?.let { album = it }
-                }
+                // 直接从文件读取标签，覆盖 MediaStore 的值
+                // 确保 TagLib 写入的标签能正确读取
+                val fileTags = TagLib.getMetadata(path)
+                fileTags["TITLE"]?.takeIf { it.isNotEmpty() }?.let { title = it }
+                fileTags["ARTIST"]?.takeIf { it.isNotEmpty() }?.let { artist = it }
+                fileTags["ALBUM"]?.takeIf { it.isNotEmpty() }?.let { album = it }
 
                 if (isUnknownArtist(artist)) {
                     artist = "<unknown>"
@@ -189,48 +181,6 @@ class MusicRepository(private val context: Context) {
             return true
         }
         return false
-    }
-
-    /**
-     * 判断是否为 WAV 文件（基于 MIME 或扩展名）。
-     */
-    private fun isWavFile(mime: String?, path: String): Boolean {
-        if (mime.equals("audio/x-wav", ignoreCase = true) ||
-            mime.equals("audio/wav", ignoreCase = true) ||
-            mime.equals("audio/wave", ignoreCase = true)
-        ) {
-            return true
-        }
-        val ext = path.substringAfterLast('.', "").lowercase(Locale.getDefault())
-        return ext == "wav"
-    }
-
-    /**
-     * 使用 JAudioTagger 从 WAV 文件直接读取 ID3v2 标签。
-     *
-     * 背景：MediaStore 的 WAV 解析器只读 RIFF INFO / BWF 块，不解析 ID3v2 chunk，
-     * 而 AudioTagEditor 通过 JAudioTagger 写入 WAV 的标签正是 ID3v2 chunk。
-     * 因此扫描时必须直接读文件，否则修改过的标签在清除应用数据后会丢失
-     * （Room 缓存被清，MediaStore 又读不到 ID3v2）。
-     *
-     * @return Triple<title, artist, album>，任一字段读不到或异常时为 null。
-     */
-    private fun readWavTagsFromFile(path: String): Triple<String?, String?, String?> {
-        return try {
-            val audioFile = AudioFileIO.read(File(path))
-            val tag: Tag? = audioFile.tag
-            if (tag == null) {
-                Triple(null, null, null)
-            } else {
-                Triple(
-                    tag.getFirst(FieldKey.TITLE).ifEmpty { null },
-                    tag.getFirst(FieldKey.ARTIST).ifEmpty { null },
-                    tag.getFirst(FieldKey.ALBUM).ifEmpty { null }
-                )
-            }
-        } catch (_: Exception) {
-            Triple(null, null, null)
-        }
     }
 
     /**

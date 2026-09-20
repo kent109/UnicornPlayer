@@ -38,6 +38,7 @@
             android:importantForAutofill="no"
             android:inputType="text"
             android:maxLength="30"
+            android:minWidth="2dp"
             android:maxLines="1"
             android:textColor="@color/onSurface"
             android:textSize="13sp"

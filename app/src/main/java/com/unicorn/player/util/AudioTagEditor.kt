@@ -1,5 +1,6 @@
 package com.unicorn.player.util
 
+import aman.taglib.TagLib
 import android.app.RecoverableSecurityException
 import android.content.ContentUris
 import android.content.Context
@@ -12,17 +13,11 @@ import android.provider.MediaStore
 import android.util.Log
 import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.model.Song
-import org.jaudiotagger.audio.AudioFileIO
-import org.jaudiotagger.audio.mp3.MP3File
-import org.jaudiotagger.tag.FieldKey
-import org.jaudiotagger.tag.Tag
-import org.jaudiotagger.tag.id3.ID3v24Tag
 import java.io.File
-import java.util.Locale
 
 /**
  * 音频标签编辑工具类
- * 负责使用 JAudiotagger 修改音频文件的标签（歌名、歌手、专辑）
+ * 负责使用 TagLib 修改音频文件的标签（歌名、歌手、专辑）
  * 通过 content Uri + 临时文件读写实现
  */
 class AudioTagEditor(private val context: Context) {
@@ -72,7 +67,7 @@ class AudioTagEditor(private val context: Context) {
     private var pendingNewAlbum: String? = null
 
     /**
-     * 使用 JAudiotagger 修改音频文件的标签（歌名、歌手、专辑）
+     * 使用 TagLib 修改音频文件的标签（歌名、歌手、专辑）
      * @return 编辑结果
      */
     fun modifyAudioTags(
@@ -88,14 +83,7 @@ class AudioTagEditor(private val context: Context) {
                 song.id
             )
 
-            // 临时文件必须保留原扩展名，否则 JAudiotagger 无法识别格式，
-            // 会抛出 "No Reader associated with this extension"
-            val extension = song.path.substringAfterLast('.', "").lowercase(Locale.getDefault())
-            if (extension.isEmpty()) {
-                LogWriter.writeError(TAG, "无法识别文件扩展名: ${song.path}", null)
-                return TagEditResult.FAILURE
-            }
-
+            val extension = song.path.substringAfterLast('.', "").lowercase()
             val temp = File(
                 context.cacheDir,
                 "temp_tag_edit_${System.currentTimeMillis()}.$extension"
@@ -110,29 +98,12 @@ class AudioTagEditor(private val context: Context) {
             }
             input.use { src -> temp.outputStream().use { dst -> src.copyTo(dst) } }
 
-            // 使用 JAudiotagger 修改临时文件的标签
-            val audioFile = AudioFileIO.read(temp)
-
-            // 关键：必须把标签显式写回 AudioFile。
-            // getTagOrCreateDefault() 只「返回」新标签而不会写回，
-            // 会导致 AudioFileIO.write() 内部 getTag() 为 null 抛 NullPointerException。
-            // MP3 的写入器只认 ID3v2 标签，需单独设置。
-            if (audioFile is MP3File) {
-                val id3Tag = audioFile.iD3v2Tag ?: ID3v24Tag()
-                setOrDeleteField(id3Tag, FieldKey.TITLE, newTitle)
-                setOrDeleteField(id3Tag, FieldKey.ARTIST, newArtist)
-                setOrDeleteField(id3Tag, FieldKey.ALBUM, newAlbum)
-                audioFile.setID3v2Tag(id3Tag)
-                audioFile.tag = id3Tag
-            } else {
-                val tag = audioFile.tag ?: audioFile.createDefaultTag()
-                setOrDeleteField(tag, FieldKey.TITLE, newTitle)
-                setOrDeleteField(tag, FieldKey.ARTIST, newArtist)
-                setOrDeleteField(tag, FieldKey.ALBUM, newAlbum)
-                audioFile.tag = tag
-            }
-
-            AudioFileIO.write(audioFile)
+            // 使用 TagLib 修改临时文件的标签
+            val meta = HashMap<String, String>()
+            if (newTitle.isNotEmpty()) meta["TITLE"] = newTitle
+            if (newArtist.isNotEmpty()) meta["ARTIST"] = newArtist
+            if (newAlbum.isNotEmpty()) meta["ALBUM"] = newAlbum
+            TagLib.setMetadata(temp.absolutePath, meta)
 
             // 将修改后的临时文件写回原 content Uri（覆盖）
             try {
@@ -248,20 +219,5 @@ class AudioTagEditor(private val context: Context) {
         pendingNewTitle = null
         pendingNewArtist = null
         pendingNewAlbum = null
-    }
-
-    /**
-     * 设置或删除标签字段：值为空时删除字段，非空时设置字段
-     */
-    private fun setOrDeleteField(tag: Tag, key: FieldKey, value: String) {
-        if (value.isEmpty()) {
-            try {
-                tag.deleteField(key)
-            } catch (_: Exception) {
-                // 字段不存在时忽略
-            }
-        } else {
-            tag.setField(key, value)
-        }
     }
 }
