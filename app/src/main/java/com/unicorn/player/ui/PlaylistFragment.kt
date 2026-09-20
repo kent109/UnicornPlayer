@@ -288,8 +288,6 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
 
     private fun observeData() {
         viewModel.playlists.observe(viewLifecycleOwner) { playlists ->
-            // 编辑 / 删除 / 新建 / 刷新后，重置 swiped 状态，
-            // 防止 DiffUtil 让新滑入该位置的 item 继承旧平移出现"关不上"。
             adapter.forceResetSwipeState()
             adapter.submitList(playlists)
             binding.smartRefreshLayout.finishRefresh(200)

@@ -27,6 +27,7 @@ import com.unicorn.player.service.MusicService
 import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.AlbumFragment
 import com.unicorn.player.ui.ArtistFragment
+import com.unicorn.player.ui.EmptyPlaylistActionDialog
 import com.unicorn.player.ui.MainPagerAdapter
 import com.unicorn.player.ui.MultiChoiceFragment
 import com.unicorn.player.ui.PlaylistExportCleanupDialog
@@ -902,7 +903,9 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
                 repository.getAllPlaylists().firstOrNull()
             } ?: emptyList()
             if (playlists.isEmpty()) {
-                Toast.makeText(this@MainActivity, "暂无歌单", Toast.LENGTH_SHORT).show()
+                EmptyPlaylistActionDialog(this@MainActivity) {
+                    handleAddToPlaylist(selectedSongIds)
+                }.show()
                 return@launch
             }
 
@@ -1312,7 +1315,9 @@ class MainActivity : AppCompatActivity(), SongsFragment.SongListHost,
                 repository.getAllPlaylists().firstOrNull()
             } ?: emptyList()
             if (playlists.isEmpty()) {
-                Toast.makeText(this@MainActivity, "暂无歌单", Toast.LENGTH_SHORT).show()
+                EmptyPlaylistActionDialog(this@MainActivity) {
+                    showSelectPlaylistDialog(song)
+                }.show()
                 return@launch
             }
             // 查询每个歌单的歌曲数量，用于弹窗显示

@@ -2,6 +2,7 @@ package com.unicorn.player.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.os.Looper
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -89,7 +90,7 @@ class PlaylistViewModel(
     private fun observeHiddenRegistry() {
         hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
         hiddenRegistryObserver = androidx.lifecycle.Observer { _ ->
-            refreshPlaylistsInternal()
+            viewModelScope.launch { refreshPlaylistsInternal() }
         }
         HiddenSongRegistry.hiddenSongIds.observeForever(hiddenRegistryObserver!!)
     }
@@ -123,51 +124,52 @@ class PlaylistViewModel(
     fun loadPlaylists() {
         if (hasLoadedOnce) return
         hasLoadedOnce = true
-        refreshPlaylistsInternal()
+        viewModelScope.launch { refreshPlaylistsInternal() }
     }
 
     /**
      * 强制重新查询（下拉刷新、写操作返回时调用，忽略 [hasLoadedOnce]）
      */
     fun refreshPlaylists() {
+        viewModelScope.launch { refreshPlaylistsInternal() }
+    }
+
+    /**
+     * 挂起版本：等待刷新完成后返回。供需要在刷新后继续执行外部调用方使用。
+     */
+    suspend fun refreshPlaylistsSuspend() {
         refreshPlaylistsInternal()
     }
 
-    private fun refreshPlaylistsInternal() {
-        viewModelScope.launch {
-            _isLoading.postValue(true)
-            try {
-                // 收集歌单列表：getAllPlaylists 是持续 Flow，仅取最新一次即停止
-                val playlistList = repository.getAllPlaylists().first()
-                // 当前隐藏的 ID 集合，用于计算时过滤
-                val hiddenIds = HiddenSongRegistry.currentIds()
-                // 对每个歌单取一次快照数量（first() 单次取值后即取消订阅），过滤隐藏歌曲
-                val infos = playlistList.map { pl ->
-                    try {
-                        // 1. 获取该歌单下的所有歌曲 (List<Song>)
-                        val allSongs = repository.getPlaylistSongs(pl.id).first()
-                        // 2. 过滤隐藏歌曲并转换为 MutableList
-                        // 如果 hiddenIds 为空，直接转换；否则过滤掉 id 在 hiddenIds 中的歌曲
-                        val visibleSongList = if (hiddenIds.isEmpty()) {
-                            allSongs.toMutableList()
-                        } else {
-                            allSongs.filter { it.id !in hiddenIds }.toMutableList()
-                        }
-                        // 3. 计算可见歌曲数量 (直接使用过滤后列表的大小，避免重复遍历)
-                        val visibleCount = visibleSongList.size
-                        // 4. 构建 PlaylistInfo
-                        pl.toInfo(visibleCount, visibleSongList)
-                    } catch (e: Exception) {
-                        // 异常情况下，数量为0，列表为空
-                        pl.toInfo(0, mutableListOf())
+    private suspend fun refreshPlaylistsInternal() {
+        val onMain = Looper.getMainLooper().thread == Thread.currentThread()
+        if (onMain) _isLoading.value = true else _isLoading.postValue(true)
+        try {
+            val playlistList = repository.getAllPlaylists().first()
+            val hiddenIds = HiddenSongRegistry.currentIds()
+            val infos = playlistList.map { pl ->
+                try {
+                    val allSongs = repository.getPlaylistSongs(pl.id).first()
+                    val visibleSongList = if (hiddenIds.isEmpty()) {
+                        allSongs.toMutableList()
+                    } else {
+                        allSongs.filter { it.id !in hiddenIds }.toMutableList()
                     }
+                    val visibleCount = visibleSongList.size
+                    pl.toInfo(visibleCount, visibleSongList)
+                } catch (e: Exception) {
+                    pl.toInfo(0, mutableListOf())
                 }
-                _playlists.postValue(infos)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                _isLoading.postValue(false)
             }
+            if (onMain) {
+                _playlists.value = infos
+            } else {
+                _playlists.postValue(infos)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            if (onMain) _isLoading.value = false else _isLoading.postValue(false)
         }
     }
 
@@ -533,7 +535,6 @@ class PlaylistViewModel(
                     }
                 }
                 refreshPlaylistsInternal()
-                PlaylistRefresher.notifyPlaylistsChanged()
             } catch (e: Exception) {
                 e.printStackTrace()
             }

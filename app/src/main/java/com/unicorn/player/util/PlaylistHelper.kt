@@ -8,6 +8,7 @@ import androidx.lifecycle.lifecycleScope
 import com.unicorn.player.model.Playlist
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
+import com.unicorn.player.ui.EmptyPlaylistActionDialog
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.viewmodel.MusicViewModel
@@ -31,7 +32,9 @@ class PlaylistHelper {
                     repository.getAllPlaylists().firstOrNull()
                 } ?: emptyList()
                 if (playlists.isEmpty()) {
-                    Toast.makeText(activity, "暂无歌单", Toast.LENGTH_SHORT).show()
+                    EmptyPlaylistActionDialog(activity) {
+                        addToPlaylist(selectedSongIds, activity, viewModel, musicService)
+                    }.show()
                     return@launch
                 }
 
