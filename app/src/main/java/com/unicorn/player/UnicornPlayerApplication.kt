@@ -1,6 +1,8 @@
 package com.unicorn.player
 
 import android.app.Application
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.FileWriter
 import java.io.PrintWriter
@@ -28,6 +30,9 @@ class UnicornPlayerApplication : Application() {
         super.onCreate()
         instance = this
 
+        // 初始化主题设置
+        initTheme()
+
         // 保存默认的异常处理器
         defaultHandler = Thread.getDefaultUncaughtExceptionHandler()!!
 
@@ -38,6 +43,26 @@ class UnicornPlayerApplication : Application() {
 
             // 调用默认的异常处理器（强制退出应用）
             defaultHandler.uncaughtException(thread, throwable)
+        }
+    }
+
+    /**
+     * 初始化主题设置
+     * 从DataStore读取保存的主题模式并应用
+     */
+    private fun initTheme() {
+        try {
+            val mode = runBlocking {
+                try {
+                    val prefs = applicationContext.themeDataStore.data.first()
+                    prefs[ThemeSettingActivity.THEME_MODE] ?: ThemeSettingActivity.MODE_FOLLOW_SYSTEM
+                } catch (e: Exception) {
+                    ThemeSettingActivity.MODE_FOLLOW_SYSTEM
+                }
+            }
+            ThemeSettingActivity.applyTheme(mode)
+        } catch (e: Exception) {
+            ThemeSettingActivity.applyTheme(ThemeSettingActivity.MODE_FOLLOW_SYSTEM)
         }
     }
 

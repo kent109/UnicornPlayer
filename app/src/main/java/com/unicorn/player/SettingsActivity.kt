@@ -83,6 +83,18 @@ class SettingsActivity : AppCompatActivity() {
         )
         playItems.add(
             SettingItem(
+                key = "theme_style",
+                title = "主题风格",
+                hasChevron = true,
+                isFirst = false,
+                isLast = false,
+                onClick = {
+                    startActivity(Intent(this, ThemeSettingActivity::class.java))
+                }
+            )
+        )
+        playItems.add(
+            SettingItem(
                 key = "scan_filter",
                 title = "扫描过滤",
                 hasChevron = true,
