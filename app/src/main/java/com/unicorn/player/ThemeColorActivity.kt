@@ -169,7 +169,7 @@ class ThemeColorActivity : BaseActivity() {
     }
 
     private fun createColorItem(index: Int): View {
-        val color = ThemeSettingActivity.COLOR_VALUES[index] or 0xFF000000.toInt()
+        val color = ThemeSettingActivity.getColorValues(this)[index] or 0xFF000000.toInt()
         val isSelected = index == currentColorIndex
 
         val container = LinearLayout(this).apply {

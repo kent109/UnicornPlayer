@@ -12,6 +12,7 @@ import android.media.audiofx.Equalizer;
 import android.media.audiofx.PresetReverb;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -810,7 +811,28 @@ public class EqualizerFragment extends Fragment {
         }
 
         ArrayList<String> equalizerPresetNames = new ArrayList<>();
-        ArrayAdapter<String> equalizerPresetSpinnerAdapter = new ArrayAdapter<>(ctx, R.layout.spinner_item, equalizerPresetNames);
+        ArrayAdapter<String> equalizerPresetSpinnerAdapter = new ArrayAdapter<String>(ctx, R.layout.spinner_item, equalizerPresetNames) {
+            @NonNull
+            @Override
+            public View getView(int position, View convertView, @NonNull ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                if (view instanceof TextView) {
+                    int color;
+                    if (Settings.isEqualizerEnabled) {
+                        TypedValue typedValue = new TypedValue();
+                        requireActivity().getTheme().resolveAttribute(
+                                com.google.android.material.R.attr.colorPrimary, typedValue, true);
+                        color = typedValue.resourceId != 0
+                                ? getResources().getColor(typedValue.resourceId, requireActivity().getTheme())
+                                : typedValue.data;
+                    } else {
+                        color = getResources().getColor(R.color.eq_disable_color, requireActivity().getTheme());
+                    }
+                    ((TextView) view).setTextColor(color);
+                }
+                return view;
+            }
+        };
         equalizerPresetSpinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
 
         equalizerPresetNames.add("自定义");
@@ -1003,10 +1025,19 @@ public class EqualizerFragment extends Fragment {
     }
 
     private void updateComponentColors(boolean enabled) {
-        int color = getResources().getColor(
-                enabled ? R.color.eq_enable_color : R.color.eq_disable_color,
-                getContext().getTheme()
-        );
+        int color;
+        if (enabled) {
+            TypedValue typedValue = new TypedValue();
+            requireActivity().getTheme().resolveAttribute(
+                    com.google.android.material.R.attr.colorPrimary, typedValue, true);
+            if (typedValue.resourceId != 0) {
+                color = getResources().getColor(typedValue.resourceId, requireActivity().getTheme());
+            } else {
+                color = typedValue.data;
+            }
+        } else {
+            color = getResources().getColor(R.color.eq_disable_color, getContext().getTheme());
+        }
 
         if (dataset != null) {
             dataset.setColor(color);

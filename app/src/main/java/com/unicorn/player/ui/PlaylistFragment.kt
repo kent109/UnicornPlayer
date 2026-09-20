@@ -533,7 +533,9 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         playlist: PlaylistViewModel.PlaylistInfo,
         position: Int
     ) {
-        MaterialAlertDialogBuilder(requireContext())
+        val errorColor = requireContext().getColor(R.color.error)
+        val secondaryColor = requireContext().getColor(R.color.secondary)
+        val dialog = MaterialAlertDialogBuilder(requireContext())
             .setTitle("删除歌单")
             .setMessage("确定要删除歌单「${playlist.name}」吗？此操作不可恢复。")
             .setNegativeButton("取消", null)
@@ -544,6 +546,8 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
                 }
             }
             .show()
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(errorColor)
+        dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
     }
 
     override fun onSwipedOpened(position: Int) {

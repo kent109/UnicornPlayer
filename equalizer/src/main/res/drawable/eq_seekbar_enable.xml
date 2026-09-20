@@ -19,7 +19,7 @@
         android:gravity="center_vertical">
         <scale android:scaleWidth="100%">
             <shape android:shape="rectangle">
-                <solid android:color="@color/eq_enable_color" />
+                <solid android:color="?attr/colorPrimary" />
                 <corners android:radius="2dp" />
             </shape>
         </scale>
@@ -32,7 +32,7 @@
         android:gravity="center_vertical">
         <scale android:scaleWidth="100%">
             <shape android:shape="rectangle">
-                <solid android:color="@color/eq_enable_color" />
+                <solid android:color="?attr/colorPrimary" />
                 <corners android:radius="2dp" />
             </shape>
         </scale>

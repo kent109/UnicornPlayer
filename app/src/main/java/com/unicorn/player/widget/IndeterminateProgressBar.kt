@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.View
 import android.view.animation.LinearInterpolator
 import androidx.core.content.ContextCompat
@@ -25,7 +26,15 @@ class IndeterminateProgressBar @JvmOverloads constructor(
         color = "#FFE0E0E0".toColorInt()
     }
     private val fgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.progress_color)
+        val tv = TypedValue()
+        context.theme.resolveAttribute(
+            com.google.android.material.R.attr.colorPrimary, tv, true
+        )
+        color = if (tv.resourceId != 0) {
+            ContextCompat.getColor(context, tv.resourceId)
+        } else {
+            tv.data
+        }
     }
     private val rect = RectF()
 

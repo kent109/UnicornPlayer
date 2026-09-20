@@ -54,65 +54,82 @@
 
         <!-- 添加主题属性来判断是否是亮色主题 -->
         <item name="isLightTheme">true</item>
+
+        <!-- AlertDialog 否定性按钮颜色 -->
+        <item name="materialButtonOutlinedStyle">@style/Widget.UnicornPlayer.Button.TextButton.Secondary</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.UnicornPlayer.Button.TextButton.Secondary</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.UnicornPlayer.Button.TextButton.Secondary</item>
+
+        <!-- ProgressBar 使用主题色 -->
+        <item name="android:progressBarStyle">@style/Widget.UnicornPlayer.ProgressBar</item>
+    </style>
+
+    <style name="Widget.UnicornPlayer.ProgressBar" parent="@android:style/Widget.Material.ProgressBar">
+        <item name="android:indeterminateTint">?attr/colorPrimary</item>
     </style>
 
     <style name="searchStyle">
         <item name="android:textSize">14sp</item>
     </style>
 
-    <!-- 主题色1: 品红 #f800f8 -->
+    <!-- 否定性按钮样式（取消、放弃等） -->
+    <style name="Widget.UnicornPlayer.Button.TextButton.Secondary" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textColor">@color/secondary</item>
+    </style>
+
+    <!-- 主题色1: 红 #FF0000 -->
     <style name="Theme.UnicornPlayer.Color1" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#f800f8</item>
-        <item name="colorOnPrimary">#000000</item>
-        <item name="colorPrimaryContainer">#fce4fc</item>
+        <item name="colorPrimary">#FF0000</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#FB89B0</item>
         <item name="colorOnPrimaryContainer">#4a004a</item>
     </style>
 
-    <!-- 主题色2: 亮粉 #f00078 -->
+    <!-- 主题色2: 橙 #FF7F00 -->
     <style name="Theme.UnicornPlayer.Color2" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#f00078</item>
+        <item name="colorPrimary">#FF7F00</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#fde4ef</item>
+        <item name="colorPrimaryContainer">#F8BD68</item>
         <item name="colorOnPrimaryContainer">#5a0030</item>
     </style>
 
-    <!-- 主题色3: 黄色 #f3c832 -->
+    <!-- 主题色3: 黄 #FBE83A -->
     <style name="Theme.UnicornPlayer.Color3" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#f3c832</item>
-        <item name="colorOnPrimary">#000000</item>
-        <item name="colorPrimaryContainer">#fdf5d6</item>
+        <item name="colorPrimary">#FBE83A</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#FAF1A0</item>
         <item name="colorOnPrimaryContainer">#5a4a0f</item>
     </style>
 
-    <!-- 主题色4: 绿色 #4ab069 -->
+    <!-- 主题色4: 绿 #15F81C -->
     <style name="Theme.UnicornPlayer.Color4" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#4ab069</item>
+        <item name="colorPrimary">#15F81C</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#d9f2e3</item>
+        <item name="colorPrimaryContainer">#A6F4C6</item>
         <item name="colorOnPrimaryContainer">#1a4a2a</item>
     </style>
 
-    <!-- 主题色5: 蓝色 #377eea -->
+    <!-- 主题色5: 青 #07F8F8 -->
     <style name="Theme.UnicornPlayer.Color5" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#377eea</item>
+        <item name="colorPrimary">#07F8F8</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#d9e8fc</item>
+        <item name="colorPrimaryContainer">#B6F7FA</item>
         <item name="colorOnPrimaryContainer">#0f2d5a</item>
     </style>
 
-    <!-- 主题色6: 青色 #26fdfd -->
+    <!-- 主题色6: 蓝 #3131FA -->
     <style name="Theme.UnicornPlayer.Color6" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#26fdfd</item>
-        <item name="colorOnPrimary">#000000</item>
-        <item name="colorPrimaryContainer">#d6fdfd</item>
+        <item name="colorPrimary">#3131FA</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#93A7F6</item>
         <item name="colorOnPrimaryContainer">#0f5a5a</item>
     </style>
 
-    <!-- 主题色7: 紫色 #7e3ae4 -->
+    <!-- 主题色7: 紫 #B400FF -->
     <style name="Theme.UnicornPlayer.Color7" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#7e3ae4</item>
+        <item name="colorPrimary">#B400FF</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#e8d9fc</item>
+        <item name="colorPrimaryContainer">#F2AFFD</item>
         <item name="colorOnPrimaryContainer">#2d0f5a</item>
     </style>
 </resources>

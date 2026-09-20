@@ -54,15 +54,14 @@ class ThemeSettingActivity : BaseActivity() {
             R.style.Theme_UnicornPlayer_Color7
         )
 
-        val COLOR_VALUES = intArrayOf(
-            0xf800f8,
-            0xf00078,
-            0xf3c832,
-            0x4ab069,
-            0x377eea,
-            0x26fdfd,
-            0x7e3ae4
-        )
+        fun getColorValues(context: Context): IntArray {
+            val typedArray = context.resources.obtainTypedArray(R.array.theme_color_values)
+            val colors = IntArray(typedArray.length()) { i ->
+                typedArray.getColor(i, 0)
+            }
+            typedArray.recycle()
+            return colors
+        }
 
         fun getColorThemeRes(index: Int): Int {
             return if (index in 0 until COLOR_COUNT) COLOR_THEME_RES[index] else 0
@@ -121,7 +120,7 @@ class ThemeSettingActivity : BaseActivity() {
             items = listOf(
                 SettingItem(
                     key = "theme_mode",
-                    title = "颜色模式",
+                    title = "深色模式",
                     summary = getThemeSummary(),
                     hasChevron = true,
                     isFirst = true,

@@ -25,7 +25,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="start|center_vertical"
             android:text="取消"
-            android:textColor="@color/onSurface"
+            android:textColor="@color/secondary"
             android:textSize="17sp"
             android:textStyle="bold" />
 

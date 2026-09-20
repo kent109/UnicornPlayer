@@ -844,6 +844,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         }
 
         val errorColor = this.getColor(R.color.error)
+        val secondaryColor = this.getColor(R.color.secondary)
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(title)
             .setMessage(message)
@@ -854,8 +855,9 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             }
             .setNegativeButton("取消", null)
             .show()
-        // 设置删除按钮文字颜色为红色（error 色）
+        // 设置删除按钮文字颜色为红色（error 色），取消按钮为 secondary 色
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(errorColor)
+        dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
     }
 
     private fun handleDeleteSelected(selectedSongIds: Set<Long>) {

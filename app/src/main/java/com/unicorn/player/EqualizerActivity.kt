@@ -3,6 +3,7 @@ package com.unicorn.player
 import android.app.AlertDialog
 import android.os.Bundle
 import android.util.Log
+import android.util.TypedValue
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -445,8 +446,18 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             return
         }
 
+        val typedValue = TypedValue()
+        theme.resolveAttribute(
+            com.google.android.material.R.attr.colorPrimary, typedValue, true
+        )
+        val accentColor = if (typedValue.resourceId != 0) {
+            ContextCompat.getColor(this, typedValue.resourceId)
+        } else {
+            typedValue.data
+        }
+
         equalizerFragment = EqualizerFragment.newBuilder()
-            .setAccentColor(ContextCompat.getColor(this, R.color.primary))
+            .setAccentColor(accentColor)
             .setAudioSessionId(sessionId)
             .build()
 

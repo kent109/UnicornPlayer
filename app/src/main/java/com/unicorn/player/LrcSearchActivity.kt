@@ -174,7 +174,8 @@ class LrcSearchActivity : BaseActivity(),
      * 搜索结果点击 -  弹出"使用歌词"确认对话框
      */
     override fun onResultClick(result: LrcSearchResult) {
-        MaterialAlertDialogBuilder(this)
+        val secondaryColor = this.getColor(R.color.secondary)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("使用歌词")
             .setMessage("确定要使用「${result.trackName} - ${result.artistName}」的歌词吗？")
             .setPositiveButton("确定") { _, _ ->
@@ -182,6 +183,7 @@ class LrcSearchActivity : BaseActivity(),
             }
             .setNegativeButton("取消", null)
             .show()
+        dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
     }
 
     /**
@@ -308,7 +310,11 @@ class LrcSearchActivity : BaseActivity(),
         theme.resolveAttribute(
             com.google.android.material.R.attr.colorPrimary, typedValue, true
         )
-        val color = ContextCompat.getColor(this, typedValue.resourceId)
+        val color = if (typedValue.resourceId != 0) {
+            ContextCompat.getColor(this, typedValue.resourceId)
+        } else {
+            typedValue.data
+        }
         val dimmed = if (searching) (color and 0x00FFFFFF) or (0xCC shl 24) else color
         binding.btnSearch.backgroundTintList = ColorStateList.valueOf(dimmed)
     }

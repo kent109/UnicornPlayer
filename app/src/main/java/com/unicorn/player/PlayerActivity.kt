@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.util.TypedValue
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.TextView
@@ -12,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
 import androidx.core.view.doOnPreDraw
 import androidx.datastore.preferences.core.edit
@@ -288,10 +290,21 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
         // 从资源获取颜色，自动适配白天/黑夜模式
         this.normalRowColor = getColor(R.color.lrc_normal_row)
-        val selectLineColor = getColor(R.color.lrc_select_line)
-        this.highlightRowColor = getColor(R.color.lrc_highlight_row)
         val timeTextColor = getColor(R.color.lrc_time_text)
-        this.trySelectRowColor = getColor(R.color.lrc_try_select_row)
+
+        // 高亮相关颜色使用主题色
+        val typedValue = TypedValue()
+        theme.resolveAttribute(
+            com.google.android.material.R.attr.colorPrimary, typedValue, true
+        )
+        val themeColor = if (typedValue.resourceId != 0) {
+            ContextCompat.getColor(this, typedValue.resourceId)
+        } else {
+            typedValue.data
+        }
+        val selectLineColor = themeColor
+        this.highlightRowColor = themeColor
+        this.trySelectRowColor = (0x55000000.toInt() or (themeColor and 0x00FFFFFF))
 
         // 字号由 applyFontSize() 读取 DataStore 后设置（下方），此处仅提供默认值兜底
         this.normalRowTextSize = DisplayUtil.sp2px(this, 15)

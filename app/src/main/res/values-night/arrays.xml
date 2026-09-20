@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer-array name="theme_color_values">
+        <item>0xFFFB0808</item>
+        <item>0xFFFF7F00</item>
+        <item>0xFFFDE624</item>
+        <item>0xFF08FB08</item>
+        <item>0xFF00FFFF</item>
+        <item>0xFF4863FF</item>
+        <item>0xFFBA20FA</item>
+    </integer-array>
+</resources>
