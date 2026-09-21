@@ -377,6 +377,7 @@ class MusicService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.d(TAG, "onCreate")
 
         serviceCreate = true
 
@@ -523,9 +524,48 @@ class MusicService : Service() {
         // 关闭线程池
         shutdownThreadPool()
 
-        // 先保存播放状态（协程异步执行，但此时mediaPlayer还未release）
-        savePlaybackState()
-        // 标记MediaPlayer即将释放，若协程延迟执行到release之后则会跳过
+        // 修复：同步保存当前播放进度，防止 service 销毁重建后 loadPlaybackState
+        // 读到旧进度导致"从头播放"或"进度往前跳"。
+        // 之前 savePlaybackState() 是异步的，紧接着 mediaPlayer.release() 会让协程
+        // 命中 isMediaPlayerReleased 守卫而跳过保存，DataStore 中 currentPosition
+        // 残留 playStateFuture 5 秒前的旧值，重建后 seekTo 到旧值。
+        // 场景：切换主题 Activity recreate → MainActivity.onDestroy → MusicManager.unbind
+        // → service 失去最后一个 binding → 系统销毁 service → 重建后 loadPlaybackState
+        // 读取旧 currentPosition。
+        runBlocking {
+            try {
+                applicationDataStore.edit { preferences ->
+                    val currentSong = _currentSong.value
+                    if (currentSong != null && !isMediaPlayerReleased) {
+                        try {
+                            val position = mediaPlayer.currentPosition
+                            val isPlaying = if (mediaPlayer.isPlaying) 1 else 0
+                            preferences[DataStoreKeys.CURRENT_POSITION] = position
+                            preferences[DataStoreKeys.IS_PLAYING] = isPlaying
+                            preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
+                            preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
+                            preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
+                            preferences[DataStoreKeys.SONG_PATH] = currentSong.path
+                            preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
+                            preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
+                            Log.d(
+                                TAG,
+                                "onDestroy: saved currentPosition=$position, isPlaying=$isPlaying, songId=${currentSong.id}"
+                            )
+                        } catch (e: IllegalStateException) {
+                            LogWriter.writeError(
+                                TAG,
+                                "onDestroy: MediaPlayer state error",
+                                e
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                LogWriter.writeError(TAG, "onDestroy: savePlaybackState failed", e)
+            }
+        }
+        // 标记MediaPlayer即将释放
         isMediaPlayerReleased = true
         mediaPlayer.release()
         mediaSession.release()
