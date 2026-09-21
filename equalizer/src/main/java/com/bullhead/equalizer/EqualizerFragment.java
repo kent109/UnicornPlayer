@@ -900,7 +900,6 @@ public class EqualizerFragment extends Fragment {
 
                             Log.d(TAG, "Loading preset: " + presetIndex);
                             mEqualizer.usePreset(presetIndex);
-                            Settings.presetPos = position;
 
                             Log.d(TAG, "Updating UI after preset");
                             for (short i = 0; i < numberOfFreqBands; i++) {
@@ -927,6 +926,7 @@ public class EqualizerFragment extends Fragment {
                         dataset.updateValues(points);
                         chart.notifyDataUpdate();
                     }
+                    Settings.presetPos = position;
                     Settings.savePresetPos(ctx, position);
                     Log.d(TAG, "Settings.seekbarpos AFTER: " + Arrays.toString(Settings.seekbarpos));
                 } catch (Exception e) {
