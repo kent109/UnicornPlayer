@@ -1,5 +1,5 @@
 {
-  "versionCode": 21,
-  "versionName": "1.1.4",
-  "changelog": "修复已知问题"
+  "versionCode": 22,
+  "versionName": "1.1.5",
+  "changelog": "支持外部文件播放"
 }
