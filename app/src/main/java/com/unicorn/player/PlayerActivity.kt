@@ -125,6 +125,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     // 待保存的文件名
     private var pendingSaveFileName: String? = null
 
+    // 待保存的音频路径（保存时可能已切歌，避免保存到下一首的歌词文件）
+    private var pendingSaveAudioPath: String? = null
+
     // SAF 目录选择器启动器：用户授权后持久化树 URI → 确认/创建保存目录 → 执行保存
     private val openDocumentTreeLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
@@ -139,6 +142,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                         } else {
                             pendingSaveContent = null
                             pendingSaveFileName = null
+                            pendingSaveAudioPath = null
                             Toast.makeText(
                                 this@PlayerActivity,
                                 "保存目录创建失败",
@@ -151,6 +155,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 // 用户取消选择，清理待保存数据
                 pendingSaveContent = null
                 pendingSaveFileName = null
+                pendingSaveAudioPath = null
             }
         }
 
@@ -346,6 +351,8 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 Toast.makeText(this@PlayerActivity, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            // 在打开弹窗时即捕获音频路径，避免保存时已切歌导致写入到下一首的歌词文件
+            val songPath = song.path
             // 以 LrcView 中心作为弹窗动画起点
             val location = IntArray(2)
             binding.lrcView.getLocationOnScreen(location)
@@ -358,7 +365,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 centerX,
                 centerY,
                 startInEditMode = true,
-                onSave = { content -> saveLyrics(content) },
+                onSave = { content -> saveLyrics(content, songPath) },
                 showSaveButton = false
             ).also { it.show() }
         }
@@ -419,7 +426,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             centerX,
             centerY,
             startInEditMode = true,
-            onSave = { content -> saveLyrics(content) },
+            onSave = { newContent -> saveLyrics(newContent, audioPath) },
             showSaveButton = false
         ).also { it.show() }
     }
@@ -434,17 +441,14 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      * 树 URI 授予的读写权限覆盖整个子树，无需系统级权限。
      *
      * @param content 要保存的歌词文本内容
+     * @param audioPath 打开编辑弹窗时的音频路径。即便保存时已切到下一首，
+     *                  也按此路径推导歌词文件名，避免覆盖到下一首的 .lrc 文件。
      */
-    private fun saveLyrics(content: String) {
+    private fun saveLyrics(content: String, audioPath: String) {
         try {
-            val song = musicService?.currentSong?.value
-            if (song == null) {
-                Toast.makeText(this, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
-                return
-            }
             // 使用音频文件名（不含扩展名）作为歌词文件名，与搜索、加载保持一致
             // 例如音频文件为 "a - b.mp3"，则保存为 "a - b.lrc"
-            val fileName = File(song.path).nameWithoutExtension.toSimpleCustom() + ".lrc"
+            val fileName = File(audioPath).nameWithoutExtension.toSimpleCustom() + ".lrc"
 
             // 1. 先检查是否有保存的 tree URI（没有则无法创建目录，直接授权）
             if (!LyricsSaveManager.hasSavedTreeUri(this)) {
@@ -452,6 +456,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 Toast.makeText(this, "请选择 Documents 目录以授权保存", Toast.LENGTH_LONG).show()
                 pendingSaveContent = content
                 pendingSaveFileName = fileName
+                pendingSaveAudioPath = audioPath
                 openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
                 return
             }
@@ -471,13 +476,14 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     withContext(Dispatchers.Main) {
                         pendingSaveContent = content
                         pendingSaveFileName = fileName
+                        pendingSaveAudioPath = audioPath
                         openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
                     }
                     return@launch
                 }
                 // 4. 目录就绪且权限有效，执行写入
                 withContext(Dispatchers.Main) {
-                    performSave(fileName, content)
+                    performSave(fileName, content, audioPath)
                 }
             }
         } catch (e: Exception) {
@@ -489,9 +495,13 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     /**
      * 执行实际的保存写入操作（在协程内完成 IO）。
      * 目录已在 SAF 回调中确认存在，此处直接写入。
-     * 保存成功后自动刷新 LrcView 显示。
+     * 保存成功后自动刷新 LrcView 显示（仅当被编辑的歌曲仍是当前播放歌曲时）。
+     *
+     * @param fileName 歌词文件名（按打开弹窗时的音频路径推导）
+     * @param content 要保存的歌词文本内容
+     * @param audioPath 打开编辑弹窗时的音频路径，用于判断是否仍为当前播放歌曲以决定是否刷新 LrcView
      */
-    private fun performSave(fileName: String, content: String) {
+    private fun performSave(fileName: String, content: String, audioPath: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             val success = LyricsSaveManager.writeLrcFile(this@PlayerActivity, fileName, content)
             withContext(Dispatchers.Main) {
@@ -501,11 +511,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     Toast.LENGTH_SHORT
                 ).show()
                 // 保存成功后刷新 LrcView 显示
-                if (success) {
-                    val audioPath = musicService?.currentSong?.value?.path
-                    if (audioPath != null) {
-                        reloadLrcView(audioPath)
-                    }
+                // 仅当被编辑的歌曲仍是当前播放歌曲时才刷新；若已切歌，无需在此刷新
+                // （当前正在播放另一首歌，刷新反而会显示错乱的歌词）
+                if (success && audioPath == musicService?.currentSong?.value?.path) {
+                    reloadLrcView(audioPath)
                 }
             }
         }
@@ -517,9 +526,11 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     private fun executePendingSave() {
         val content = pendingSaveContent ?: return
         val fileName = pendingSaveFileName ?: return
+        val audioPath = pendingSaveAudioPath ?: return
         pendingSaveContent = null
         pendingSaveFileName = null
-        performSave(fileName, content)
+        pendingSaveAudioPath = null
+        performSave(fileName, content, audioPath)
     }
 
     /**
