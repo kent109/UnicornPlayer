@@ -135,6 +135,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     // 标记当前歌曲是否搜索/加载不到歌词（本地+网络均无结果），用于显示"新建歌词"按钮
     private var showNoLyricsButton = false
 
+    // 歌词加载代数计数器：每次调用 loadAndShowLrc 递增，异步结果只在接受时检查代数是否匹配，
+    // 保证只有最新一次调用的结果生效，避免并发加载互相覆盖
+    private var lrcLoadGeneration = 0
+
     // ===== SAF 歌词保存 =====
     // 待保存的歌词内容（授权完成后写入）
     private var pendingSaveContent: String? = null
@@ -797,13 +801,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             exitLrcFullscreen()
         }
 
+        val myGeneration = ++lrcLoadGeneration
         lifecycleScope.launch {
             try {
-                // 检查当前播放的是不是这首歌，避免切歌后显示旧歌词
-                if (!isCurrentSong(audioPath)) {
-                    Log.d(TAG, "歌曲已切换，丢弃旧歌词: $audioPath")
-                    return@launch
-                }
                 // 1. SAF 权限前置检查——无权限则关闭歌词开关，不显示不下载
                 if (!hasValidSafPermission()) {
                     Log.d(TAG, "无 SAF 权限，关闭歌词功能")
@@ -813,9 +813,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 // 2. Documents 优先
                 val docsRows = loadLrcFromDocuments(audioPath)
                 Log.d(TAG, "loadLrcFromDocuments 返回: ${docsRows?.size ?: "null"} 行")
-                // 再次检查，避免加载期间歌曲已切换
-                if (!isCurrentSong(audioPath)) {
-                    Log.d(TAG, "歌曲已切换，丢弃旧歌词: $audioPath")
+                // 检查代数：若加载期间有新的 loadAndShowLrc 调用，丢弃本次结果
+                if (lrcLoadGeneration != myGeneration) {
+                    Log.d(TAG, "歌词加载已过时(generation=$myGeneration, current=$lrcLoadGeneration)，丢弃: $audioPath")
                     return@launch
                 }
                 if (!docsRows.isNullOrEmpty()) {
@@ -830,7 +830,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 binding.lrcView.setLrcData(emptyList())
                 binding.lrcView.visibility = View.GONE
                 Log.d(TAG, "Documents 无歌词，尝试网络下载")
-                fetchLrcFromNetwork(audioPath)
+                fetchLrcFromNetwork(audioPath, myGeneration)
             } catch (e: Exception) {
                 binding.lrcView.visibility = View.GONE
                 Log.e(TAG, "加载歌词失败", e)
@@ -852,13 +852,13 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     /**
      * 从网络下载歌词，下载成功后刷新 LrcView
      */
-    private fun fetchLrcFromNetwork(audioPath: String) {
+    private fun fetchLrcFromNetwork(audioPath: String, generation: Int) {
         LrcFetcher.fetchLrc(this@PlayerActivity, audioPath, object : LrcFetcher.LrcFetchCallback {
             override fun onSuccess(lrcFileName: String) {
                 lifecycleScope.launch {
-                    // 检查当前播放的还是不是这首歌，避免切歌后显示旧歌词
-                    if (!isCurrentSong(audioPath)) {
-                        Log.d(TAG, "歌曲已切换，丢弃旧歌词: $audioPath")
+                    // 检查代数：若下载期间有新的 loadAndShowLrc 调用，丢弃本次结果
+                    if (lrcLoadGeneration != generation) {
+                        Log.d(TAG, "网络歌词加载已过时(generation=$generation, current=$lrcLoadGeneration)，丢弃: $audioPath")
                         return@launch
                     }
                     try {
@@ -889,8 +889,8 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
             override fun onNoLyricsFound() {
                 lifecycleScope.launch {
-                    // 切歌后不应影响新歌曲的 LrcView 状态
-                    if (!isCurrentSong(audioPath)) return@launch
+                    // 代数不匹配说明已有更新的歌词请求，不应影响新歌曲的状态
+                    if (lrcLoadGeneration != generation) return@launch
                     showNoLyricsButton = true
                     updateCreateLyricsButtonVisibility()
                     binding.lrcView.visibility = View.GONE
@@ -900,8 +900,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
             override fun onFailure(message: String) {
                 lifecycleScope.launch {
-                    // 切歌后不应影响新歌曲的 LrcView 状态
-                    if (!isCurrentSong(audioPath)) return@launch
+                    if (lrcLoadGeneration != generation) return@launch
                     showNoLyricsButton = true
                     updateCreateLyricsButtonVisibility()
                     binding.lrcView.visibility = View.GONE
@@ -909,14 +908,6 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 }
             }
         })
-    }
-
-    /**
-     * 判断指定的音频路径是否对应当前正在播放的歌曲
-     */
-    private fun isCurrentSong(audioPath: String): Boolean {
-        val currentPath = musicService?.currentSong?.value?.path
-        return currentPath != null && currentPath == audioPath
     }
 
     /**
@@ -988,7 +979,6 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             } else {
                 if (isExternalPlayback) {
                     // 外部播放正在处理中，不要覆盖即将播放的外部歌曲
-                    Log.d(TAG, "setupViewPager: skip, external playback in progress")
                 } else {
                     // 有歌曲，隐藏空状态
                     hideEmptyState()
