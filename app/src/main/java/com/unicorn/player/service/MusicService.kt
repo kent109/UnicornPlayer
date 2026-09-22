@@ -328,6 +328,11 @@ class MusicService : Service() {
     @Volatile
     private var isSettingExternalSong = false
 
+    // 外部播放期间需要在 Service 销毁时校验播放来源：
+    // 如果销毁时当前歌曲不属于保存的播放来源列表，则重置播放来源为"全部歌曲"
+    @Volatile
+    private var pendingPlaySourceValidation = false
+
     // 标记用户重新打开应用后需要显示通知（用于从最近任务移除后，异步加载完成前用户重新打开应用的场景）
     // 注意：此标志仅在 isTaskRemoved=false 时使用，isTaskRemoved=true 时不应该触发通知显示
     private var pendingNotificationToShow = false
@@ -594,6 +599,9 @@ class MusicService : Service() {
         // 读取旧 currentPosition。
         runBlocking {
             try {
+                // 外部播放结束，校验当前歌曲是否属于保存的播放来源，不属于则重置为"全部歌曲"
+                validatePlaySourceForCurrentSong()
+
                 applicationDataStore.edit { preferences ->
                     val currentSong = _currentSong.value
                     if (currentSong != null && !isMediaPlayerReleased) {
@@ -894,9 +902,31 @@ class MusicService : Service() {
         _tempPlayback.postValue(isTemp)
         // 立即重置进度为 0，避免 UI 从旧歌曲的进度跳到 0
         _currentPosition.value = 0
+
+        // 冷启动时 loadPlaybackState 不会被调用（MusicManager.bind 的 intent 不带 KEY_CREATE），
+        // playSourceTag 保持默认值 "f0"，后续 onPause/savePlaybackState 会把默认值覆盖写入 DataStore，
+        // 导致下次正常启动时播放来源丢失。这里同步恢复，确保在任何保存之前内存中已是正确值。
+        if (playSourceTag == PlaySource.SONGS) {
+            try {
+                val savedTag = runBlocking {
+                    applicationDataStore.data.first()[DataStoreKeys.PLAY_SOURCE_TAG]
+                }
+                if (savedTag != null) {
+                    playSourceTag = savedTag
+                    PlaySourceManager.notifyPlaySourceChanged(savedTag)
+                }
+            } catch (e: Exception) {
+                LogWriter.writeError(TAG, "playExternalSong: restore playSourceTag failed", e)
+            }
+        }
+
+        // 标记需要在 Service 销毁时校验播放来源（当前歌曲是否属于播放来源列表）
+        pendingPlaySourceValidation = true
+
         CoroutineScope(Dispatchers.IO).launch {
             // 刷新排除目录缓存，保证 setCurrentSong 的动态判断使用最新设置
             refreshExcludedDirsCache()
+
             if (isTemp) {
                 withContext(Dispatchers.Main) {
                     setSongList(listOf(song), 0)
@@ -917,6 +947,36 @@ class MusicService : Service() {
                     updateNotification(target)
                 }
             }
+        }
+    }
+
+    /**
+     * 校验当前歌曲是否属于保存的播放来源，不属于则重置为"全部歌曲"。
+     * 在 Service 销毁时调用（onDestroy / onTaskRemoved），确保用户有足够时间切回属于来源的歌曲。
+     */
+    private suspend fun validatePlaySourceForCurrentSong() {
+        if (!pendingPlaySourceValidation) return
+        pendingPlaySourceValidation = false
+        val currentSong = _currentSong.value ?: return
+        val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
+        val belongsToSource = when (sourceType) {
+            PlaySource.SONGS -> true
+            PlaySource.ARTIST -> currentSong.artist == sourceName
+            PlaySource.ALBUM -> currentSong.album == sourceName
+            PlaySource.PLAYLIST -> {
+                val playlistId = sourceName.toLongOrNull()
+                if (playlistId != null) {
+                    val ids = MusicDatabase.getDatabase(this@MusicService)
+                        .playlistDao().getPlaylistSongIds(playlistId).first()
+                    currentSong.id in ids
+                } else false
+            }
+
+            else -> false
+        }
+        if (!belongsToSource) {
+            playSourceTag = PlaySource.SONGS
+            PlaySourceManager.notifyPlaySourceChanged(PlaySource.SONGS)
         }
     }
 
@@ -1807,8 +1867,10 @@ class MusicService : Service() {
                         }
                         // 保存播放模式
                         preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
-                        // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
-                        preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
+                        // 播放入口来源：外部播放期间暂不保存，等 Service 销毁时校验后再保存
+                        if (!pendingPlaySourceValidation) {
+                            preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
+                        }
                         // 保存均衡器设置
                         preferences[DataStoreKeys.IS_EQUALIZER_ENABLED] =
                             if (Settings.isEqualizerEnabled) 1 else 0
@@ -1830,7 +1892,10 @@ class MusicService : Service() {
                         preferences.remove(DataStoreKeys.SONG_PATH)
                         preferences.remove(DataStoreKeys.CURRENT_POSITION)
                         preferences.remove(DataStoreKeys.IS_PLAYING)
-                        preferences.remove(DataStoreKeys.PLAY_SOURCE_TAG)
+                        // 外部播放期间暂不清除播放来源，等 Service 销毁时校验后再决定
+                        if (!pendingPlaySourceValidation) {
+                            preferences.remove(DataStoreKeys.PLAY_SOURCE_TAG)
+                        }
                         preferences.remove(DataStoreKeys.IS_EQUALIZER_ENABLED)
                         preferences.remove(DataStoreKeys.EQUALIZER_BAND_LEVELS)
                         preferences.remove(DataStoreKeys.EQUALIZER_PRESET_POS)
@@ -1881,12 +1946,26 @@ class MusicService : Service() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 如果正在设置外部歌曲，跳过恢复，避免覆盖外部歌曲
+                val preferences = applicationDataStore.data.first()
+
+                // 尽早恢复播放来源标签和播放模式（用户偏好），即使外部歌曲跳过歌曲恢复也要保留
+                val savedSourceTag = preferences[DataStoreKeys.PLAY_SOURCE_TAG] ?: PlaySource.SONGS
+                playSourceTag = savedSourceTag
+                PlaySourceManager.notifyPlaySourceChanged(savedSourceTag)
+                val savedPlayModeOrdinal = preferences[DataStoreKeys.PLAY_MODE] ?: 0
+                playMode = PlayMode.entries.getOrElse(savedPlayModeOrdinal) { PlayMode.ALL_LOOP }
+                _playModeLiveData.postValue(playMode)
+                Log.d(
+                    TAG,
+                    "loadPlaybackState: restored playSourceTag=$savedSourceTag, playMode=$playMode"
+                )
+
+                // 如果正在设置外部歌曲，跳过歌曲恢复，避免覆盖外部歌曲
                 if (isSettingExternalSong) {
                     isPlaybackStateLoaded = true
                     return@launch
                 }
-                val preferences = applicationDataStore.data.first()
+
                 // 检查用户是否从最近任务移除了应用
                 val isTaskRemoved = preferences[DataStoreKeys.TASK_REMOVED_FLAG] == 1
                 if (isTaskRemoved) {
@@ -1936,13 +2015,6 @@ class MusicService : Service() {
                     // 当用户重新打开应用时，onStartCommand 中 intent != null 会触发通知显示
                 }
 
-                // 尽早恢复播放来源标签（f0/f1/f2/f3），避免后续早期 return 时丢失来源
-                val savedSourceTag = preferences[DataStoreKeys.PLAY_SOURCE_TAG] ?: PlaySource.SONGS
-                playSourceTag = savedSourceTag
-                // 通知 PlaySourceManager，让 ViewModel 更新歌手/专辑高亮
-                PlaySourceManager.notifyPlaySourceChanged(savedSourceTag)
-                Log.d(TAG, "loadPlaybackState: restored playSourceTag=$savedSourceTag")
-
                 // 如果用户从最近任务移除了应用，强制恢复保存的进度
                 // 因为 onTaskRemoved() 中已同步保存了正确的进度到 DataStore
                 val shouldRestorePosition = restorePosition || isTaskRemoved
@@ -1969,11 +2041,6 @@ class MusicService : Service() {
                     "loadPlaybackState: will restore songId=$songId, title=$songTitle, position=$currentPosition"
                 )
                 val isPlaying = preferences[DataStoreKeys.IS_PLAYING] ?: 0
-                // 恢复播放模式
-                val savedPlayModeOrdinal = preferences[DataStoreKeys.PLAY_MODE] ?: 0
-                playMode = PlayMode.entries.getOrElse(savedPlayModeOrdinal) { PlayMode.ALL_LOOP }
-                _playModeLiveData.postValue(playMode)
-                Log.d(TAG, "loadPlaybackState: restored playMode=$playMode")
 
                 Log.d(
                     TAG,
@@ -2233,6 +2300,9 @@ class MusicService : Service() {
         }
         // 同步保存播放状态和标志，防止异步保存未完成时服务被停止
         runBlocking {
+            // 外部播放期间移除任务，校验当前歌曲是否属于保存的播放来源
+            validatePlaySourceForCurrentSong()
+
             applicationDataStore.edit { preferences ->
                 // 设置任务移除标志
                 preferences[DataStoreKeys.TASK_REMOVED_FLAG] = 1
