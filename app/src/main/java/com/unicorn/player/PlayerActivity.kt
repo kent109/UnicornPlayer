@@ -1,6 +1,7 @@
 package com.unicorn.player
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -22,6 +23,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.hw.lrcviewlib.LrcRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.manager.MusicManager
+import com.unicorn.player.model.Song
+import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.util.DisplayUtil
 import com.unicorn.player.util.LogWriter
@@ -43,6 +46,20 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     private lateinit var pagerAdapter: PlayerPagerAdapter
     private var isUserScrolling = false
     private val scrollDebounceHandler = Handler(Looper.getMainLooper())
+
+    // 外部文件播放（文件管理器 ACTION_VIEW）相关
+    private val repository by lazy { MusicRepository(applicationContext) }
+
+    // 待播放的外部歌曲（service 未就绪时暂存，onServiceConnected 消费）
+    private data class PendingExternal(val song: Song, val isTemp: Boolean)
+
+    private var pendingExternal: PendingExternal? = null
+
+    // 标记服务在 PlayerActivity 启动前是否未运行（用于外部文件播放结束后停止服务）
+    private var serviceWasNotRunning = false
+
+    // 标记是否为外部文件播放会话
+    private var isExternalPlayback = false
 
     companion object {
         const val TAG = "PlayerActivity"
@@ -212,6 +229,59 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         })
 
         bindMusicService()
+
+        // 处理外部启动 intent（文件管理器 ACTION_VIEW）
+        handleExternalIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // singleTask 下外部再次打开会走这里；更新 intent 供后续读取
+        setIntent(intent)
+        handleExternalIntent(intent)
+    }
+
+    /**
+     * 处理外部音频文件打开请求（ACTION_VIEW）。
+     * - 仅处理 ACTION_VIEW 且带 data 的 intent，其它走原流程。
+     * - 解析 URI 构建 Song，并根据路径动态判断是否在排除目录内：
+     *   在排除目录内 → 临时模式（不入库、不保存进度）；
+     *   否则 → 永久模式（写入 DB、加入全库队列、保存进度）。
+     * - 始终从头播放，即使当前正在播放同一首歌。
+     * - service 未就绪时暂存 pendingExternal，onServiceConnected 消费。
+     */
+    private fun handleExternalIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val uri: Uri = intent.data ?: return
+        // 标记为外部文件播放会话
+        isExternalPlayback = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            val song = repository.buildSongFromExternalUri(uri)
+            if (song == null) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@PlayerActivity,
+                        "无法打开此音频文件",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    finish()
+                }
+                return@launch
+            }
+            // 动态判断：路径在排除目录内 → 临时模式（不入库、不保存进度）
+            val isTemp = repository.isPathExcluded(song.path)
+            val finalSong = if (isTemp) song else repository.ensureSongInDb(song)
+            withContext(Dispatchers.Main) {
+                val svc = musicService
+                if (svc != null) {
+                    svc.playExternalSong(finalSong, isTemp)
+                    pendingExternal = null
+                } else {
+                    // service 未就绪，暂存待 onServiceConnected 消费
+                    pendingExternal = PendingExternal(finalSong, isTemp)
+                }
+            }
+        }
     }
 
     private fun transformPage(page: View, position: Float) {
@@ -729,6 +799,11 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
         lifecycleScope.launch {
             try {
+                // 检查当前播放的是不是这首歌，避免切歌后显示旧歌词
+                if (!isCurrentSong(audioPath)) {
+                    Log.d(TAG, "歌曲已切换，丢弃旧歌词: $audioPath")
+                    return@launch
+                }
                 // 1. SAF 权限前置检查——无权限则关闭歌词开关，不显示不下载
                 if (!hasValidSafPermission()) {
                     Log.d(TAG, "无 SAF 权限，关闭歌词功能")
@@ -738,6 +813,11 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 // 2. Documents 优先
                 val docsRows = loadLrcFromDocuments(audioPath)
                 Log.d(TAG, "loadLrcFromDocuments 返回: ${docsRows?.size ?: "null"} 行")
+                // 再次检查，避免加载期间歌曲已切换
+                if (!isCurrentSong(audioPath)) {
+                    Log.d(TAG, "歌曲已切换，丢弃旧歌词: $audioPath")
+                    return@launch
+                }
                 if (!docsRows.isNullOrEmpty()) {
                     showNoLyricsButton = false
                     binding.btnCreateLyrics.visibility = View.GONE
@@ -899,44 +979,51 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             // 检查是否有歌曲列表
             val songs = service.getSongList()
             if (songs.isEmpty()) {
-                // 没有歌曲，显示空状态
-                showEmptyState()
-                // 尝试从数据库加载
-                loadSongsFromDatabase(service)
+                if (!isExternalPlayback) {
+                    // 没有歌曲，显示空状态
+                    showEmptyState()
+                    // 尝试从数据库加载
+                    loadSongsFromDatabase(service)
+                }
             } else {
-                // 有歌曲，隐藏空状态
-                hideEmptyState()
+                if (isExternalPlayback) {
+                    // 外部播放正在处理中，不要覆盖即将播放的外部歌曲
+                    Log.d(TAG, "setupViewPager: skip, external playback in progress")
+                } else {
+                    // 有歌曲，隐藏空状态
+                    hideEmptyState()
 
-                // 找到当前播放歌曲在列表中的位置
-                val currentSong = service.currentSong.value
-                val startPosition = if (currentSong != null) {
-                    val index = songs.indexOfFirst { it.id == currentSong.id }
-                    if (index >= 0) {
-                        Log.d(TAG, "Found current song at position $index")
-                        index
+                    // 找到当前播放歌曲在列表中的位置
+                    val currentSong = service.currentSong.value
+                    val startPosition = if (currentSong != null) {
+                        val index = songs.indexOfFirst { it.id == currentSong.id }
+                        if (index >= 0) {
+                            Log.d(TAG, "Found current song at position $index")
+                            index
+                        } else {
+                            Log.w(
+                                TAG,
+                                "Current song not in list, using index ${service.currentIndex}"
+                            )
+                            service.currentIndex
+                        }
                     } else {
-                        Log.w(
-                            TAG,
-                            "Current song not in list, using index ${service.currentIndex}"
-                        )
+                        Log.d(TAG, "No current song, using index ${service.currentIndex}")
                         service.currentIndex
                     }
-                } else {
-                    Log.d(TAG, "No current song, using index ${service.currentIndex}")
-                    service.currentIndex
+
+                    // 设置初始歌曲
+                    pagerAdapter.updateSongs(songs, startPosition)
+                    Log.d(
+                        TAG,
+                        "Initialized ViewPager with ${songs.size} songs, starting at position $startPosition"
+                    )
+
+                    // 重要：确保初始设置时不触发播放
+                    // 只更新当前歌曲，不播放
+                    Log.d(TAG, "Setting current song: ${songs[startPosition].title}")
+                    service.setCurrentSong(songs[startPosition])
                 }
-
-                // 设置初始歌曲
-                pagerAdapter.updateSongs(songs, startPosition)
-                Log.d(
-                    TAG,
-                    "Initialized ViewPager with ${songs.size} songs, starting at position $startPosition"
-                )
-
-                // 重要：确保初始设置时不触发播放
-                // 只更新当前歌曲，不播放
-                Log.d(TAG, "Setting current song: ${songs[startPosition].title}")
-                service.setCurrentSong(songs[startPosition])
             }
 
             // 初始设置完成
@@ -961,10 +1048,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     val currentSongs = pagerAdapter.songs
                     if (currentSongs.isNotEmpty()) {
                         val index = currentSongs.indexOfFirst { it.id == song.id }
-                        if (index >= 0 && binding.viewPager.currentItem != index) {
-                            // 只在非用户滑动时更新ViewPager位置
-                            if (!isUserScrolling) {
-                                // 标记为代码设置
+                        if (index >= 0) {
+                            if (binding.viewPager.currentItem != index && !isUserScrolling) {
+                                // 只在非用户滑动时更新ViewPager位置
                                 isProgrammaticSetItem = true
                                 try {
                                     // 直接设置当前项，不触发onPageSelected
@@ -974,12 +1060,42 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                                     isProgrammaticSetItem = false
                                 }
                             }
+                        } else {
+                            // 当前歌曲不在 pagerAdapter 中（如临时播放结束切回全库），
+                            // 从 service 的 songList 刷新 pagerAdapter
+                            val list = service.getSongList()
+                            val idx = list.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+                            if (list.isNotEmpty()) {
+                                isProgrammaticSetItem = true
+                                try {
+                                    pagerAdapter.updateSongs(list, idx)
+                                    binding.viewPager.setCurrentItem(idx, false)
+                                } finally {
+                                    isProgrammaticSetItem = false
+                                }
+                            }
                         }
                         // 有歌曲时确保空状态被隐藏
                         hideEmptyState()
-                    } else if (service.getSongList().isEmpty()) {
-                        // 如果当前歌曲不为空但播放列表为空，尝试重新加载数据
-                        loadSongsFromDatabase(service)
+                    } else {
+                        // pagerAdapter 为空：优先从 service.songList 填充（外部播放刚设置），
+                        // 否则从数据库加载
+                        val list = service.getSongList()
+                        if (list.isNotEmpty()) {
+                            val idx = list.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+                            isProgrammaticSetItem = true
+                            try {
+                                pagerAdapter.updateSongs(list, idx)
+                                binding.viewPager.setCurrentItem(idx, false)
+                            } finally {
+                                isProgrammaticSetItem = false
+                            }
+                            hideEmptyState()
+                        } else {
+                            if (!isExternalPlayback) {
+                                loadSongsFromDatabase(service)
+                            }
+                        }
                     }
                 }
             }
@@ -1024,6 +1140,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     }
 
     private fun loadSongsFromDatabase(service: MusicService) {
+        if (isExternalPlayback) return
         // 从数据库加载歌曲列表
         val database = com.unicorn.player.database.MusicDatabase.getDatabase(this)
 
@@ -1088,6 +1205,8 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     }
 
     private fun bindMusicService() {
+        // 记录服务在绑定前是否未运行（用于外部文件播放结束后停止服务）
+        serviceWasNotRunning = MusicManager.getService() == null
         // 注册服务连接回调，在异步绑定完成时收到通知
         MusicManager.registerConnectionCallback(this)
         // 使用MusicManager绑定MusicService
@@ -1108,6 +1227,11 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         setupViewPager()
         observeCurrentSong()
         observeCurrentPosition()
+        // 消费待播放的外部歌曲（外部启动时 service 异步绑定完成）
+        pendingExternal?.let { pending ->
+            musicService?.playExternalSong(pending.song, pending.isTemp)
+            pendingExternal = null
+        }
     }
 
     override fun onServiceDisconnected() {
@@ -1160,6 +1284,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
         // 使用MusicManager解绑
         MusicManager.unregisterConnectionCallback(this)
+        // 外部文件播放且服务之前未运行：停止服务，避免残留
+        if (isExternalPlayback && serviceWasNotRunning) {
+            musicService?.stopSelf()
+        }
         MusicManager.unbind(this)
     }
 

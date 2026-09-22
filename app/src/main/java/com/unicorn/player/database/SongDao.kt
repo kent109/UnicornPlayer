@@ -16,6 +16,18 @@ interface SongDao {
     @Query("SELECT * FROM songs WHERE id = :songId")
     fun getSongById(songId: Long): Flow<Song?>
 
+    /**
+     * 同步按 ID 查询单首歌曲（用于恢复"上次保存进度的歌曲"等场景，避开 Flow）
+     */
+    @Query("SELECT * FROM songs WHERE id = :songId")
+    fun getSongByIdSync(songId: Long): Song?
+
+    /**
+     * 同步按文件路径查询单首歌曲（用于外部入库去重）
+     */
+    @Query("SELECT * FROM songs WHERE path = :path")
+    fun getSongByPathSync(path: String): Song?
+
     @Query("SELECT * FROM songs WHERE title LIKE :query OR artist LIKE :query OR album LIKE :query")
     fun searchSongs(query: String): Flow<List<Song>>
 

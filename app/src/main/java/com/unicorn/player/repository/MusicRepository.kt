@@ -4,20 +4,25 @@ import aman.taglib.TagLib
 import android.content.ContentUris
 import android.content.Context
 import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.provider.MediaStore
 import androidx.core.net.toUri
+import com.unicorn.player.ScanFilterActivity
 import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.PlaylistSong
 import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
+import com.unicorn.player.scanFiltersDataStore
 import com.unicorn.player.util.PlaylistFileManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import okhttp3.internal.immutableListOf
 import java.io.File
 import java.util.Locale
+import kotlin.math.absoluteValue
 
 
 class MusicRepository(private val context: Context) {
@@ -205,6 +210,154 @@ class MusicRepository(private val context: Context) {
     suspend fun getSongById(id: Long) = songDao.getSongById(id)
 
     fun searchSongs(query: String) = songDao.searchSongs("%$query%")
+
+    /**
+     * 判断文件路径是否落在用户配置的排除目录前缀下。
+     * 用于外部文件播放时决定是否走临时模式（不保存进度、不入库）。
+     */
+    suspend fun isPathExcluded(path: String): Boolean = withContext(Dispatchers.IO) {
+        val excluded = context.scanFiltersDataStore.data.first()[ScanFilterActivity.EXCLUDED_DIRS]
+            ?: emptySet()
+        excluded.any { path.startsWith(it) }
+    }
+
+    /**
+     * 从外部 URI（文件管理器 ACTION_VIEW）构建 Song 对象。
+     * 仅支持可解析为真实文件路径的 URI：
+     * - content://media/...（MediaStore）：从 _ID 查 DATA 列得到真实路径
+     * - file://...：直接取路径
+     * 其他 URI（如 SAF document）无法解析真实路径时返回 null，由调用方提示用户。
+     *
+     * 是否走临时播放（不保存进度）由调用方用 [isPathExcluded] 动态判断，
+     * 不持久化到 Song/数据库。
+     */
+    suspend fun buildSongFromExternalUri(uri: Uri): Song? = withContext(Dispatchers.IO) {
+        val scheme = uri.scheme?.lowercase()
+        var mediaStoreId: Long? = null
+        var path: String? = null
+        var mime: String? = null
+        var albumId: Long? = null
+
+        when (scheme) {
+            "content" -> {
+                // 1. MediaStore 音频 URI：content://media/external/audio/media/<id>
+                val idFromUri = uri.lastPathSegment?.toLongOrNull()
+                if (uri.authority == "media" && idFromUri != null) {
+                    mediaStoreId = idFromUri
+                    val projection = arrayOf(
+                        MediaStore.Audio.Media._ID,
+                        MediaStore.Audio.Media.TITLE,
+                        MediaStore.Audio.Media.ARTIST,
+                        MediaStore.Audio.Media.ALBUM,
+                        MediaStore.Audio.Media.DURATION,
+                        MediaStore.Audio.Media.DATA,
+                        MediaStore.Audio.Media.ALBUM_ID,
+                        MediaStore.Audio.Media.MIME_TYPE
+                    )
+                    val selection = "${MediaStore.Audio.Media._ID} = ?"
+                    val selectionArgs = arrayOf(idFromUri.toString())
+                    context.contentResolver.query(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                        projection,
+                        selection,
+                        selectionArgs,
+                        null
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            path = cursor.getString(
+                                cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                            )
+                            mime = cursor.getString(
+                                cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+                            )
+                            albumId = cursor.getLong(
+                                cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+                            )
+                        }
+                    }
+                } else {
+                    // 2. 三方文件管理器 content URI（如 content://com.filemanager.files/...）：
+                    // uri.path 经 URL 解码后即真实文件路径，直接尝试使用。
+                    val rawPath = uri.path
+                    if (rawPath != null) {
+                        val decoded = Uri.decode(rawPath)
+                        val f = File(decoded)
+                        if (f.exists()) {
+                            path = decoded
+                        }
+                    }
+                }
+            }
+
+            "file" -> {
+                path = uri.path
+            }
+
+            else -> return@withContext null
+        }
+
+        val realPath = path ?: return@withContext null
+        val file = File(realPath)
+        if (!file.exists()) return@withContext null
+
+        // 元数据：优先 TagLib 读标签，失败回退到文件名
+        val fileTags = TagLib.getMetadata(realPath)
+        val title = fileTags["TITLE"]?.takeIf { it.isNotEmpty() } ?: file.nameWithoutExtension
+        var artist = fileTags["ARTIST"]?.takeIf { it.isNotEmpty() } ?: "<unknown>"
+        var album = fileTags["ALBUM"]?.takeIf { it.isNotEmpty() } ?: "<unknown>"
+
+        if (isUnknownArtist(artist)) artist = "<unknown>"
+        if (isUnknownAlbum(album, realPath)) album = "<unknown>"
+
+        // duration：MediaMetadataRetriever
+        val duration = try {
+            val mmr = MediaMetadataRetriever()
+            mmr.setDataSource(realPath)
+            val d = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            mmr.release()
+            d
+        } catch (e: Exception) {
+            0L
+        }
+
+        val quality = classifyQuality(mime, file)
+        val albumArtUri = albumId?.let {
+            ContentUris.withAppendedId(
+                "content://media/external/audio/albumart".toUri(),
+                it
+            ).toString()
+        }
+        val lastModified = file.lastModified()
+        val id = mediaStoreId ?: -(realPath.hashCode().toLong().absoluteValue)
+
+        Song(
+            id = id,
+            title = title,
+            artist = artist,
+            album = album,
+            duration = duration,
+            path = realPath,
+            albumArt = albumArtUri,
+            lastModified = lastModified,
+            quality = quality
+        )
+    }
+
+    /**
+     * 永久模式下将外部歌曲写入数据库（不存在时插入）。
+     * 命中相同路径的已存在记录则返回库内对象（保证 ID 一致、避免重复入库）；
+     * 未命中则插入。
+     */
+    suspend fun ensureSongInDb(song: Song): Song = withContext(Dispatchers.IO) {
+        val existing = songDao.getSongByPathSync(song.path)
+        if (existing != null) {
+            existing
+        } else {
+            songDao.insertSong(song)
+            song
+        }
+    }
 
     private fun isFileSizeValid(path: String): Boolean {
         return try {

@@ -36,8 +36,10 @@ import com.bullhead.equalizer.EqualizerModel
 import com.bullhead.equalizer.Settings
 import com.unicorn.player.MainActivity
 import com.unicorn.player.R
+import com.unicorn.player.ScanFilterActivity
 import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.model.Song
+import com.unicorn.player.scanFiltersDataStore
 import com.unicorn.player.util.LogWriter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -129,6 +131,11 @@ class MusicService : Service() {
     // 公共方法设置当前歌曲
     fun setCurrentSong(song: Song) {
         _currentSong.value = song
+        // 切到普通歌曲（路径不在排除目录内）时清除临时播放态，
+        // 标志着从临时播放回到正常队列。路径动态判断，不依赖持久化字段。
+        if (!isPathExcludedSync(song.path)) {
+            clearTempPlayback()
+        }
         // 重启恢复链中的典型竞争：Service 的 songList 在 DataStore 恢复出 currentSong 之前就被
         // MainActivity 装填（updateServiceSongList 用 index=0 兜底），导致 currentIndex=0 并不指向
         // currentSong，prev/next 就会从错误的 0 偏移，总是播同一首固定 item。
@@ -164,6 +171,41 @@ class MusicService : Service() {
 
     private var songList = mutableListOf<Song>()
     private val _songList = MutableLiveData<List<Song>>(emptyList())
+
+    // ===== 外部文件临时播放 =====
+    // isTempPlayback=true 表示当前在播放"临时歌曲"（外部打开排除目录内文件，未入库）：
+    // - 不保存播放进度到 DataStore（保留上次保存的歌曲状态）
+    // - 通知栏/MediaSession/耳机的 next/prev 全部禁用
+    // - PlayerActivity 销毁后继续播放，自然结束或用户切歌时回到上次保存的歌曲从头播放
+    @Volatile
+    private var isTempPlayback = false
+    private var tempSong: Song? = null
+    private val _tempPlayback = MutableLiveData(false)
+    val tempPlayback: LiveData<Boolean> = _tempPlayback
+
+    // 用户配置的排除目录缓存（onCreate 同步加载）。
+    // 用于动态判断当前歌曲是否为临时播放：路径在排除目录内 → 临时（不保存进度）。
+    // 不持久化到 Song/数据库，路径已知即可计算。
+    @Volatile
+    private var excludedDirsCache: Set<String> = emptySet()
+
+    /**
+     * 同步判断路径是否落在排除目录内（使用缓存，供主线程调用）。
+     */
+    private fun isPathExcludedSync(path: String): Boolean =
+        excludedDirsCache.any { path.startsWith(it) }
+
+    /**
+     * 从 scanFiltersDataStore 重新加载排除目录缓存（IO 调用，保证设置修改后及时生效）。
+     */
+    private suspend fun refreshExcludedDirsCache() {
+        try {
+            excludedDirsCache =
+                scanFiltersDataStore.data.first()[ScanFilterActivity.EXCLUDED_DIRS] ?: emptySet()
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "refreshExcludedDirsCache failed", e)
+        }
+    }
 
     // 音频管理器
     private lateinit var audioManager: AudioManager
@@ -282,6 +324,10 @@ class MusicService : Service() {
     // 标记loadPlaybackState是否已经被调用过
     private var isPlaybackStateLoaded = false
 
+    // 标记正在设置外部歌曲播放，防止 loadPlaybackState 覆盖外部歌曲
+    @Volatile
+    private var isSettingExternalSong = false
+
     // 标记用户重新打开应用后需要显示通知（用于从最近任务移除后，异步加载完成前用户重新打开应用的场景）
     // 注意：此标志仅在 isTaskRemoved=false 时使用，isTaskRemoved=true 时不应该触发通知显示
     private var pendingNotificationToShow = false
@@ -396,6 +442,12 @@ class MusicService : Service() {
                     // MediaPlayer可能已释放，忽略
                 }
 
+                // 临时播放结束：回到上次保存进度的歌曲从头播放（恢复全库队列）
+                if (isTempPlayback) {
+                    resumeLastSavedSong()
+                    return@setOnCompletionListener
+                }
+
                 // 顺序播放模式下最后一首自然播放完毕，只更新 UI 状态，不操作 MediaPlayer
                 if (playMode == PlayMode.SEQUENCE && currentIndex >= songList.size - 1) {
                     _isPlaying.value = false
@@ -410,7 +462,7 @@ class MusicService : Service() {
 
         mediaSession = MediaSessionCompat(this, "MusicService")
 
-        // 先同步加载播放模式，避免图标闪烁
+        // 先同步加载播放模式和排除目录，避免图标闪烁和临时态判断缺失
         runBlocking {
             try {
                 val preferences = applicationDataStore.data.first()
@@ -422,6 +474,14 @@ class MusicService : Service() {
                 Log.d(TAG, "onCreate: loaded playMode=$savedPlayMode")
             } catch (e: Exception) {
                 LogWriter.writeError(TAG, "Failed to load play mode", e)
+            }
+            try {
+                excludedDirsCache =
+                    scanFiltersDataStore.data.first()[ScanFilterActivity.EXCLUDED_DIRS]
+                        ?: emptySet()
+                Log.d(TAG, "onCreate: loaded excludedDirs=${excludedDirsCache.size}")
+            } catch (e: Exception) {
+                LogWriter.writeError(TAG, "Failed to load excluded dirs", e)
             }
         }
 
@@ -538,20 +598,30 @@ class MusicService : Service() {
                     val currentSong = _currentSong.value
                     if (currentSong != null && !isMediaPlayerReleased) {
                         try {
-                            val position = mediaPlayer.currentPosition
-                            val isPlaying = if (mediaPlayer.isPlaying) 1 else 0
-                            preferences[DataStoreKeys.CURRENT_POSITION] = position
-                            preferences[DataStoreKeys.IS_PLAYING] = isPlaying
-                            preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
-                            preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
-                            preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
-                            preferences[DataStoreKeys.SONG_PATH] = currentSong.path
+                            if (!isTempPlayback) {
+                                // 正常歌曲：保存歌曲状态
+                                val position = mediaPlayer.currentPosition
+                                val isPlaying = if (mediaPlayer.isPlaying) 1 else 0
+                                preferences[DataStoreKeys.CURRENT_POSITION] = position
+                                preferences[DataStoreKeys.IS_PLAYING] = isPlaying
+                                preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
+                                preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
+                                preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
+                                preferences[DataStoreKeys.SONG_PATH] = currentSong.path
+                                Log.d(
+                                    TAG,
+                                    "onDestroy: saved currentPosition=$position, isPlaying=$isPlaying, songId=${currentSong.id}"
+                                )
+                            } else {
+                                // 临时歌曲：不覆盖上次保存的歌曲状态，仅标记不自动播放
+                                preferences[DataStoreKeys.IS_PLAYING] = 0
+                                Log.d(
+                                    TAG,
+                                    "onDestroy: temp song, preserve previous saved state, IS_PLAYING=0"
+                                )
+                            }
                             preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
                             preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
-                            Log.d(
-                                TAG,
-                                "onDestroy: saved currentPosition=$position, isPlaying=$isPlaying, songId=${currentSong.id}"
-                            )
                         } catch (e: IllegalStateException) {
                             LogWriter.writeError(
                                 TAG,
@@ -793,6 +863,110 @@ class MusicService : Service() {
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             // 获得音频焦点，播放当前歌曲
             playCurrentSong()
+        }
+    }
+
+    /**
+     * 清除临时播放态（切到路径不在排除目录内的普通歌曲时由 setCurrentSong 自动调用）。
+     * 通知栏/MediaSession/耳机的 next/prev 随之恢复。
+     */
+    private fun clearTempPlayback() {
+        if (isTempPlayback || tempSong != null) {
+            isTempPlayback = false
+            tempSong = null
+            _tempPlayback.postValue(false)
+            Log.d(TAG, "clearTempPlayback: temp mode cleared")
+        }
+    }
+
+    /**
+     * 外部文件打开（文件管理器 ACTION_VIEW）时调用。
+     * - isTemp=true：单曲队列，不入库，禁用 next/prev，不保存进度。
+     * - isTemp=false：全库队列，定位到该歌曲，next/prev 正常，保存进度。
+     * 始终从头播放（playSongDirectly 走 reset+prepare+start，天然 position=0），
+     * 即使当前正在播放同一首歌也会重播。
+     */
+    fun playExternalSong(song: Song, isTemp: Boolean) {
+        // 标记正在设置外部歌曲，防止 loadPlaybackState 覆盖
+        isSettingExternalSong = true
+        isTempPlayback = isTemp
+        tempSong = if (isTemp) song else null
+        _tempPlayback.postValue(isTemp)
+        // 立即重置进度为 0，避免 UI 从旧歌曲的进度跳到 0
+        _currentPosition.value = 0
+        CoroutineScope(Dispatchers.IO).launch {
+            // 刷新排除目录缓存，保证 setCurrentSong 的动态判断使用最新设置
+            refreshExcludedDirsCache()
+            if (isTemp) {
+                withContext(Dispatchers.Main) {
+                    setSongList(listOf(song), 0)
+                    setCurrentSong(song)
+                    requestAudioFocusAndPlayCurrentSong()
+                    updateNotification(song)
+                }
+            } else {
+                // 永久：全库队列，定位到该歌曲
+                val allSongs = MusicDatabase.getDatabase(this@MusicService).songDao()
+                    .getAllSongs().first()
+                val idx = allSongs.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+                val target = allSongs.getOrElse(idx) { song }
+                withContext(Dispatchers.Main) {
+                    setSongList(allSongs, idx)
+                    setCurrentSong(target)
+                    requestAudioFocusAndPlayCurrentSong()
+                    updateNotification(target)
+                }
+            }
+        }
+    }
+
+    /**
+     * 临时播放结束后：从 DataStore 读取上次保存进度的歌曲，从全库恢复队列并从头播放。
+     * 无保存歌曲或文件不存在则停止。
+     */
+    private fun resumeLastSavedSong() {
+        Log.d(TAG, "resumeLastSavedSong: enter")
+        CoroutineScope(Dispatchers.IO).launch {
+            refreshExcludedDirsCache()
+            val preferences = applicationDataStore.data.first()
+            val songId = preferences[DataStoreKeys.CURRENT_SONG_ID]
+            val saved = songId?.let {
+                MusicDatabase.getDatabase(this@MusicService).songDao().getSongByIdSync(it)
+            }
+            if (saved == null) {
+                Log.d(TAG, "resumeLastSavedSong: no saved song, stop")
+                withContext(Dispatchers.Main) {
+                    clearTempPlayback()
+                    _isPlaying.value = false
+                    _currentSong.value = null
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+                return@launch
+            }
+            val file = java.io.File(saved.path)
+            if (!file.exists()) {
+                LogWriter.writeError(TAG, "resumeLastSavedSong: file not found: ${saved.path}")
+                withContext(Dispatchers.Main) {
+                    clearTempPlayback()
+                    _isPlaying.value = false
+                    _currentSong.value = null
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+                return@launch
+            }
+            val allSongs = MusicDatabase.getDatabase(this@MusicService).songDao()
+                .getAllSongs().first()
+            val idx = allSongs.indexOfFirst { it.id == saved.id }.coerceAtLeast(0)
+            val target = allSongs.getOrElse(idx) { saved }
+            withContext(Dispatchers.Main) {
+                clearTempPlayback()
+                setSongList(allSongs, idx)
+                setCurrentSong(target)
+                requestAudioFocusAndPlayCurrentSong()
+                updateNotification(target)
+            }
         }
     }
 
@@ -1045,6 +1219,12 @@ class MusicService : Service() {
     }
 
     fun playNext() {
+        // 临时播放态：用户主动点"下一首"（UI 按钮/通知/耳机）→ 回到上次保存的歌曲从头播放
+        // 单曲队列下，不守卫会重播这首临时歌曲
+        if (isTempPlayback) {
+            resumeLastSavedSong()
+            return
+        }
         if (songList.isEmpty()) {
             // 如果songList为空，通知MainActivity重新设置歌曲列表
             // 这样可以确保播放顺序与用户界面一致
@@ -1094,6 +1274,11 @@ class MusicService : Service() {
     }
 
     fun playPrevious() {
+        // 临时播放态：用户主动点"上一首"（UI 按钮/通知/耳机）→ 回到上次保存的歌曲从头播放
+        if (isTempPlayback) {
+            resumeLastSavedSong()
+            return
+        }
         if (songList.isEmpty()) {
             // 如果songList为空，通知MainActivity重新设置歌曲列表
             // 这样可以确保播放顺序与用户界面一致
@@ -1474,7 +1659,11 @@ class MusicService : Service() {
             }
             android.support.v4.media.session.PlaybackStateCompat.Builder()
                 .setState(state, position, 1.0f).setActions(
-                    android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or android.support.v4.media.session.PlaybackStateCompat.ACTION_PAUSE or android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT or android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or android.support.v4.media.session.PlaybackStateCompat.ACTION_SEEK_TO
+                    android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or
+                            android.support.v4.media.session.PlaybackStateCompat.ACTION_PAUSE or
+                            android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                            android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                            android.support.v4.media.session.PlaybackStateCompat.ACTION_SEEK_TO
                 ).build()
         }
         mediaSession.setPlaybackState(playbackState)
@@ -1528,20 +1717,25 @@ class MusicService : Service() {
             )
         }
 
-        return NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle(song.title)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle(song.title)
             .setContentText("${song.artist} - ${song.album}").setSmallIcon(R.drawable.ic_music_note)
-            .setContentIntent(pendingIntent).addAction(
-                NotificationCompat.Action(
-                    R.drawable.ic_previous, "Previous", createActionPendingIntent(ACTION_PREVIOUS)
-                )
-            ).addAction(playPauseAction).addAction(
-                NotificationCompat.Action(
-                    R.drawable.ic_next, "Next", createActionPendingIntent(ACTION_NEXT)
-                )
-            ).setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setMediaSession(mediaSession.sessionToken).setShowActionsInCompactView(0, 1, 2)
-            ).setPriority(NotificationCompat.PRIORITY_HIGH).setOngoing(isPlaying)
+            .setContentIntent(pendingIntent)
+
+        builder.addAction(
+            NotificationCompat.Action(
+                R.drawable.ic_previous, "Previous", createActionPendingIntent(ACTION_PREVIOUS)
+            )
+        ).addAction(playPauseAction).addAction(
+            NotificationCompat.Action(
+                R.drawable.ic_next, "Next", createActionPendingIntent(ACTION_NEXT)
+            )
+        )
+        builder.setStyle(
+            androidx.media.app.NotificationCompat.MediaStyle()
+                .setMediaSession(mediaSession.sessionToken).setShowActionsInCompactView(0, 1, 2)
+        )
+
+        return builder.setPriority(NotificationCompat.PRIORITY_HIGH).setOngoing(isPlaying)
             .setOnlyAlertOnce(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).build()
     }
 
@@ -1573,6 +1767,12 @@ class MusicService : Service() {
     private var isMediaPlayerReleased = false
 
     fun savePlaybackState() {
+        // 临时播放态不保存进度，保留 DataStore 中上次保存的歌曲状态
+        // （用于临时播放结束后回到上次保存的歌曲从头播放）
+        if (isTempPlayback) {
+            Log.d(TAG, "savePlaybackState: temp song, skip")
+            return
+        }
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 // 注意：之前曾加过 isPlaybackStateLoaded 守卫，但该标志在 loadPlaybackState
@@ -1681,6 +1881,11 @@ class MusicService : Service() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // 如果正在设置外部歌曲，跳过恢复，避免覆盖外部歌曲
+                if (isSettingExternalSong) {
+                    isPlaybackStateLoaded = true
+                    return@launch
+                }
                 val preferences = applicationDataStore.data.first()
                 // 检查用户是否从最近任务移除了应用
                 val isTaskRemoved = preferences[DataStoreKeys.TASK_REMOVED_FLAG] == 1
@@ -1784,6 +1989,11 @@ class MusicService : Service() {
 
                 // 恢复歌曲信息（在主线程更新）
                 withContext(Dispatchers.Main) {
+                    // 再次检查：如果在加载期间外部歌曲已被设置，跳过恢复
+                    if (isSettingExternalSong) {
+                        isPlaybackStateLoaded = true
+                        return@withContext
+                    }
                     val restoredSong = Song(
                         id = songId,
                         title = songTitle,
@@ -1791,6 +2001,10 @@ class MusicService : Service() {
                         album = "",
                         duration = 0,
                         path = songPath
+                    )
+                    Log.d(
+                        TAG,
+                        "loadPlaybackState: about to setCurrentSong for restored song=${restoredSong.title}, id=${restoredSong.id}"
                     )
                     setCurrentSong(restoredSong)
                     // 仅在真正加载了歌曲后才标记为已加载，避免无进度时跳过后续合法恢复
@@ -2025,22 +2239,32 @@ class MusicService : Service() {
                 // 同步保存播放状态
                 val currentSong = _currentSong.value
                 if (currentSong != null && !isMediaPlayerReleased) {
-                    preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
-                    preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
-                    preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
-                    preferences[DataStoreKeys.SONG_PATH] = currentSong.path
-                    try {
-                        val savedPosition = mediaPlayer.currentPosition
-                        // 修复：强制保存 IS_PLAYING=0，重新打开应用时不应自动播放
-                        // （用户主动从最近任务划掉应用，恢复时应为暂停状态）
-                        preferences[DataStoreKeys.CURRENT_POSITION] = savedPosition
+                    if (!isTempPlayback) {
+                        // 正常歌曲：保存歌曲状态
+                        preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
+                        preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
+                        preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
+                        preferences[DataStoreKeys.SONG_PATH] = currentSong.path
+                        try {
+                            val savedPosition = mediaPlayer.currentPosition
+                            // 修复：强制保存 IS_PLAYING=0，重新打开应用时不应自动播放
+                            // （用户主动从最近任务划掉应用，恢复时应为暂停状态）
+                            preferences[DataStoreKeys.CURRENT_POSITION] = savedPosition
+                            preferences[DataStoreKeys.IS_PLAYING] = 0
+                            Log.d(
+                                TAG,
+                                "onTaskRemoved: saved songId=${currentSong.id}, title=${currentSong.title}, position=$savedPosition, isPlaying=0"
+                            )
+                        } catch (e: IllegalStateException) {
+                            LogWriter.writeError(TAG, "onTaskRemoved: MediaPlayer state error", e)
+                        }
+                    } else {
+                        // 临时歌曲：不覆盖上次保存的歌曲状态，仅强制 IS_PLAYING=0
                         preferences[DataStoreKeys.IS_PLAYING] = 0
                         Log.d(
                             TAG,
-                            "onTaskRemoved: saved songId=${currentSong.id}, title=${currentSong.title}, position=$savedPosition, isPlaying=0"
+                            "onTaskRemoved: temp song, preserve previous saved state, IS_PLAYING=0"
                         )
-                    } catch (e: IllegalStateException) {
-                        LogWriter.writeError(TAG, "onTaskRemoved: MediaPlayer state error", e)
                     }
                     preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
                     // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
