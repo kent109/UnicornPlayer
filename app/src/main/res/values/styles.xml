@@ -17,8 +17,8 @@
     </style>
 
     <style name="ShapeAppearanceBottomSheet" parent="ShapeAppearance.MaterialComponents.LargeComponent">
-        <item name="cornerSizeTopLeft">40dp</item>
-        <item name="cornerSizeTopRight">40dp</item>
+        <item name="cornerSizeTopLeft">32dp</item>
+        <item name="cornerSizeTopRight">32dp</item>
         <item name="cornerSizeBottomLeft">0dp</item>
         <item name="cornerSizeBottomRight">0dp</item>
     </style>

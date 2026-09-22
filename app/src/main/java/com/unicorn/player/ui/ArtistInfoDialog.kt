@@ -87,7 +87,7 @@ class ArtistInfoDialog(
             behavior.isHideable = true
             behavior.skipCollapsed = true
 
-            val cornerRadius = 40f * designBottomSheet.resources.displayMetrics.density
+            val cornerRadius = 32f * designBottomSheet.resources.displayMetrics.density
             val drawable = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                 setColor(designBottomSheet.context.getColor(R.color.surface))

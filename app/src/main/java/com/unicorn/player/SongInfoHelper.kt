@@ -284,7 +284,7 @@ class SongInfoHelper(private val context: Context) {
             behavior.isHideable = true
             behavior.skipCollapsed = true
 
-            val cornerRadius = 40f * designBottomSheet.resources.displayMetrics.density
+            val cornerRadius = 32f * designBottomSheet.resources.displayMetrics.density
             val drawable = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 setColor(designBottomSheet.context.getColor(R.color.surface))

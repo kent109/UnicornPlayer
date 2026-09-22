@@ -528,7 +528,14 @@ public class EqualizerFragment extends Fragment {
             saveCustomEq(toSavePos);
             dialog.dismiss();
         });
-        view.findViewById(R.id.btnCancel).setOnClickListener(v -> {
+        android.widget.Button btnCancel = view.findViewById(R.id.btnCancel);
+        TypedValue tv = new TypedValue();
+        requireContext().getTheme().resolveAttribute(
+                com.google.android.material.R.attr.colorSecondary, tv, true);
+        btnCancel.setTextColor(tv.resourceId != 0
+                ? getResources().getColor(tv.resourceId, requireContext().getTheme())
+                : tv.data);
+        btnCancel.setOnClickListener(v -> {
             discardEq(exit);
             dialog.dismiss();
         });
