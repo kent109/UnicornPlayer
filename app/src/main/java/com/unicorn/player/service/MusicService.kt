@@ -125,6 +125,15 @@ class MusicService : Service() {
     private lateinit var mediaPlayer: MediaPlayer
     private lateinit var mediaSession: MediaSessionCompat
 
+    // 播放状态恢复窗口标志：loadPlaybackState 开始准备媒体播放器起，到 songList 从数据库回填
+    // 对齐止，该标志为 true。窗口内：
+    // - MediaPlayer 异步错误被 OnErrorListener 吞掉（部分 ROM 如 OPPO NuPlayer 上同步
+    //   prepare()+seekTo 会竞态触发 -38，框架在无 OnErrorListener 时会把错误转成 onCompletion，
+    //   误触发 playNext 自动跳到下一首——即"杀进程重启后自动播放下一首"的根因）；
+    // - onCompletion / MediaSession 回调被忽略，防止 songList 尚未回填时导航到错误位置。
+    @Volatile
+    private var isRestoringState = false
+
     private val _currentSong = MutableLiveData<Song?>()
     val currentSong: LiveData<Song?> = _currentSong
 
@@ -475,7 +484,23 @@ class MusicService : Service() {
                 AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .setUsage(AudioAttributes.USAGE_MEDIA).build()
             )
+            // 必须设置 OnErrorListener：框架在错误未被处理（无监听器或返回 false）时会把
+            // 异步错误转成 onCompletion 回调，恢复窗口外的真实错误借由该路径走 playNext
+            // 跳过坏歌曲；恢复窗口内的错误返回 true 吞掉，防止误触发 playNext
+            setOnErrorListener { _, what, extra ->
+                Log.e(
+                    TAG,
+                    "MediaPlayer onError: what=$what, extra=$extra, isRestoringState=$isRestoringState"
+                )
+                isRestoringState
+            }
             setOnCompletionListener {
+                // 恢复窗口内的 onCompletion 一律忽略：它可能不是真正的播放完成，而是异步
+                // 错误被框架转成的伪完成；此刻 songList 尚未回填对齐，playNext 会跳到错误的歌曲
+                if (isRestoringState) {
+                    Log.d(TAG, "onCompletion ignored during state restore")
+                    return@setOnCompletionListener
+                }
                 // 强制更新进度为100%，避免最后一次进度更新不到位
                 try {
                     _currentPosition.postValue(mediaPlayer.duration)
@@ -540,6 +565,12 @@ class MusicService : Service() {
         // 设置MediaSession回调
         mediaSession.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
+                // 恢复窗口内忽略外部播放指令（耳机/蓝牙重连可能补发旧指令），
+                // 避免打断正在进行的恢复流程
+                if (isRestoringState) {
+                    Log.d(TAG, "MediaSession onPlay ignored during state restore")
+                    return
+                }
                 requestAudioFocusAndPlay()
             }
 
@@ -548,10 +579,18 @@ class MusicService : Service() {
             }
 
             override fun onSkipToNext() {
+                if (isRestoringState) {
+                    Log.d(TAG, "MediaSession onSkipToNext ignored during state restore")
+                    return
+                }
                 requestAudioFocusAndPlayNext()
             }
 
             override fun onSkipToPrevious() {
+                if (isRestoringState) {
+                    Log.d(TAG, "MediaSession onSkipToPrevious ignored during state restore")
+                    return
+                }
                 requestAudioFocusAndPlayPrevious()
             }
 
@@ -560,6 +599,11 @@ class MusicService : Service() {
             }
 
             override fun onSeekTo(pos: Long) {
+                // 恢复窗口内播放器尚未准备好，seekTo 会与恢复流程的 seekTo 冲突
+                if (isRestoringState) {
+                    Log.d(TAG, "MediaSession onSeekTo ignored during state restore")
+                    return
+                }
                 // 处理通知栏进度条拖动事件
                 seekTo(pos.toInt())
                 updateMediaSessionPlaybackState()
@@ -726,6 +770,14 @@ class MusicService : Service() {
                     AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                         .setUsage(AudioAttributes.USAGE_MEDIA).build()
                 )
+                // 同 onCreate：错误未处理会被框架转成 onCompletion，误触发 playNext
+                setOnErrorListener { _, what, extra ->
+                    Log.e(
+                        TAG,
+                        "MediaPlayer onError: what=$what, extra=$extra, isRestoringState=$isRestoringState"
+                    )
+                    isRestoringState
+                }
                 setOnCompletionListener {
                     playNext()
                 }
@@ -874,6 +926,10 @@ class MusicService : Service() {
         _isPlaying.value = true  // 确保立即更新状态
 
         try {
+            // 本实例可能残留恢复流程的 OnPreparedListener（恢复被取消/失败时未消费），
+            // 部分 ROM 对同步 prepare() 也会回调 onPrepared，若不解绑会把恢复进度
+            // seek 到这首新歌上（表现为切歌后从旧进度开始播放）
+            mediaPlayer.setOnPreparedListener(null)
             mediaPlayer.reset()
             mediaPlayer.setDataSource(song.path)
             mediaPlayer.prepare()
@@ -1318,6 +1374,23 @@ class MusicService : Service() {
         }
     }
 
+    /**
+     * 校正 currentIndex 不变式：songList[currentIndex].id == currentSong.id。
+     * songList 的异步回填/覆盖可能让 currentIndex 指向与当前实际播放歌曲不一致的位置
+     * （如恢复流程按过期的恢复入参定位），prev/next 的索引加减会从错误位置偏移，
+     * 导致"播完后又重播同一首"。以 currentSong 真值为准重新定位。
+     */
+    private fun realignCurrentIndex() {
+        val song = _currentSong.value ?: return
+        if (songList.isEmpty()) return
+        if (currentIndex in songList.indices && songList[currentIndex].id == song.id) return
+        val realIndex = songList.indexOfFirst { it.id == song.id }
+        if (realIndex >= 0) {
+            Log.d(TAG, "realignCurrentIndex: $currentIndex -> $realIndex (song=${song.title})")
+            currentIndex = realIndex
+        }
+    }
+
     fun playNext() {
         // 临时播放态：用户主动点"下一首"（UI 按钮/通知/耳机）→ 回到上次保存的歌曲从头播放
         // 单曲队列下，不守卫会重播这首临时歌曲
@@ -1332,6 +1405,7 @@ class MusicService : Service() {
             _requestSongList.postValue(Event(true))
             return
         }
+        realignCurrentIndex()
 
         when (playMode) {
             PlayMode.ALL_LOOP -> {
@@ -1386,6 +1460,7 @@ class MusicService : Service() {
             _requestSongList.postValue(Event(true))
             return
         }
+        realignCurrentIndex()
 
         currentIndex = when {
             // 顺序播放模式：到达第一首后点击上一首不做处理
@@ -2097,6 +2172,12 @@ class MusicService : Service() {
                     isPlaybackStateLoaded = true
 
                     // 准备媒体播放器但不立即播放
+                    // 使用 prepareAsync + OnPreparedListener：同步 prepare() 后紧跟 seekTo 在
+                    // 部分 ROM（如 OPPO OplusNuPlayer）上会因内部竞态触发异步 -38 错误，且错误
+                    // 会被框架转成 onCompletion 误触发 playNext（自动播放下一首的根因）。
+                    // prepareAsync 让 seekTo 等后续操作在 prepared 事件回调中执行，状态迁移干净；
+                    // 恢复窗口持续到 songList 回填对齐（loadSongListFromDatabase 的 onSettled）。
+                    isRestoringState = true
                     try {
                         // 尝试reset，如果MediaPlayer处于Error状态会抛出IllegalStateException
                         try {
@@ -2112,69 +2193,100 @@ class MusicService : Service() {
                                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                                         .setUsage(AudioAttributes.USAGE_MEDIA).build()
                                 )
+                                // 同 onCreate：错误未处理会被框架转成 onCompletion，误触发 playNext
+                                setOnErrorListener { _, what, extra ->
+                                    Log.e(
+                                        TAG,
+                                        "MediaPlayer onError: what=$what, extra=$extra, isRestoringState=$isRestoringState"
+                                    )
+                                    isRestoringState
+                                }
                                 setOnCompletionListener {
                                     playNext()
                                 }
                             }
                         }
                         mediaPlayer.setDataSource(songPath)
-                        mediaPlayer.prepare()
-                        // 根据 shouldRestorePosition 决定是否恢复到保存的进度
-                        // shouldRestorePosition=false 时（服务被系统重启且任务未被移除），不恢复到旧进度
-                        // 而是以 MusicService 当前进度为准，避免跳转到过时的位置
-                        // shouldRestorePosition=true 时（正常启动或任务被移除后重启），恢复到保存的进度
-                        if (shouldRestorePosition) {
-                            Log.d(
-                                TAG,
-                                "loadPlaybackState: before seekTo, target=$currentPosition, duration=${mediaPlayer.duration}, currentPosition=${mediaPlayer.currentPosition}"
-                            )
-                            seekTo(currentPosition)
-                            Log.d(
-                                TAG,
-                                "loadPlaybackState: after seekTo, currentPosition=${mediaPlayer.currentPosition}"
-                            )
-                        } else {
-                            Log.d(
-                                TAG,
-                                "loadPlaybackState: skip seekTo (shouldRestorePosition=false)"
-                            )
-                        }
+                        mediaPlayer.setOnPreparedListener { mp ->
+                            // 一次性消费：先解绑自身。部分 ROM 对同步 prepare() 也会回调
+                            // onPrepared，残留监听器会把恢复进度 seek 到之后播放的新歌上
+                            mp.setOnPreparedListener(null)
+                            try {
+                                // 根据 shouldRestorePosition 决定是否恢复到保存的进度
+                                // shouldRestorePosition=false 时（服务被系统重启且任务未被移除），不恢复到旧进度
+                                // 而是以 MusicService 当前进度为准，避免跳转到过时的位置
+                                // shouldRestorePosition=true 时（正常启动或任务被移除后重启），恢复到保存的进度
+                                if (shouldRestorePosition) {
+                                    Log.d(
+                                        TAG,
+                                        "loadPlaybackState: before seekTo, target=$currentPosition, duration=${mp.duration}, currentPosition=${mp.currentPosition}"
+                                    )
+                                    mp.seekTo(currentPosition)
+                                    Log.d(
+                                        TAG,
+                                        "loadPlaybackState: after seekTo, currentPosition=${mp.currentPosition}"
+                                    )
+                                } else {
+                                    Log.d(
+                                        TAG,
+                                        "loadPlaybackState: skip seekTo (shouldRestorePosition=false)"
+                                    )
+                                }
 
-                        // 不再自动恢复播放，只准备媒体播放器
-                        // 更新MediaSession状态（系统媒体控件需要）
-                        updateMediaSessionPlaybackState()
-                        // 显示通知的条件：
-                        // 1. 用户没有从最近任务移除（isTaskRemoved=false）
-                        // 2. 或者用户已从最近任务移除但重新打开了应用（pendingNotificationToShow=true）
-                        if (!isTaskRemoved || pendingNotificationToShow) {
-                            updateNotification(restoredSong)
-                            pendingNotificationToShow = false
+                                // 不再自动恢复播放，只准备媒体播放器
+                                // 更新MediaSession状态（系统媒体控件需要）
+                                updateMediaSessionPlaybackState()
+                                // 显示通知的条件：
+                                // 1. 用户没有从最近任务移除（isTaskRemoved=false）
+                                // 2. 或者用户已从最近任务移除但重新打开了应用（pendingNotificationToShow=true）
+                                if (!isTaskRemoved || pendingNotificationToShow) {
+                                    updateNotification(restoredSong)
+                                    pendingNotificationToShow = false
+                                }
+                                // 仅在「后台播放中 Activity 被系统回收后恢复」时自动恢复播放。
+                                // 判定条件：之前正在播放 && restoreFlag==RESTORE_CREATE（savedInstanceState != null）
+                                // 其他场景（最近任务划掉、杀进程重启、正常启动）都不自动播放。
+                                if (isPlaying == 1 && restoreFlag == MainActivity.RESTORE_CREATE) {
+                                    Log.d(
+                                        TAG,
+                                        "loadPlaybackState: auto-resume play, isPlaying=$isPlaying, restoreFlag=$restoreFlag, currentPosition=${mp.currentPosition}"
+                                    )
+                                    play()
+                                } else {
+                                    Log.d(
+                                        TAG,
+                                        "loadPlaybackState: no auto-play, isPlaying=$isPlaying, restoreFlag=$restoreFlag"
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                LogWriter.writeError(
+                                    TAG,
+                                    "Error in onPrepared during restore: ${e.message}",
+                                    e
+                                )
+                            }
                         }
-                        // 仅在「后台播放中 Activity 被系统回收后恢复」时自动恢复播放。
-                        // 判定条件：之前正在播放 && restoreFlag==RESTORE_CREATE（savedInstanceState != null）
-                        // 其他场景（最近任务划掉、杀进程重启、正常启动）都不自动播放。
-                        if (isPlaying == 1 && restoreFlag == MainActivity.RESTORE_CREATE) {
-                            Log.d(
-                                TAG,
-                                "loadPlaybackState: auto-resume play, isPlaying=$isPlaying, restoreFlag=$restoreFlag, currentPosition=${mediaPlayer.currentPosition}"
-                            )
-                            play()
-                        } else {
-                            Log.d(
-                                TAG,
-                                "loadPlaybackState: no auto-play, isPlaying=$isPlaying, restoreFlag=$restoreFlag"
-                            )
-                        }
+                        mediaPlayer.prepareAsync()
                     } catch (e: IOException) {
                         LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
+                        // 准备失败，恢复窗口提前结束（songList 回填仍在进行，无需重复置位）；
+                        // 同时解绑恢复监听器，防止后续 sync prepare 时被 ROM 触发误 seek
+                        isRestoringState = false
+                        mediaPlayer.setOnPreparedListener(null)
                     } catch (e: IllegalStateException) {
                         LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
+                        isRestoringState = false
+                        mediaPlayer.setOnPreparedListener(null)
                     }
 
                     // 加载歌曲列表到service，确保播放完成后能自动播放下一首
                     // 根据保存的来源标签（f0/f1/f2/f3）重建作用域内的歌曲列表
+                    // 回填对齐后（成功/跳过/异常均算）关闭恢复窗口
                     val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
-                    loadSongListFromDatabase(sourceType, sourceName, songId)
+                    loadSongListFromDatabase(sourceType, sourceName, songId) {
+                        isRestoringState = false
+                        Log.d(TAG, "loadPlaybackState: restore window closed (songList settled)")
+                    }
                 }
 
                 // shouldRestorePosition=false 时（服务被系统重启且任务未被移除），将当前进度同步到 DataStore
@@ -2206,14 +2318,16 @@ class MusicService : Service() {
      *
      * @param sourceType 播放来源类型（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
      * @param sourceName 来源名称（歌手/专辑/歌单名；f0 时为空）
-     * @param songId 当前恢复的歌曲 id，用于定位 startIndex
+     * @param songId 定位用的歌曲 id（仅当 currentSong 为空时作为回退），用于定位 startIndex
+     * @param onSettled 列表回填结算（成功/跳过/异常）后的回调，用于关闭恢复窗口
      *
      * 退化规则：来源作用域为空（f1/f2 下已无歌曲 / f3 歌单已不存在）→ 退化到全部歌曲（f0）。
      */
     private fun loadSongListFromDatabase(
         sourceType: String,
         sourceName: String = "",
-        songId: Long = 0L
+        songId: Long = 0L,
+        onSettled: (() -> Unit)? = null
     ) {
         // 记录 DB 查询开始时间，用于与手动同步时间戳比较
         val dbQueryStartTime = lastManualSyncTime
@@ -2253,8 +2367,11 @@ class MusicService : Service() {
                         if (scoped.isEmpty() && sourceType != PlaySource.SONGS) songsFromDb else scoped
                     val songs = sortSongs(finalSongs, sortMode)
 
-                    // 按 songId 或当前播放歌曲定位 startIndex
-                    val currentSongId = if (songId != 0L) songId else _currentSong.value?.id
+                    // 以当前实际播放的歌曲定位 startIndex（currentSong 真值优先）。
+                    // 恢复入参 songId 只是回退值：DB 查询期间 playNext 可能已切到下一首，
+                    // 用过期的入参定位会把 currentIndex 重置回旧歌，导致下一首播完后
+                    // playNext 的 +1 又指向它，造成"播完立即从头重播"。
+                    val currentSongId = _currentSong.value?.id ?: songId.takeIf { it != 0L }
                     val currentIndexInList = if (currentSongId != null) {
                         songs.indexOfFirst { it.id == currentSongId }
                     } else {
@@ -2287,6 +2404,9 @@ class MusicService : Service() {
             } catch (e: Exception) {
                 LogWriter.writeError(TAG, "Error loading song list from database: ${e.message}", e)
                 e.printStackTrace()
+            } finally {
+                // 无论回填成功、被跳过还是异常，都要结算恢复窗口
+                onSettled?.invoke()
             }
         }
     }
