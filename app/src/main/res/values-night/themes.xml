@@ -56,11 +56,11 @@
         <item name="isLightTheme">false</item>
     </style>
 
-    <!-- 主题色1: 红 #FB0808 -->
+    <!-- 主题色1: 红 #F82020 -->
     <style name="Theme.UnicornPlayer.Color1" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#FB0808</item>
+        <item name="colorPrimary">#F82020</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#F4867E</item>
+        <item name="colorPrimaryContainer">#F07167</item>
         <item name="colorOnPrimaryContainer">#4a004a</item>
     </style>
 
@@ -68,47 +68,47 @@
     <style name="Theme.UnicornPlayer.Color2" parent="Theme.UnicornPlayer">
         <item name="colorPrimary">#FF7F00</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#F6BB69</item>
+        <item name="colorPrimaryContainer">#FA9D82</item>
         <item name="colorOnPrimaryContainer">#5a0030</item>
     </style>
 
-    <!-- 主题色3: 黄 #FDE624 -->
+    <!-- 主题色3: 黄 #F6DD0E -->
     <style name="Theme.UnicornPlayer.Color3" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#FDE624</item>
+        <item name="colorPrimary">#F6DD0E</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#E7DF9E</item>
+        <item name="colorPrimaryContainer">#EDDF7A</item>
         <item name="colorOnPrimaryContainer">#5a4a0f</item>
     </style>
 
-    <!-- 主题色4: 绿 #08FB08 -->
+    <!-- 主题色4: 绿 #1AF01A -->
     <style name="Theme.UnicornPlayer.Color4" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#08FB08</item>
+        <item name="colorPrimary">#1AF01A</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#B3F8CF</item>
+        <item name="colorPrimaryContainer">#89E986</item>
         <item name="colorOnPrimaryContainer">#1a4a2a</item>
     </style>
 
-    <!-- 主题色5: 青 #00FFFF -->
+    <!-- 主题色5: 青 #11FAFA -->
     <style name="Theme.UnicornPlayer.Color5" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#00FFFF</item>
+        <item name="colorPrimary">#11FAFA</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#C5FAFA</item>
+        <item name="colorPrimaryContainer">#89F8F8</item>
         <item name="colorOnPrimaryContainer">#0f2d5a</item>
     </style>
 
-    <!-- 主题色6: 蓝 #4863FF -->
+    <!-- 主题色6: 蓝 #2E66F2 -->
     <style name="Theme.UnicornPlayer.Color6" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#4863FF</item>
+        <item name="colorPrimary">#2E66F2</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#8080FB</item>
+        <item name="colorPrimaryContainer">#506DE0</item>
         <item name="colorOnPrimaryContainer">#0f5a5a</item>
     </style>
 
-    <!-- 主题色7: 紫 #BA20FA -->
+    <!-- 主题色7: 紫 #B224F4 -->
     <style name="Theme.UnicornPlayer.Color7" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#BA20FA</item>
+        <item name="colorPrimary">#B224F4</item>
         <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#E7A4F2</item>
+        <item name="colorPrimaryContainer">#BB5CD3</item>
         <item name="colorOnPrimaryContainer">#2d0f5a</item>
     </style>
 </resources>
