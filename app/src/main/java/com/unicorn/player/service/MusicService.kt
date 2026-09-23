@@ -207,6 +207,42 @@ class MusicService : Service() {
         }
     }
 
+    /**
+     * 从 DataStore 恢复均衡器参数到 com.bullhead.equalizer.Settings。
+     * - 冷启动外部播放时 loadPlaybackState 可能尚未执行或被 isSettingExternalSong 提前 return 跳过，
+     *   需要主动调用保证 initializeAudioEffects() 用到正确状态。
+     * - 参数（bandLevels/presetPos/bassStrength/reverbPreset）无论开关是否启用都读取，
+     *   保留关闭开关前的预设，下次打开开关时能恢复。
+     */
+    private suspend fun restoreEqualizerSettings() {
+        try {
+            val preferences = applicationDataStore.data.first()
+            Settings.isEqualizerEnabled = preferences[DataStoreKeys.IS_EQUALIZER_ENABLED] == 1
+            val savedBandLevels = preferences[DataStoreKeys.EQUALIZER_BAND_LEVELS]
+            if (savedBandLevels != null) {
+                val bandLevelsArray = savedBandLevels.split(",")
+                for (i in bandLevelsArray.indices) {
+                    Settings.seekbarpos[i] = bandLevelsArray[i].toInt()
+                }
+            }
+            Settings.presetPos = preferences[DataStoreKeys.EQUALIZER_PRESET_POS] ?: 0
+            // 兜底：DataStore 可能残留旧版本写入的 -1，强制收敛到合法范围 [0, 1000]
+            val rawBass = preferences[DataStoreKeys.BASS_STRENGTH]?.toShort() ?: 0
+            Settings.bassStrength = if (rawBass < 0 || rawBass > 1000) 0 else rawBass
+            // 兜底：reverbPreset 合法范围 [0, 6]，-1 视为未设置 → PRESET_NONE
+            val rawReverb = preferences[DataStoreKeys.REVERB_PRESET]?.toShort() ?: 0
+            val reverbPreset = if (rawReverb < 0 || rawReverb > 6) 0 else rawReverb
+            if (Settings.equalizerModel == null) {
+                Settings.equalizerModel = EqualizerModel()
+                Settings.equalizerModel.reverbPreset = reverbPreset
+                Settings.equalizerModel.bassStrength = Settings.bassStrength
+            }
+            Log.d(TAG, "restoreEqualizerSettings: enabled=${Settings.isEqualizerEnabled}, presetPos=${Settings.presetPos}, bass=${Settings.bassStrength}, reverb=$reverbPreset")
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "restoreEqualizerSettings failed", e)
+        }
+    }
+
     // 音频管理器
     private lateinit var audioManager: AudioManager
 
@@ -926,6 +962,10 @@ class MusicService : Service() {
         CoroutineScope(Dispatchers.IO).launch {
             // 刷新排除目录缓存，保证 setCurrentSong 的动态判断使用最新设置
             refreshExcludedDirsCache()
+            // 主动恢复均衡器设置：冷启动外部播放时 loadPlaybackState 可能尚未执行或被
+            // isSettingExternalSong 提前 return 跳过，导致 Settings.isEqualizerEnabled 为默认 false，
+            // initializeAudioEffects() 初始化后均衡器实际未启用。这里同步恢复保证播放前就位。
+            restoreEqualizerSettings()
 
             if (isTemp) {
                 withContext(Dispatchers.Main) {
@@ -1960,6 +2000,12 @@ class MusicService : Service() {
                     "loadPlaybackState: restored playSourceTag=$savedSourceTag, playMode=$playMode"
                 )
 
+                // 加载均衡器设置（必须在currentPosition检查之前，且在 isSettingExternalSong 检查之前）：
+                // 外部文件播放时 isSettingExternalSong=true 会提前 return 跳过歌曲恢复，
+                // 但均衡器参数必须恢复，否则冷启动外部播放时 Settings.isEqualizerEnabled 为默认 false，
+                // initializeAudioEffects() 初始化后均衡器实际未启用。
+                restoreEqualizerSettings()
+
                 // 如果正在设置外部歌曲，跳过歌曲恢复，避免覆盖外部歌曲
                 if (isSettingExternalSong) {
                     isPlaybackStateLoaded = true
@@ -1973,33 +2019,6 @@ class MusicService : Service() {
                     applicationDataStore.edit { p ->
                         p.remove(DataStoreKeys.TASK_REMOVED_FLAG)
                     }
-                }
-
-                // 加载均衡器设置（必须在currentPosition检查之前）
-                val isEqualizerEnabled = preferences[DataStoreKeys.IS_EQUALIZER_ENABLED] == 1
-                Settings.isEqualizerEnabled = isEqualizerEnabled
-
-                // 加载均衡器参数（无论开关是否启用都读取，保留关闭开关前的预设/低音/虚拟值，
-                // 下次打开开关时能恢复，否则 Settings.presetPos 会保持默认 0=自定义）
-                val savedBandLevels = preferences[DataStoreKeys.EQUALIZER_BAND_LEVELS]
-                if (savedBandLevels != null) {
-                    val bandLevelsArray = savedBandLevels.split(",")
-                    for (i in bandLevelsArray.indices) {
-                        Settings.seekbarpos[i] = bandLevelsArray[i].toInt()
-                    }
-                }
-                Settings.presetPos = preferences[DataStoreKeys.EQUALIZER_PRESET_POS] ?: 0
-                // 兜底：DataStore 可能残留旧版本写入的 -1，强制收敛到合法范围 [0, 1000]
-                val rawBass = preferences[DataStoreKeys.BASS_STRENGTH]?.toShort() ?: 0
-                Settings.bassStrength = if (rawBass < 0 || rawBass > 1000) 0 else rawBass
-                // 兜底：reverbPreset 合法范围 [0, 6]，-1 视为未设置 → PRESET_NONE
-                val rawReverb = preferences[DataStoreKeys.REVERB_PRESET]?.toShort() ?: 0
-                val reverbPreset = if (rawReverb < 0 || rawReverb > 6) 0 else rawReverb
-
-                if (Settings.equalizerModel == null) {
-                    Settings.equalizerModel = EqualizerModel()
-                    Settings.equalizerModel.reverbPreset = reverbPreset
-                    Settings.equalizerModel.bassStrength = Settings.bassStrength
                 }
 
                 if (isTaskRemoved) {
