@@ -24,7 +24,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -73,7 +72,7 @@ public class EqualizerFragment extends Fragment {
 
     AnalogController bassController, reverbController;
 
-    Spinner presetSpinner;
+    ObservableSpinner presetSpinner;
 
     FrameLayout equalizerBlocker;
     FrameLayout equalizerTouchBlocker;
@@ -238,6 +237,12 @@ public class EqualizerFragment extends Fragment {
         spinnerDropDownIcon.setOnClickListener(v -> presetSpinner.performClick());
 
         presetSpinner = view.findViewById(R.id.equalizer_preset_spinner);
+
+        // 下拉打开时旋转箭头到 -180°（逆时针），收起时旋转回 0°（顺时针）。
+        // 打开检测：performClick()；收起检测：onWindowFocusChanged（下拉弹出时窗口失去焦点，
+        // 收起时重新获得焦点）
+        presetSpinner.setOnDropdownOpenedListener(() -> rotateDropdownIcon(true));
+        presetSpinner.setOnDropdownDismissedListener(() -> rotateDropdownIcon(false));
 
         equalizerBlocker = view.findViewById(R.id.equalizerBlocker);
         equalizerTouchBlocker = view.findViewById(R.id.equalizerTouchBlocker);
@@ -1029,6 +1034,20 @@ public class EqualizerFragment extends Fragment {
         }
 
         updateComponentColors(enabled);
+    }
+
+    /**
+     * 旋转 Spinner 下拉箭头：展开时逆时针旋转 180°（rotation: 0 → -180），
+     * 收起时顺时针旋转复位（rotation: -180 → 0）。
+     * 使用同一个箭头图片，仅靠 View 的 rotation 属性实现方向变化。
+     */
+    private void rotateDropdownIcon(boolean open) {
+        if (spinnerDropDownIcon == null) return;
+        float target = open ? -180f : 0f;
+        spinnerDropDownIcon.animate()
+                .rotation(target)
+                .setDuration(200)
+                .start();
     }
 
     private void updateComponentColors(boolean enabled) {
