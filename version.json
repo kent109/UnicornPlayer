@@ -1,5 +1,5 @@
 {
-  "versionCode": 23,
-  "versionName": "1.1.6",
-  "changelog": "修复已知问题"
+  "versionCode": 24,
+  "versionName": "1.1.7",
+  "changelog": "支持设置高亮色\n修复已知问题"
 }

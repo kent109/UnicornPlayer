@@ -2162,6 +2162,33 @@ class MusicService : Service() {
                         isPlaybackStateLoaded = true
                         return@withContext
                     }
+                    // 播放未中断场景（主题切换等导致 Activity recreate，Service 未死）：
+                    // 待恢复歌曲就是当前已准备的歌曲时，跳过重准备。否则 reset+prepare 会
+                    // 打断正在进行的播放，且 restorePosition=false 跳过 seekTo 后会从头播放。
+                    // duration 在 Prepared/Started/Paused/PlaybackCompleted 状态返回有效值，
+                    // Idle/Error 状态抛 IllegalStateException，可据此判断播放器是否仍存活。
+                    val isSameSongAlive = try {
+                        _currentSong.value?.id == songId && mediaPlayer.duration > 0
+                    } catch (e: IllegalStateException) {
+                        false
+                    }
+                    if (isSameSongAlive) {
+                        Log.d(
+                            TAG,
+                            "loadPlaybackState: same song alive (id=$songId), skip re-prepare"
+                        )
+                        isPlaybackStateLoaded = true
+                        // 与尾部逻辑一致：不恢复进度时以当前实际进度为准同步一次
+                        if (!shouldRestorePosition) {
+                            savePlaybackState()
+                        }
+                        // 极端情况下 songList 可能为空，回填以保证上一首/下一首可用
+                        if (songList.isEmpty()) {
+                            val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
+                            loadSongListFromDatabase(sourceType, sourceName, songId)
+                        }
+                        return@withContext
+                    }
                     val restoredSong = Song(
                         id = songId,
                         title = songTitle,
