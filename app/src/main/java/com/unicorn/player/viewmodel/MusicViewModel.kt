@@ -404,8 +404,17 @@ class MusicViewModel(
 
     private fun sortSongsInternal(songs: List<Song>, mode: SortMode): List<Song> = when (mode) {
         SortMode.BY_TIME -> songs.sortedByDescending { it.lastModified }
-        SortMode.BY_TITLE -> songs.sortedBy { it.title.lowercase() }
-        SortMode.BY_ARTIST -> songs.sortedBy { it.artist.lowercase() }
+        // 按首字母排序：中文名整体转拼音、英文名原样保留，再按字符串排序，
+        // 中英文才能 A-Z 混排（与歌手/专辑列表一致）。
+        // 不能用 Collator(Locale.CHINA)，该 Collator 在部分设备上把英文整体排在中文之后；
+        // 也不能直接按原字符串排（中文按 Unicode 码点/部首排，不是拼音）。
+        // sortedBy 会为每首歌只计算一次 key，避免 O(NlogN) 次重复拼音转换。
+        SortMode.BY_TITLE -> songs.sortedBy {
+            PinyinUtil.getPinyinString(it.title).lowercase()
+        }
+        SortMode.BY_ARTIST -> songs.sortedBy {
+            PinyinUtil.getPinyinString(it.artist).lowercase()
+        }
     }
 
     /**

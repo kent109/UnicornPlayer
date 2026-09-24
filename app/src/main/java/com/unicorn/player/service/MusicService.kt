@@ -41,6 +41,7 @@ import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.model.Song
 import com.unicorn.player.scanFiltersDataStore
 import com.unicorn.player.util.LogWriter
+import com.unicorn.player.util.PinyinUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -451,8 +452,14 @@ class MusicService : Service() {
 
         fun sortSongs(songs: List<Song>, mode: SortMode): List<Song> = when (mode) {
             SortMode.BY_TIME -> songs.sortedByDescending { it.lastModified }
-            SortMode.BY_TITLE -> songs.sortedBy { it.title.lowercase() }
-            SortMode.BY_ARTIST -> songs.sortedBy { it.artist.lowercase() }
+            // 与 MusicViewModel.sortSongsInternal 保持一致：
+            // 中文转拼音、英文原样保留后按字符串排，中英文 A-Z 混排
+            SortMode.BY_TITLE -> songs.sortedBy {
+                PinyinUtil.getPinyinString(it.title).lowercase()
+            }
+            SortMode.BY_ARTIST -> songs.sortedBy {
+                PinyinUtil.getPinyinString(it.artist).lowercase()
+            }
         }
 
         const val NOTIFICATION_ID = 1001
