@@ -9,45 +9,32 @@ import android.widget.LinearLayout
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.edit
-import com.unicorn.player.databinding.ActivityThemeColorBinding
+import com.unicorn.player.databinding.ActivityHighlightColorBinding
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 
-class ThemeColorActivity : BaseActivity() {
+class HighlightColorActivity : BaseActivity() {
 
     companion object {
-        private const val TAG = "ThemeColorActivity"
+        private const val TAG = "HighlightColorActivity"
 
-        fun getColorModeSummary(context: Context): String {
-            val mode = runBlocking {
-                try {
-                    context.applicationContext.themeDataStore.data.first()[THEME_COLOR_MODE]
-                        ?: COLOR_MODE_SYSTEM
-                } catch (e: Exception) {
-                    COLOR_MODE_SYSTEM
-                }
-            }
-            return when (mode) {
-                COLOR_MODE_RANDOM -> "随机变化"
-                COLOR_MODE_FIXED -> "固定使用"
-                else -> "系统默认"
-            }
+        fun getHighlightColorSummary(context: Context): String {
+            return ThemeSettingActivity.getHighlightColorSummary(context)
         }
 
-        private val THEME_COLOR_MODE = ThemeSettingActivity.THEME_COLOR_MODE
-        private val THEME_COLOR_INDEX = ThemeSettingActivity.THEME_COLOR_INDEX
-        private const val COLOR_MODE_SYSTEM = ThemeSettingActivity.COLOR_MODE_SYSTEM
-        private const val COLOR_MODE_RANDOM = ThemeSettingActivity.COLOR_MODE_RANDOM
-        private const val COLOR_MODE_FIXED = ThemeSettingActivity.COLOR_MODE_FIXED
+        private val HIGHLIGHT_COLOR_MODE = ThemeSettingActivity.HIGHLIGHT_COLOR_MODE
+        private val HIGHLIGHT_COLOR_INDEX = ThemeSettingActivity.HIGHLIGHT_COLOR_INDEX
+        private const val HIGHLIGHT_MODE_SYSTEM = ThemeSettingActivity.HIGHLIGHT_MODE_SYSTEM
+        private const val HIGHLIGHT_MODE_FIXED = ThemeSettingActivity.HIGHLIGHT_MODE_FIXED
     }
 
-    private lateinit var binding: ActivityThemeColorBinding
-    private var currentColorMode = COLOR_MODE_SYSTEM
-    private var currentColorIndex = 0
+    private lateinit var binding: ActivityHighlightColorBinding
+    private var currentMode = HIGHLIGHT_MODE_SYSTEM
+    private var currentIndex = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityThemeColorBinding.inflate(layoutInflater)
+        binding = ActivityHighlightColorBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         binding.titleBar.setOnBackClickListener { finish() }
@@ -58,25 +45,24 @@ class ThemeColorActivity : BaseActivity() {
     }
 
     private fun loadCurrentSettings() {
-        currentColorMode = runBlocking {
+        currentMode = runBlocking {
             try {
-                applicationContext.themeDataStore.data.first()[THEME_COLOR_MODE]
-                    ?: COLOR_MODE_SYSTEM
+                applicationContext.themeDataStore.data.first()[HIGHLIGHT_COLOR_MODE]
+                    ?: HIGHLIGHT_MODE_SYSTEM
             } catch (e: Exception) {
-                COLOR_MODE_SYSTEM
+                HIGHLIGHT_MODE_SYSTEM
             }
         }
-        currentColorIndex = runBlocking {
+        currentIndex = runBlocking {
             try {
-                applicationContext.themeDataStore.data.first()[THEME_COLOR_INDEX] ?: 0
+                applicationContext.themeDataStore.data.first()[HIGHLIGHT_COLOR_INDEX] ?: 0
             } catch (e: Exception) {
                 0
             }
         }
 
-        when (currentColorMode) {
-            COLOR_MODE_RANDOM -> binding.rbRandom.isChecked = true
-            COLOR_MODE_FIXED -> {
+        when (currentMode) {
+            HIGHLIGHT_MODE_FIXED -> {
                 binding.rbFixed.isChecked = true
                 binding.colorContainer.visibility = View.VISIBLE
             }
@@ -88,42 +74,32 @@ class ThemeColorActivity : BaseActivity() {
     private fun setupRadioButtons() {
         binding.rbSystemDefault.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
-                binding.rbRandom.isChecked = false
                 binding.rbFixed.isChecked = false
-                onColorModeSelected(COLOR_MODE_SYSTEM)
-            }
-        }
-        binding.rbRandom.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                binding.rbSystemDefault.isChecked = false
-                binding.rbFixed.isChecked = false
-                onColorModeSelected(COLOR_MODE_RANDOM)
+                onModeSelected(HIGHLIGHT_MODE_SYSTEM)
             }
         }
         binding.rbFixed.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 binding.rbSystemDefault.isChecked = false
-                binding.rbRandom.isChecked = false
-                onColorModeSelected(COLOR_MODE_FIXED)
+                onModeSelected(HIGHLIGHT_MODE_FIXED)
             }
         }
     }
 
-    private fun onColorModeSelected(mode: Int) {
-        if (mode == currentColorMode) return
-        currentColorMode = mode
+    private fun onModeSelected(mode: Int) {
+        if (mode == currentMode) return
+        currentMode = mode
 
         runBlocking {
             try {
                 applicationContext.themeDataStore.edit { prefs ->
-                    prefs[THEME_COLOR_MODE] = mode
-                    if (mode == COLOR_MODE_RANDOM && !prefs.contains(THEME_COLOR_INDEX)) {
-                        val initialIndex = (0 until ThemeSettingActivity.COLOR_COUNT).random()
-                        prefs[THEME_COLOR_INDEX] = initialIndex
+                    prefs[HIGHLIGHT_COLOR_MODE] = mode
+                    if (mode == HIGHLIGHT_MODE_FIXED && !prefs.contains(HIGHLIGHT_COLOR_INDEX)) {
+                        prefs[HIGHLIGHT_COLOR_INDEX] = 0
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "保存主题色模式失败", e)
+                Log.e(TAG, "保存高亮色模式失败", e)
             }
         }
 
@@ -170,7 +146,7 @@ class ThemeColorActivity : BaseActivity() {
 
     private fun createColorItem(index: Int): View {
         val color = ThemeSettingActivity.getColorValues(this)[index] or 0xFF000000.toInt()
-        val isSelected = index == currentColorIndex
+        val isSelected = index == currentIndex
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -195,13 +171,13 @@ class ThemeColorActivity : BaseActivity() {
             layoutParams = LinearLayout.LayoutParams(dpToPx(24), dpToPx(24))
             setImageDrawable(
                 ContextCompat.getDrawable(
-                    this@ThemeColorActivity, R.drawable.ic_check
+                    this@HighlightColorActivity, R.drawable.ic_check
                 )
             )
             visibility = if (isSelected) View.VISIBLE else View.GONE
             if (isSelected) {
                 setColorFilter(
-                    ThemeSettingActivity.resolveHighlightColor(this@ThemeColorActivity)
+                    ThemeSettingActivity.resolveHighlightColor(this@HighlightColorActivity)
                 )
             }
         }
@@ -219,16 +195,16 @@ class ThemeColorActivity : BaseActivity() {
     }
 
     private fun onColorSelected(index: Int) {
-        if (index == currentColorIndex) return
-        currentColorIndex = index
+        if (index == currentIndex) return
+        currentIndex = index
 
         runBlocking {
             try {
                 applicationContext.themeDataStore.edit { prefs ->
-                    prefs[THEME_COLOR_INDEX] = index
+                    prefs[HIGHLIGHT_COLOR_INDEX] = index
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "保存主题色索引失败", e)
+                Log.e(TAG, "保存高亮色索引失败", e)
             }
         }
 

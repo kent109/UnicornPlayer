@@ -6,6 +6,8 @@ import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 import androidx.annotation.ColorInt
+import com.unicorn.player.R
+import com.unicorn.player.ThemeSettingActivity
 import kotlin.math.sin
 
 class PlayingAnimationView @JvmOverloads constructor(
@@ -18,7 +20,7 @@ class PlayingAnimationView @JvmOverloads constructor(
     private var isAnimating = false
 
     @ColorInt
-    private var lineColor = resources.getColor(android.R.color.holo_red_light, context.theme)
+    private var lineColor = ThemeSettingActivity.resolveHighlightColor(context)
 
     private var animationProgress = 0f
 

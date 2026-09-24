@@ -18,12 +18,14 @@ abstract class BaseActivity : AppCompatActivity() {
     }
 
     private var currentThemeRes = 0
+    private var currentHighlightColor = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         currentThemeRes = resolveColorTheme()
         if (currentThemeRes != 0) {
             setTheme(currentThemeRes)
         }
+        currentHighlightColor = ThemeSettingActivity.resolveHighlightColor(this)
         super.onCreate(savedInstanceState)
     }
 
@@ -31,6 +33,11 @@ abstract class BaseActivity : AppCompatActivity() {
         super.onResume()
         val newThemeRes = resolveColorTheme()
         if (newThemeRes != currentThemeRes) {
+            recreate()
+            return
+        }
+        val newHighlightColor = ThemeSettingActivity.resolveHighlightColor(this)
+        if (newHighlightColor != currentHighlightColor) {
             recreate()
         }
     }

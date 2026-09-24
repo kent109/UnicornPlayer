@@ -3,7 +3,6 @@ package com.unicorn.player.adapter
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.graphics.Rect
-import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.TouchDelegate
 import android.view.ViewGroup
@@ -11,6 +10,7 @@ import android.view.animation.LinearInterpolator
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemSongBinding
 import com.unicorn.player.model.Song
 
@@ -23,6 +23,16 @@ class SongAdapter(
 
     companion object {
         const val TAG = "SongAdapter"
+
+        private val DISC_PLAYING_DRAWABLES = intArrayOf(
+            com.unicorn.player.R.drawable.ic_disc_playing_1,
+            com.unicorn.player.R.drawable.ic_disc_playing_2,
+            com.unicorn.player.R.drawable.ic_disc_playing_3,
+            com.unicorn.player.R.drawable.ic_disc_playing_4,
+            com.unicorn.player.R.drawable.ic_disc_playing_5,
+            com.unicorn.player.R.drawable.ic_disc_playing_6,
+            com.unicorn.player.R.drawable.ic_disc_playing_7
+        )
     }
 
     // 保存旋转角度，用于暂停/恢复动画时保持角度
@@ -272,15 +282,20 @@ class SongAdapter(
 
                 // 动态设置颜色
                 if (isCurrentPlaying) {
-                    songTitle.setTextColor(context.getColor(android.R.color.holo_red_light))
-                    artistName.setTextColor(context.getColor(android.R.color.holo_red_light))
-                    albumName.setTextColor(context.getColor(android.R.color.holo_red_light))
-                    albumArt.isSelected = true
+                    val highlightColor = ThemeSettingActivity.resolveHighlightColor(context)
+                    songTitle.setTextColor(highlightColor)
+                    artistName.setTextColor(highlightColor)
+                    albumName.setTextColor(highlightColor)
+                    val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
+                    val resId = DISC_PLAYING_DRAWABLES.getOrElse(colorIndex) { DISC_PLAYING_DRAWABLES[0] }
+                    albumArt.isSelected = false
+                    albumArt.setImageResource(resId)
                 } else {
                     songTitle.setTextColor(context.getColor(com.unicorn.player.R.color.onSurface))
                     artistName.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
                     albumName.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
                     albumArt.isSelected = false
+                    albumArt.setImageResource(com.unicorn.player.R.drawable.ic_disc)
                 }
 
                 // 品质标签颜色根据音频质量固定设置

@@ -60,4 +60,13 @@
     <color name="lrc_highlight_row">#D0BCFF</color>          <!-- 高亮行颜色 -->
     <color name="lrc_time_text">#CAC4D0</color>              <!-- 时间文字颜色 -->
     <color name="lrc_try_select_row">#55D0BCFF</color>       <!-- 尝试选中行颜色 -->
+
+    <!-- 唱片播放状态环形颜色（7种高亮色 - 夜间模式） -->
+    <color name="disc_playing_color_1">#FFF82020</color>
+    <color name="disc_playing_color_2">#FFFF7F00</color>
+    <color name="disc_playing_color_3">#FFF6DD0E</color>
+    <color name="disc_playing_color_4">#FF1AF01A</color>
+    <color name="disc_playing_color_5">#FF11FAFA</color>
+    <color name="disc_playing_color_6">#FF2E66F2</color>
+    <color name="disc_playing_color_7">#FFB224F4</color>
 </resources>

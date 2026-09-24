@@ -70,4 +70,15 @@
 
     <color name="progress_color">#cc49454F</color>
     <color name="import_playlist">#4CAF50</color>
+
+    <color name="highlight_color">@android:color/holo_red_light</color>
+
+    <!-- 唱片播放状态环形颜色（7种高亮色） -->
+    <color name="disc_playing_color_1">#FFF62D2D</color>
+    <color name="disc_playing_color_2">#FFFF7F00</color>
+    <color name="disc_playing_color_3">#FFFFE64E</color>
+    <color name="disc_playing_color_4">#FF18E618</color>
+    <color name="disc_playing_color_5">#FF07F8F8</color>
+    <color name="disc_playing_color_6">#FF164DF0</color>
+    <color name="disc_playing_color_7">#FFB400FF</color>
 </resources>

@@ -382,7 +382,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             typedValue.data
         }
         val selectLineColor = themeColor
-        this.highlightRowColor = themeColor
+        this.highlightRowColor = ThemeSettingActivity.resolveHighlightColor(this)
         this.trySelectRowColor = (0x55000000.toInt() or (themeColor and 0x00FFFFFF))
 
         // 字号由 applyFontSize() 读取 DataStore 后设置（下方），此处仅提供默认值兜底

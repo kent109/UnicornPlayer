@@ -7,6 +7,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.R
+import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemArtistBinding
 import com.unicorn.player.model.Artist
 
@@ -46,45 +47,35 @@ class ArtistAdapter(
         private val binding: ItemArtistBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        private var lastPlaying = false
-
         fun bind(artist: Artist, position: Int) {
             binding.apply {
                 tvArtistName.text = artist.name
                 tvSongCount.text = "${artist.songCount} 首"
 
                 val isPlaying = artist.name == currentPlayingArtist
-                if (isPlaying != lastPlaying) {
-                    lastPlaying = isPlaying
-                    if (isPlaying) {
-                        ivArtistIcon.isSelected = true
-                        tvArtistName.setTextColor(
-                            ContextCompat.getColor(
-                                tvArtistName.context,
-                                android.R.color.holo_red_light
-                            )
+                if (isPlaying) {
+                    val highlightColor = ThemeSettingActivity.resolveHighlightColor(
+                        ivArtistIcon.context
+                    )
+                    ivArtistIcon.isSelected = true
+                    ivArtistIcon.setColorFilter(highlightColor)
+                    tvArtistName.setTextColor(highlightColor)
+                    tvSongCount.setTextColor(highlightColor)
+                } else {
+                    ivArtistIcon.isSelected = false
+                    ivArtistIcon.clearColorFilter()
+                    tvArtistName.setTextColor(
+                        ContextCompat.getColor(
+                            tvArtistName.context,
+                            R.color.onSurface
                         )
-                        tvSongCount.setTextColor(
-                            ContextCompat.getColor(
-                                tvSongCount.context,
-                                android.R.color.holo_red_light
-                            )
+                    )
+                    tvSongCount.setTextColor(
+                        ContextCompat.getColor(
+                            tvSongCount.context,
+                            R.color.onSurfaceVariant
                         )
-                    } else {
-                        ivArtistIcon.isSelected = false
-                        tvArtistName.setTextColor(
-                            ContextCompat.getColor(
-                                tvArtistName.context,
-                                R.color.onSurface
-                            )
-                        )
-                        tvSongCount.setTextColor(
-                            ContextCompat.getColor(
-                                tvSongCount.context,
-                                R.color.onSurfaceVariant
-                            )
-                        )
-                    }
+                    )
                 }
 
                 root.setOnClickListener {

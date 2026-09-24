@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.R
+import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemAlbumBinding
 import com.unicorn.player.databinding.ItemAlbumHeaderBinding
 import com.unicorn.player.model.Album
@@ -77,45 +78,35 @@ class AlbumAdapter(
     inner class AlbumHolder(
         private val binding: ItemAlbumBinding
     ) : RecyclerView.ViewHolder(binding.root) {
-        private var lastPlaying = false
-
         fun bind(album: Album, position: Int) {
             binding.apply {
                 tvAlbumName.text = album.name
                 tvAlbumSubtitle.text = "${album.artist} - ${album.songCount} 首"
 
                 val isPlaying = album.name == currentPlayingAlbum
-                if (isPlaying != lastPlaying) {
-                    lastPlaying = isPlaying
-                    if (isPlaying) {
-                        ivAlbumIcon.isSelected = true
-                        tvAlbumName.setTextColor(
-                            ContextCompat.getColor(
-                                tvAlbumName.context,
-                                android.R.color.holo_red_light
-                            )
+                if (isPlaying) {
+                    val highlightColor = ThemeSettingActivity.resolveHighlightColor(
+                        ivAlbumIcon.context
+                    )
+                    ivAlbumIcon.isSelected = true
+                    ivAlbumIcon.setColorFilter(highlightColor)
+                    tvAlbumName.setTextColor(highlightColor)
+                    tvAlbumSubtitle.setTextColor(highlightColor)
+                } else {
+                    ivAlbumIcon.isSelected = false
+                    ivAlbumIcon.clearColorFilter()
+                    tvAlbumName.setTextColor(
+                        ContextCompat.getColor(
+                            tvAlbumName.context,
+                            R.color.onSurface
                         )
-                        tvAlbumSubtitle.setTextColor(
-                            ContextCompat.getColor(
-                                tvAlbumSubtitle.context,
-                                android.R.color.holo_red_light
-                            )
+                    )
+                    tvAlbumSubtitle.setTextColor(
+                        ContextCompat.getColor(
+                            tvAlbumSubtitle.context,
+                            R.color.onSurfaceVariant
                         )
-                    } else {
-                        ivAlbumIcon.isSelected = false
-                        tvAlbumName.setTextColor(
-                            ContextCompat.getColor(
-                                tvAlbumName.context,
-                                R.color.onSurface
-                            )
-                        )
-                        tvAlbumSubtitle.setTextColor(
-                            ContextCompat.getColor(
-                                tvAlbumSubtitle.context,
-                                R.color.onSurfaceVariant
-                            )
-                        )
-                    }
+                    )
                 }
 
                 root.setOnClickListener {

@@ -44,6 +44,12 @@ class ThemeSettingActivity : BaseActivity() {
 
         const val COLOR_COUNT = 7
 
+        val HIGHLIGHT_COLOR_MODE = intPreferencesKey("highlight_color_mode")
+        val HIGHLIGHT_COLOR_INDEX = intPreferencesKey("highlight_color_index")
+
+        const val HIGHLIGHT_MODE_SYSTEM = 0
+        const val HIGHLIGHT_MODE_FIXED = 1
+
         private val COLOR_THEME_RES = intArrayOf(
             R.style.Theme_UnicornPlayer_Color1,
             R.style.Theme_UnicornPlayer_Color2,
@@ -65,6 +71,57 @@ class ThemeSettingActivity : BaseActivity() {
 
         fun getColorThemeRes(index: Int): Int {
             return if (index in 0 until COLOR_COUNT) COLOR_THEME_RES[index] else 0
+        }
+
+        fun resolveHighlightColor(context: Context): Int {
+            val prefs = runBlocking {
+                try {
+                    context.applicationContext.themeDataStore.data.first()
+                } catch (e: Exception) {
+                    null
+                }
+            } ?: return ContextCompat.getColor(context, R.color.highlight_color)
+
+            val mode = prefs[HIGHLIGHT_COLOR_MODE] ?: HIGHLIGHT_MODE_SYSTEM
+            if (mode == HIGHLIGHT_MODE_SYSTEM) {
+                return ContextCompat.getColor(context, R.color.highlight_color)
+            }
+
+            val index = prefs[HIGHLIGHT_COLOR_INDEX] ?: 0
+            val colors = getColorValues(context)
+            return if (index in colors.indices) {
+                colors[index] or 0xFF000000.toInt()
+            } else {
+                ContextCompat.getColor(context, R.color.highlight_color)
+            }
+        }
+
+        fun resolveHighlightColorIndex(context: Context): Int {
+            val prefs = runBlocking {
+                try {
+                    context.applicationContext.themeDataStore.data.first()
+                } catch (e: Exception) {
+                    null
+                }
+            } ?: return 0
+            val mode = prefs[HIGHLIGHT_COLOR_MODE] ?: HIGHLIGHT_MODE_SYSTEM
+            return if (mode == HIGHLIGHT_MODE_SYSTEM) 0
+            else prefs[HIGHLIGHT_COLOR_INDEX] ?: 0
+        }
+
+        fun getHighlightColorSummary(context: Context): String {
+            val mode = runBlocking {
+                try {
+                    context.applicationContext.themeDataStore.data.first()[HIGHLIGHT_COLOR_MODE]
+                        ?: HIGHLIGHT_MODE_SYSTEM
+                } catch (e: Exception) {
+                    HIGHLIGHT_MODE_SYSTEM
+                }
+            }
+            return when (mode) {
+                HIGHLIGHT_MODE_FIXED -> "固定使用"
+                else -> "系统默认"
+            }
         }
 
         fun applyTheme(mode: Int) {
@@ -108,6 +165,9 @@ class ThemeSettingActivity : BaseActivity() {
         binding.settingsContainer
             .findViewWithTag<android.widget.TextView>("theme_color_summary")
             ?.text = ThemeColorActivity.getColorModeSummary(this)
+        binding.settingsContainer
+            .findViewWithTag<android.widget.TextView>("highlight_color_summary")
+            ?.text = HighlightColorActivity.getHighlightColorSummary(this)
     }
 
     private fun setupSettingsItems() {
@@ -134,10 +194,22 @@ class ThemeSettingActivity : BaseActivity() {
                     summary = ThemeColorActivity.getColorModeSummary(this),
                     hasChevron = true,
                     isFirst = false,
-                    isLast = true,
+                    isLast = false,
                     type = SettingItemType.NORMAL,
                     onClick = {
                         startActivity(android.content.Intent(this, ThemeColorActivity::class.java))
+                    }
+                ),
+                SettingItem(
+                    key = "highlight_color",
+                    title = "高亮色",
+                    summary = HighlightColorActivity.getHighlightColorSummary(this),
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = true,
+                    type = SettingItemType.NORMAL,
+                    onClick = {
+                        startActivity(android.content.Intent(this, HighlightColorActivity::class.java))
                     }
                 )
             )
@@ -256,7 +328,7 @@ class ThemeSettingActivity : BaseActivity() {
             }
         }
 
-        val checkColor = ContextCompat.getColor(this, android.R.color.holo_red_light)
+        val checkColor = resolveHighlightColor(this)
         val normalColor = ContextCompat.getColor(this, R.color.text_primary)
 
         setupThemeModeItem(

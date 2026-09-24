@@ -531,7 +531,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
 
         // 根据当前排序模式显示钩号
         val currentSortMode = viewModel.sortMode.value
-        val checkColor = ContextCompat.getColor(this, android.R.color.holo_red_light)
+        val checkColor = ThemeSettingActivity.resolveHighlightColor(this)
         val normalTextColor = ContextCompat.getColor(this, R.color.text_primary)
 
         setupSortItem(

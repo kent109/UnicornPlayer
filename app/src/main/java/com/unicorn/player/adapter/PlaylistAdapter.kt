@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.R
+import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemPlaylistBinding
 import com.unicorn.player.viewmodel.PlaylistViewModel
 
@@ -178,21 +179,16 @@ class PlaylistAdapter(
 
             // 仅当歌单正在播放时高亮（通过观察当前正在播放的歌单ID）
             if (playlist.id == currentPlayingPlaylistId) {
+                val highlightColor = ThemeSettingActivity.resolveHighlightColor(
+                    binding.ivPlaylistIcon.context
+                )
                 binding.ivPlaylistIcon.isSelected = true
-                binding.tvPlaylistName.setTextColor(
-                    ContextCompat.getColor(
-                        binding.tvSongCount.context,
-                        android.R.color.holo_red_light
-                    )
-                )
-                binding.tvSongCount.setTextColor(
-                    ContextCompat.getColor(
-                        binding.tvSongCount.context,
-                        android.R.color.holo_red_light
-                    )
-                )
+                binding.ivPlaylistIcon.setColorFilter(highlightColor)
+                binding.tvPlaylistName.setTextColor(highlightColor)
+                binding.tvSongCount.setTextColor(highlightColor)
             } else {
                 binding.ivPlaylistIcon.isSelected = false
+                binding.ivPlaylistIcon.clearColorFilter()
                 binding.tvPlaylistName.setTextColor(
                     ContextCompat.getColor(
                         binding.tvPlaylistName.context,

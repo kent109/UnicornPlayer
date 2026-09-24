@@ -377,7 +377,7 @@ class LyricsOptionsActivity : BaseActivity() {
             }
         }
 
-        val checkColor = ContextCompat.getColor(this, android.R.color.holo_red_light)
+        val checkColor = ThemeSettingActivity.resolveHighlightColor(this)
         val normalColor = ContextCompat.getColor(this, R.color.text_primary)
 
         setupFontSizeItem(tvSmall, currentSize == FONT_SIZE_SMALL, checkColor, normalColor)
