@@ -2236,6 +2236,10 @@ class MusicService : Service() {
                                 // 不再自动恢复播放，只准备媒体播放器
                                 // 更新MediaSession状态（系统媒体控件需要）
                                 updateMediaSessionPlaybackState()
+                                // 立即同步 position 到 LiveData，让 PlayerFragment 的 seekBar 显示正确进度。
+                                // startPositionUpdates 线程仅在 isPlaying 时 post，恢复不自动播放时
+                                // LiveData 不更新，seekBar 会停在 0
+                                _currentPosition.postValue(mp.currentPosition)
                                 // 显示通知的条件：
                                 // 1. 用户没有从最近任务移除（isTaskRemoved=false）
                                 // 2. 或者用户已从最近任务移除但重新打开了应用（pendingNotificationToShow=true）
