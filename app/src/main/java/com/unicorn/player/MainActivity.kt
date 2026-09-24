@@ -38,6 +38,7 @@ import com.unicorn.player.ui.SongsFragment
 import com.unicorn.player.util.AudioTagEditor
 import com.unicorn.player.util.PlaylistFileManager
 import com.unicorn.player.util.UpdateHelper
+import com.unicorn.player.util.ViewUtil
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import com.unicorn.player.viewmodel.PlaylistViewModel
@@ -679,10 +680,10 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
 
     private fun setupTouchDelegate() {
         val expandPx = (48 * resources.displayMetrics.density).toInt()
-        expandTouchTarget(binding.ivLoop, expandPx)
-        expandTouchTarget(binding.ivSort, expandPx)
-        expandTouchTarget(binding.ivSetting, expandPx)
-        expandTouchTarget(binding.ivMultiChoice, expandPx)
+        ViewUtil.expandTouchTarget(binding.ivLoop, expandPx)
+        ViewUtil.expandTouchTarget(binding.ivSort, expandPx)
+        ViewUtil.expandTouchTarget(binding.ivSetting, expandPx)
+        ViewUtil.expandTouchTarget(binding.ivMultiChoice, expandPx)
     }
 
     // ==================== MultiChoiceFragment 相关 ====================
@@ -974,19 +975,6 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             MusicService.PlayMode.SEQUENCE -> R.drawable.ic_sequence
         }
         binding.ivLoop.setImageResource(iconRes)
-    }
-
-    private fun expandTouchTarget(view: android.view.View, expandPx: Int) {
-        view.post {
-            val parent = view.parent as android.view.ViewGroup
-            val rect = android.graphics.Rect()
-            view.getHitRect(rect)
-            rect.top -= expandPx / 2
-            rect.bottom += expandPx / 2
-            rect.left -= expandPx / 2
-            rect.right += expandPx / 2
-            parent.touchDelegate = android.view.TouchDelegate(rect, view)
-        }
     }
 
     // 保存观察者的引用，以便在重新连接时移除旧的观察者

@@ -18,6 +18,7 @@ import com.unicorn.player.databinding.ItemSongInfoBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.util.AudioTagEditor
 import com.unicorn.player.util.LogWriter
+import com.unicorn.player.util.ViewUtil
 import java.io.File
 import java.util.Locale
 
@@ -222,11 +223,22 @@ class SongInfoHelper(private val context: Context) {
         }
 
         // 点击星号时聚焦对应 EditText，光标置于末尾
-        dialogBinding.tvTitleAsterisk.setOnClickListener {
+        dialogBinding.rlSongTitle.setOnClickListener {
             dialogBinding.etSongTitle.requestFocus()
             dialogBinding.etSongTitle.setSelection(dialogBinding.etSongTitle.text.length)
             showKeyboard(dialogBinding.etSongTitle)
         }
+        artistItemBinding.llInfo.setOnClickListener {
+            artistItemBinding.etValue.requestFocus()
+            artistItemBinding.etValue.setSelection(artistItemBinding.etValue.text.length)
+            showKeyboard(artistItemBinding.etValue)
+        }
+        albumItemBinding.llInfo.setOnClickListener {
+            albumItemBinding.etValue.requestFocus()
+            albumItemBinding.etValue.setSelection(albumItemBinding.etValue.text.length)
+            showKeyboard(albumItemBinding.etValue)
+        }
+
         artistItemBinding.tvAsterisk.setOnClickListener {
             artistItemBinding.etValue.requestFocus()
             artistItemBinding.etValue.setSelection(artistItemBinding.etValue.text.length)
@@ -237,6 +249,12 @@ class SongInfoHelper(private val context: Context) {
             albumItemBinding.etValue.setSelection(albumItemBinding.etValue.text.length)
             showKeyboard(albumItemBinding.etValue)
         }
+
+        // 增大点击区域
+        val expandPx = (48 * context.resources.displayMetrics.density).toInt()
+        ViewUtil.expandTouchTarget(dialogBinding.rlSongTitle, expandPx)
+        ViewUtil.expandTouchTarget(artistItemBinding.llInfo, expandPx)
+        ViewUtil.expandTouchTarget(albumItemBinding.llInfo, expandPx)
 
         // 添加到歌单（在"文件路径"后面，"分享本地文件"前面，仅当存在歌单时显示）
         if (showAddToPlaylist) {

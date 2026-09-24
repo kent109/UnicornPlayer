@@ -18,7 +18,8 @@
         android:textStyle="bold" />
 
     <LinearLayout
-        android:layout_width="match_parent"
+        android:id="@+id/llInfo"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
         android:orientation="horizontal">
@@ -37,7 +38,7 @@
             android:background="@android:color/transparent"
             android:importantForAutofill="no"
             android:inputType="text"
-            android:maxLength="30"
+            android:maxLength="20"
             android:minWidth="2dp"
             android:maxLines="1"
             android:textColor="@color/onSurface"
