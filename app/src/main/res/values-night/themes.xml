@@ -80,17 +80,17 @@
         <item name="colorOnPrimaryContainer">#5a4a0f</item>
     </style>
 
-    <!-- 主题色4: 绿 #1AF01A -->
+    <!-- 主题色4: 绿 #0DFB17 -->
     <style name="Theme.UnicornPlayer.Color4" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#1AF01A</item>
+        <item name="colorPrimary">#0DFB17</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#89E986</item>
         <item name="colorOnPrimaryContainer">#1a4a2a</item>
     </style>
 
-    <!-- 主题色5: 青 #11FAFA -->
+    <!-- 主题色5: 青 #07E6FA -->
     <style name="Theme.UnicornPlayer.Color5" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#11FAFA</item>
+        <item name="colorPrimary">#07E6FA</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#89F8F8</item>
         <item name="colorOnPrimaryContainer">#0f2d5a</item>
