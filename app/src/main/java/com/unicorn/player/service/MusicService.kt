@@ -876,15 +876,32 @@ class MusicService : Service() {
                     // 提前消费标志导致 isServiceCreate 变为 false
                     val isServiceCreate = serviceCreate
                     serviceCreate = false
-                    val restore =
-                        intent.getIntExtra(MainActivity.KEY_RESTORE, MainActivity.NORMAL_CREATE)
-                    // 完全重建才需要加载历史进度，例如：最近任务划掉(组件全部被杀，进程未死)、强行停止(整个进程被杀)
-                    // 长期在后台灭屏播放，Activity可能被杀，Service未死，重新绑定服务后，不需要加载历史进度(以当前播放进度为准)
-                    // 长期在后台灭屏不播放，跟强行停止类似，重启时好像系统会恢复状态
-                    val restorePosition = isServiceCreate || restore == MainActivity.NORMAL_CREATE
-                    // 加载播放状态和均衡器设置
-                    // 传入 restore 用于判断是否为 Activity 被回收后恢复（RESTORE_CREATE），此时需要自动恢复播放
-                    loadPlaybackState(isServiceCreate, restorePosition, restore)
+                    // 播放未中断场景（主题/高亮色切换、夜间模式等导致 Activity recreate，
+                    // Service 未死）：当前歌曲仍在播放器中且已准备时，完全跳过历史状态恢复。
+                    // 否则 reset+prepareAsync+seekTo 会产生可闻的停顿，并把播放位置 seek 回
+                    // 几秒前保存的旧进度（表现为返回主界面后进度回跳、衔接不自然）。
+                    val isPlaybackAlive = _currentSong.value != null && try {
+                        !isMediaPlayerReleased && mediaPlayer.duration > 0
+                    } catch (e: IllegalStateException) {
+                        false
+                    }
+                    if (isPlaybackAlive) {
+                        Log.d(
+                            TAG,
+                            "onStartCommand: playback alive (songId=${_currentSong.value?.id}), skip loadPlaybackState on recreate"
+                        )
+                        isPlaybackStateLoaded = true
+                    } else {
+                        val restore =
+                            intent.getIntExtra(MainActivity.KEY_RESTORE, MainActivity.NORMAL_CREATE)
+                        // 完全重建才需要加载历史进度，例如：最近任务划掉(组件全部被杀，进程未死)、强行停止(整个进程被杀)
+                        // 长期在后台灭屏播放，Activity可能被杀，Service未死，重新绑定服务后，不需要加载历史进度(以当前播放进度为准)
+                        // 长期在后台灭屏不播放，跟强行停止类似，重启时好像系统会恢复状态
+                        val restorePosition = isServiceCreate || restore == MainActivity.NORMAL_CREATE
+                        // 加载播放状态和均衡器设置
+                        // 传入 restore 用于判断是否为 Activity 被回收后恢复（RESTORE_CREATE），此时需要自动恢复播放
+                        loadPlaybackState(isServiceCreate, restorePosition, restore)
+                    }
                 }
             }
         }
