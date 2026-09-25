@@ -644,8 +644,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         // 容器约束设为全屏（容器在 ConstraintLayout 内）
         val containerParams = binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
         containerParams.height = 0 // 0dp，配合约束撑满父布局
-        containerParams.topMargin = DisplayUtil.dp2px(this, 50f)
-        containerParams.bottomMargin = DisplayUtil.dp2px(this, 20f)
+        containerParams.matchConstraintPercentHeight = 0.92f
+        containerParams.topMargin = DisplayUtil.dp2px(this, 12f)
+        containerParams.bottomMargin = 0
         containerParams.marginStart = 0
         containerParams.marginEnd = 0
         containerParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
@@ -713,11 +714,12 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 // 恢复容器原始布局（ConstraintLayout.LayoutParams）
                 val containerParams =
                     binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
-                containerParams.height = DisplayUtil.dp2px(this@PlayerActivity, 120f)
+                // 复位百分比哨兵值
+                containerParams.matchConstraintPercentHeight = 0.18f
                 containerParams.topToTop = ConstraintLayout.LayoutParams.UNSET
                 containerParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
                 containerParams.topMargin = 0
-                containerParams.bottomMargin = DisplayUtil.dp2px(this@PlayerActivity, 20f)
+                containerParams.bottomMargin = DisplayUtil.dp2px(this@PlayerActivity, 24f)
                 containerParams.marginStart = DisplayUtil.dp2px(this@PlayerActivity, 16f)
                 containerParams.marginEnd = DisplayUtil.dp2px(this@PlayerActivity, 16f)
                 binding.lrcViewContainer.layoutParams = containerParams
