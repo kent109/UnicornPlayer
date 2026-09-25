@@ -6,23 +6,35 @@
     android:background="@color/background"
     android:padding="16dp">
 
-    <ImageView
-        android:id="@+id/albumArt"
-        android:layout_width="280dp"
-        android:layout_height="280dp"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/albumArtContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:layout_marginTop="32dp"
-        android:contentDescription="专辑封面"
-        android:scaleType="centerCrop"
-        android:src="@drawable/ic_music_note"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/albumArt"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:contentDescription="专辑封面"
+            android:scaleType="centerCrop"
+            android:src="@drawable/ic_music_note"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <TextView
         android:id="@+id/songTitle"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="28dp"
+        android:layout_marginTop="20dp"
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="2"
@@ -32,19 +44,19 @@
         android:textStyle="bold"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/albumArt" />
+        app:layout_constraintTop_toBottomOf="@+id/albumArtContainer" />
 
     <TextView
         android:id="@+id/artistName"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="1"
         android:text="艺术家"
         android:textColor="@color/onSurfaceVariant"
-        android:textSize="18sp"
+        android:textSize="17sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/songTitle" />
@@ -59,7 +71,7 @@
         android:maxLines="1"
         android:text="专辑"
         android:textColor="@color/onSurfaceVariant"
-        android:textSize="18sp"
+        android:textSize="17sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/artistName" />
@@ -68,7 +80,7 @@
         android:id="@+id/seekBar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="28dp"
+        android:layout_marginTop="24dp"
         android:progressDrawable="@drawable/seekbar_progress"
         android:thumb="@drawable/seekbar_thumb"
         app:layout_constraintEnd_toEndOf="parent"
@@ -115,13 +127,13 @@
         android:layout_height="wrap_content"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        android:layout_marginTop="32dp"
+        android:layout_marginTop="28dp"
         app:layout_constraintTop_toBottomOf="@+id/seekBar">
 
         <ImageButton
             android:id="@+id/playPauseButton"
-            android:layout_width="80dp"
-            android:layout_height="80dp"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="播放/暂停"
             android:src="@drawable/ic_play"
@@ -136,8 +148,8 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             android:id="@+id/previousButton"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="上一首"
             android:src="@drawable/ic_previous" />
@@ -148,8 +160,8 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             android:id="@+id/nextButton"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="下一首"
             android:src="@drawable/ic_next" />

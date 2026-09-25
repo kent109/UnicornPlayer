@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.util.TypedValue
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.animation.AnimationUtils
 import android.widget.TextView
 import android.widget.Toast
@@ -33,6 +34,7 @@ import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
 import com.unicorn.player.util.LyricsSaveManager
+import com.unicorn.player.util.ViewUtil
 import com.unicorn.player.util.toSimpleCustom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -165,6 +167,14 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     // 进入全屏时正在播放的歌曲路径，用于判断切歌时是否退出全屏
     private var fullscreenSongPath: String? = null
 
+    // 每次绘制前同步非全屏容器顶部位置（playPauseButton 位置可能因布局/切页变化）
+    private val preDrawListener = ViewTreeObserver.OnPreDrawListener {
+        if (!isLrcFullscreen) {
+            applyNonFullscreenTopMargin()
+        }
+        true
+    }
+
     // 标记当前歌曲是否搜索/加载不到歌词（本地+网络均无结果），用于显示"新建歌词"按钮
     private var showNoLyricsButton = false
 
@@ -253,6 +263,17 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 finishAndAnimate()
             }
         }
+
+        // topBar 向下箭头：收起播放页（带退场动画，覆盖控件默认的 finish()）。
+        // 该箭头仅在非全屏时显示，歌词全屏时会隐藏，由 ivCollapse 负责退出全屏
+        binding.dropdown.setOnClickListener {
+            finishAndAnimate()
+        }
+        val expandPx = (48 * resources.displayMetrics.density).toInt()
+        ViewUtil.expandTouchTarget(binding.dropdown, expandPx)
+
+        // 注册绘制前监听：非全屏时持续把容器顶部锚到当前页 playPauseButton 底部
+        binding.root.viewTreeObserver.addOnPreDrawListener(preDrawListener)
 
         // 注册返回键回调（替代已废弃的onBackPressed）
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -892,17 +913,19 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         fullscreenSongPath = musicService?.currentSong?.value?.path
         // 进入全屏时隐藏"新建歌词"按钮
         binding.btnCreateLyrics.visibility = View.GONE
+        // 全屏：显示居中收起箭头，隐藏 topBar 向下箭头
+        binding.ivCollapse.visibility = View.VISIBLE
+        binding.dropdown.visibility = View.GONE
 
-        // 容器约束设为全屏（容器在 ConstraintLayout 内）
+        // 容器顶部位于 topBar 下方、底部撑满父布局（不使用百分比高度、不设 topMargin）
         val containerParams = binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
-        containerParams.height = 0 // 0dp，配合约束撑满父布局
-        containerParams.matchConstraintPercentHeight = 0.92f
-        containerParams.topMargin = DisplayUtil.dp2px(this, 12f)
-        containerParams.bottomMargin = 0
+        containerParams.height = 0 // 0dp，配合上下约束填满可用空间
+        containerParams.topToTop = ConstraintLayout.LayoutParams.UNSET
+        containerParams.topToBottom = R.id.topBar
+        containerParams.topMargin = 0
+        containerParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
         containerParams.marginStart = 0
         containerParams.marginEnd = 0
-        containerParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
-        containerParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
         binding.lrcViewContainer.layoutParams = containerParams
 
         // LrcView 在 FrameLayout 容器内撑满
@@ -971,18 +994,20 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             override fun onAnimationEnd(animation: android.view.animation.Animation?) {
                 // 退出全屏后，若无歌词则重新显示"新建歌词"按钮
                 updateCreateLyricsButtonVisibility()
-                // 恢复容器原始布局（ConstraintLayout.LayoutParams）
+                // 退出全屏：隐藏居中收起箭头，恢复 topBar 向下箭头
+                binding.ivCollapse.visibility = View.GONE
+                binding.dropdown.visibility = View.VISIBLE
+                // 恢复容器非全屏布局：左右 16dp、底部 24dp；
+                // 顶部动态锚到当前页 playPauseButton 底部（不使用百分比高度）
                 val containerParams =
                     binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
-                // 复位百分比哨兵值
-                containerParams.matchConstraintPercentHeight = 0.18f
-                containerParams.topToTop = ConstraintLayout.LayoutParams.UNSET
+                containerParams.height = 0
+                containerParams.topToBottom = ConstraintLayout.LayoutParams.UNSET
                 containerParams.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
-                containerParams.topMargin = 0
-                containerParams.bottomMargin = DisplayUtil.dp2px(this@PlayerActivity, 24f)
                 containerParams.marginStart = DisplayUtil.dp2px(this@PlayerActivity, 16f)
                 containerParams.marginEnd = DisplayUtil.dp2px(this@PlayerActivity, 16f)
                 binding.lrcViewContainer.layoutParams = containerParams
+                applyNonFullscreenTopMargin(force = true)
 
                 // 恢复 LrcView 在 FrameLayout 内撑满
                 val lrcParams =
@@ -1005,6 +1030,55 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             override fun onAnimationRepeat(animation: android.view.animation.Animation?) {}
         })
         binding.lrcView.startAnimation(slideOutDown)
+    }
+
+    /**
+     * 从 ViewPager2 当前页面查找 playPauseButton。
+     * ViewPager2 内部第一层为 RecyclerView，其 item 视图即 PlayerFragment 根视图。
+     */
+    private fun findCurrentPlayPauseButton(): View? {
+        val rv = binding.viewPager.getChildAt(0) as? RecyclerView ?: return null
+        for (i in 0 until rv.childCount) {
+            val itemView = rv.getChildAt(i)
+            if (rv.getChildAdapterPosition(itemView) == binding.viewPager.currentItem) {
+                return itemView.findViewById(R.id.playPauseButton)
+            }
+        }
+        return null
+    }
+
+    /**
+     * 非全屏时把 lrcViewContainer 顶部锚到当前页 playPauseButton 底部。
+     *
+     * playPauseButton 位于 ViewPager2 的 Fragment 内，不是 ConstraintLayout
+     * 的直接子 View，无法直接建立约束（预加载的多个 Fragment 还存在同 ID 按钮），
+     * 因此采用：topToTop=parent + 动态 topMargin（按钮底部相对根布局的 Y 值）。
+     * 由 preDrawListener 在每帧绘制前调用；值未变化时不重复设置，避免布局循环。
+     *
+     * @param force true 时强制重新应用（如刚退出全屏）
+     */
+    private fun applyNonFullscreenTopMargin(force: Boolean = false) {
+        if (isLrcFullscreen) return
+        val button = findCurrentPlayPauseButton() ?: return
+        val rootLocation = IntArray(2)
+        binding.root.getLocationOnScreen(rootLocation)
+        val buttonLocation = IntArray(2)
+        button.getLocationOnScreen(buttonLocation)
+        val targetTop = buttonLocation[1] + button.height - rootLocation[1]
+        if (targetTop <= 0) return
+
+        val params = binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
+        if (!force &&
+            params.topToTop == ConstraintLayout.LayoutParams.PARENT_ID &&
+            params.topToBottom == ConstraintLayout.LayoutParams.UNSET &&
+            params.topMargin == targetTop
+        ) {
+            return
+        }
+        params.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+        params.topToBottom = ConstraintLayout.LayoutParams.UNSET
+        params.topMargin = targetTop
+        binding.lrcViewContainer.layoutParams = params
     }
 
     /**
@@ -1621,6 +1695,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     override fun onDestroy() {
         super.onDestroy()
+        // 移除绘制前监听，避免泄漏
+        if (binding.root.viewTreeObserver.isAlive) {
+            binding.root.viewTreeObserver.removeOnPreDrawListener(preDrawListener)
+        }
         // 关闭歌词预览对话框，避免内存泄漏
         lrcPreviewDialog?.dismiss()
         lrcPreviewDialog = null
