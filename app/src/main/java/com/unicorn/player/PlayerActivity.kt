@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.util.TypedValue
 import android.view.View
@@ -21,6 +22,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import com.hw.lrcviewlib.LrcRow
+import com.hw.lrcviewlib.LrcShowRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.model.Song
@@ -47,6 +49,28 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     private var isUserScrolling = false
     private val scrollDebounceHandler = Handler(Looper.getMainLooper())
 
+    // ===== 歌词进度更新抑制 =====
+    // true 时忽略 currentPosition 观察者的所有更新。
+    // 用于：亮屏恢复（LiveData 粘性派发旧值）、用户拖动 seekbar（异步 seek
+    // 期间 mediaPlayer.currentPosition 短暂返回旧值），避免库的动画跳到错误行
+    private var positionUpdateSuppressed = false
+
+    // 抑制窗口结束时的重同步任务：按实际播放位置无动画重新定位
+    private val endSuppressRunnable = Runnable { endPositionSuppress() }
+
+    // 上次 onPause 的时间戳，onStart 用于区分"灭屏/后台离开"与"短暂时离开（如设置页）"
+    private var pausedElapsedRealtime = 0L
+
+    // 标记是否主动跳转 LrcSearchActivity。返回 onResume 时需要重新加载歌词
+    // （用户可能下载了新歌词）；而灭屏亮屏时该值为 false，歌词仍在内存，
+    // 只需即时重定位、不应重新加载
+    private var leavingForLrcSearch = false
+
+    // 本次 Activity 是否已完成首次歌词加载。
+    // 打开 PlayerActivity 时首次加载必须传入当前播放位置即时定位，
+    // 避免"先高亮第一行、再滚动到当前行"；之后切歌走正常动画流程
+    private var hasInitiallyLoadedLrc = false
+
     // 外部文件播放（文件管理器 ACTION_VIEW）相关
     private val repository by lazy { MusicRepository(applicationContext) }
 
@@ -63,6 +87,15 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     companion object {
         const val TAG = "PlayerActivity"
+
+        /** seekbar 操作的进度抑制时长：拖动中随 progress 续期，松手后覆盖 seek 生效期 */
+        private const val SEEK_SUPPRESS_MS = 1000L
+
+        /** 亮屏恢复时的抑制时长，覆盖粘性派发 + 首轮进度 */
+        private const val RESUME_SUPPRESS_MS = 1200L
+
+        /** onPause→onStart 间隔超过该值才视为"灭屏/后台离开"，需要抑制恢复 */
+        private const val AWAY_THRESHOLD_MS = 2000L
     }
 
     // 匹配 LRC 行内所有时间戳标记 [mm:ss.xx] / [mm:ss.xxx]
@@ -415,6 +448,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         // 隐藏"加载歌词中"提示
         lrcView.setNoDataMessage("")
 
+        // 滚动动画时长：库默认 400ms，调快为 250ms（seekbar 定位与切行滚动均生效）
+        lrcView.setAutomaticMoveAnimationDuration(250)
+
         // 应用字号设置（从 DataStore 读取字体大小偏好）
         applyFontSize()
 
@@ -469,6 +505,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     putExtra(LrcSearchActivity.EXTRA_TITLE, song.title)
                     putExtra(LrcSearchActivity.EXTRA_AUDIO_PATH, song.path)
                 }
+                leavingForLrcSearch = true
                 startActivity(intent)
             }
         }
@@ -630,6 +667,221 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     }
 
     /**
+     * 将当前高亮歌词行立即滚动到 LrcView 垂直中心。
+     *
+     * 背景：LrcView(V1.4) 只在播放进度回调驱动 seekLrcToTime 时居中，且
+     * StartMoveAnimation 在"目标行 == 当前高亮行"时直接 return。因此进入/退出全屏
+     * 改变高度后，要等下一句歌词切换（甚至暂停时永远不会）才会重新居中。
+     *
+     * 该库无公开 recenter API，这里在 doOnPreDraw（确保已按新高度完成测量）中
+     * 复用库自身的坐标公式直接修正偏移，即时生效，与播放/暂停状态无关：
+     *   delta = height/2 + hlTextSize/2 - 高亮行首显示行上次绘制的 Y
+     *   FirstRowPositionY = 当前偏移 + delta
+     * 若库版本变更导致反射失败，静默降级为原有行为。
+     */
+    private fun snapLrcHighlightToCenter() {
+        binding.lrcView.doOnPreDraw {
+            try {
+                val view = binding.lrcView
+                if (!view.hasData()) return@doOnPreDraw
+                val viewCls = view.javaClass
+
+                // 先取消可能在运行的滚动动画，避免其后续帧覆盖本次偏移
+                cancelLrcMoveAnimator()
+
+                val firstRowField = viewCls.getDeclaredField("FirstRowPositionY")
+                firstRowField.isAccessible = true
+                val currentOffset = firstRowField.getFloat(view)
+
+                val hlIndexField = viewCls.getDeclaredField("HeightLightRowPosition")
+                hlIndexField.isAccessible = true
+                val hlIndex = hlIndexField.getInt(view)
+
+                val mRowsField = viewCls.getDeclaredField("mRows")
+                mRowsField.isAccessible = true
+                @Suppress("UNCHECKED_CAST")
+                val rows = mRowsField.get(view) as List<LrcRow>
+                if (hlIndex !in rows.indices) return@doOnPreDraw
+
+                val showRows: List<LrcShowRow> = rows[hlIndex].showRows ?: return@doOnPreDraw
+                if (showRows.isEmpty()) return@doOnPreDraw
+
+                // 高亮行第一个显示行上次被绘制时的绝对 Y（FirstRowPositionY + 累积行高）
+                val yPosField = LrcShowRow::class.java.getDeclaredField("YPosition")
+                yPosField.isAccessible = true
+                val rowDrawnY = yPosField.getFloat(showRows[0])
+
+                val setting = view.lrcSetting
+                val hlSizeField = setting.javaClass.getDeclaredField("HeightLightRowTextSize")
+                hlSizeField.isAccessible = true
+                val hlTextSize = hlSizeField.getInt(setting)
+
+                val targetOffset =
+                    currentOffset + (view.height / 2f + hlTextSize / 2f - rowDrawnY)
+                firstRowField.setFloat(view, targetOffset)
+                view.invalidate()
+            } catch (e: Exception) {
+                Log.e(TAG, "snapLrcHighlightToCenter 失败: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * 取消 LrcView 内部正在运行的滚动 ValueAnimator，并复位 OnAnimation 标记。
+     * 库的 setLrcData/外部直接写偏移都不会停止该动画，运行中的动画会逐帧覆盖
+     * FirstRowPositionY，因此任何"即时定位"前都必须先调用本方法。
+     */
+    private fun cancelLrcMoveAnimator() {
+        try {
+            val view = binding.lrcView
+            val animatorField =
+                view.javaClass.getDeclaredField("valueAnimator")
+            animatorField.isAccessible = true
+            (animatorField.get(view) as? android.animation.ValueAnimator)?.cancel()
+            val onAnimationField =
+                view.javaClass.getDeclaredField("OnAnimation")
+            onAnimationField.isAccessible = true
+            onAnimationField.set(view, false)
+        } catch (e: Exception) {
+            Log.e(TAG, "cancelLrcMoveAnimator 失败: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 应用歌词数据并立即定位到 [position] 对应的歌词行：无动画、无首行闪烁。
+     *
+     * 灭屏再亮屏时走 onResume → loadAndShowLrc → setLrcData。而 setLrcData 会把
+     * HeightLightRowPosition、FirstRowPositionY 全部重置为 0，导致第一帧高亮第一行，
+     * 之后要等播放进度回调驱动 seekLrcToTime 才滚到当前播放行（暂停时更久）。
+     *
+     * 在 setLrcData 之后、首帧绘制之前，先反射触发库内部的行布局，再委托
+     * [positionLrcImmediate] 直接写好高亮行下标与偏移，使第一帧即为正确状态。
+     *
+     * @return true 表示已立即定位；false 表示反射失败或高度未就绪，调用方回退到原流程
+     */
+    private fun applyLrcRowsImmediate(rows: List<LrcRow>, position: Long): Boolean {
+        val view = binding.lrcView
+        if (view.height <= 0) return false
+        return try {
+            val viewCls = view.javaClass
+            // 1. 正常应用数据（内部会重置高亮/偏移并 postInvalidate）
+            view.setLrcData(rows)
+
+            // 2. 立即触发库内部的行布局，生成 ShowRows（首帧 onDraw 前通常尚未执行）。
+            // 注意 initLrcRowData 非幂等：对每行 getShowRows().add(...) 并累加
+            // ContentHeight。因此调用前必须先重置每行的 ShowRows 与 ContentHeight，
+            // 调用后把 InitLrcRowDada 置为 true，避免 onDraw 再执行一次导致
+            // 每行歌词重复显示。
+            rows.forEach { row ->
+                row.showRows = ArrayList()
+                // ContentHeight 为纯 public 字段（无 getter），用原名访问
+                row.ContentHeight = 0
+            }
+            val initMethod =
+                viewCls.getDeclaredMethod("initLrcRowData", List::class.java)
+            initMethod.isAccessible = true
+            initMethod.invoke(view, rows)
+            val initFlagField =
+                viewCls.getDeclaredField("InitLrcRowDada")
+            initFlagField.isAccessible = true
+            initFlagField.set(view, true)
+
+            // 3. 无动画定位到 position
+            positionLrcImmediate(position)
+        } catch (e: Exception) {
+            Log.e(TAG, "applyLrcRowsImmediate 失败: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * 立即（无动画）把歌词定位到 [position] 对应行并垂直居中。
+     * 要求歌词数据已设置、ShowRows 已生成（数据加载后或 applyLrcRowsImmediate 后）。
+     *
+     * 坐标公式与库 StartMoveAnimation 完全一致：
+     *   目标行首显示行 Y = FirstRowPositionY + 之前所有显示行 (RowHeight+RowPadding) 之和
+     *   FirstRowPositionY = height/2 + hlTextSize/2 - 前行高度和
+     *
+     * @return true 成功；false 数据/高度未就绪，调用方应回退到 seekLrcToTime
+     */
+    private fun positionLrcImmediate(position: Long): Boolean {
+        val view = binding.lrcView
+        if (view.height <= 0 || !view.hasData()) return false
+        return try {
+            val viewCls = view.javaClass
+            // 先取消滚动动画，避免其后续帧覆盖即将写入的偏移
+            cancelLrcMoveAnimator()
+
+            val mRowsField = viewCls.getDeclaredField("mRows")
+            mRowsField.isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            val readyRows = mRowsField.get(view) as List<LrcRow>
+
+            // 与 seekLrcToTime 一致：最后一个时间 <= position 的行；
+            // position 早于首行时间时按默认首行居中处理
+            val foundIndex = readyRows.indexOfLast { it.currentRowTime <= position }
+            val targetIndex = if (foundIndex < 0) 0 else foundIndex
+
+            // 累加目标行之前所有显示行的高度（RowHeight+RowPadding）
+            var precedingHeight = 0f
+            for (i in 0 until targetIndex) {
+                val showRows = readyRows[i].showRows ?: return false
+                showRows.forEach { showRow ->
+                    precedingHeight += showRow.floatFieldOf("RowHeight") +
+                            showRow.floatFieldOf("RowPadding")
+                }
+            }
+
+            val setting = view.lrcSetting
+            val hlSizeField =
+                setting.javaClass.getDeclaredField("HeightLightRowTextSize")
+            hlSizeField.isAccessible = true
+            val hlTextSize = hlSizeField.getInt(setting)
+
+            var targetOffset = view.height / 2f + hlTextSize / 2f - precedingHeight
+            // 与库 makeFirstRowPositionSecure 一致：偏移不超过 height/2（首行边界保护）
+            val halfHeight = view.height / 2f
+            if (targetOffset > halfHeight) targetOffset = halfHeight
+
+            val firstRowField = viewCls.getDeclaredField("FirstRowPositionY")
+            firstRowField.isAccessible = true
+            firstRowField.setFloat(view, targetOffset)
+
+            val hlPosField = viewCls.getDeclaredField("HeightLightRowPosition")
+            hlPosField.isAccessible = true
+            hlPosField.setInt(view, targetIndex)
+
+            view.invalidate()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "positionLrcImmediate 失败: ${e.message}", e)
+            false
+        }
+    }
+
+    /** 反射读取 LrcShowRow 的包级可见 float 字段（RowHeight / RowPadding） */
+    private fun LrcShowRow.floatFieldOf(name: String): Float {
+        val field = LrcShowRow::class.java.getDeclaredField(name)
+        field.isAccessible = true
+        return field.getFloat(this)
+    }
+
+    /**
+     * 即时应用歌词并定位到 [position]；若视图尚未完成测量（如服务在 onCreate 中
+     * 同步连接、协程极快返回时 height 仍为 0），延迟到下一帧绘制前重试，
+     * 保证第一帧高亮的就是 [position] 对应行，不会先闪现第一行。
+     */
+    private fun applyLrcRowsWhenReady(rows: List<LrcRow>, position: Long) {
+        if (applyLrcRowsImmediate(rows, position)) return
+        binding.lrcView.doOnPreDraw {
+            if (!applyLrcRowsImmediate(rows, position)) {
+                // 重试仍失败（如反射异常）：回退普通流程
+                binding.lrcView.setLrcData(rows)
+            }
+        }
+    }
+
+    /**
      * 进入歌词全屏模式
      * ViewPager向上滑出消失，LrcView向上滑入全屏显示
      */
@@ -684,7 +936,15 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             .setHeightLightRowTextSize(highlightRowTextSize)
             .setTrySelectRowColor(trySelectRowColor)
             .setTrySelectRowTextSize(trySelectRowTextSize)
+        commitLrcSettingsAndSnap()
+    }
+
+    /**
+     * 提交歌词设置并在新布局下把当前高亮行立即滚动到垂直中心
+     */
+    private fun commitLrcSettingsAndSnap() {
         binding.lrcView.commitLrcSettings()
+        snapLrcHighlightToCenter()
     }
 
     /**
@@ -739,7 +999,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     .setHeightLightRowTextSize(highlightRowTextSize)
                     .setTrySelectRowColor(normalRowColor)
                     .setTrySelectRowTextSize(normalRowTextSize)
-                binding.lrcView.commitLrcSettings()
+                commitLrcSettingsAndSnap()
             }
 
             override fun onAnimationRepeat(animation: android.view.animation.Animation?) {}
@@ -786,8 +1046,15 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     /**
      * 加载并显示歌词，优先级：Documents/Unicorn/Lyrics > 网络下载。
      * 无 SAF 权限时不显示歌词、不下载，并关闭歌词开关。
+     *
+     * @param syncPosition 非 null 时（如 onResume 灭屏亮屏恢复），数据应用后立即
+     *                     定位到该播放位置，避免 setLrcData 重置导致首帧高亮第一行；
+     *                     null 时保持原有加载动画流程
      */
-    private fun loadAndShowLrc(audioPath: String) {
+    private fun loadAndShowLrc(
+        audioPath: String,
+        syncPosition: Long? = null
+    ) {
         Log.d(TAG, "loadAndShowLrc: path=$audioPath")
         // 歌词功能被关闭时，清空并隐藏 LrcView 和"新建歌词"按钮
         if (!LrcFetcher.lyricsEnabled) {
@@ -823,7 +1090,13 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 if (!docsRows.isNullOrEmpty()) {
                     showNoLyricsButton = false
                     binding.btnCreateLyrics.visibility = View.GONE
-                    binding.lrcView.setLrcData(applyTimeLabelToRows(docsRows))
+                    val displayRows = applyTimeLabelToRows(docsRows)
+                    if (syncPosition != null) {
+                        // 即时定位（视图未就绪时等下一帧），首帧即为当前播放行
+                        applyLrcRowsWhenReady(displayRows, syncPosition)
+                    } else {
+                        binding.lrcView.setLrcData(displayRows)
+                    }
                     binding.lrcView.visibility = View.VISIBLE
                     Log.d(TAG, "Documents 歌词加载成功: ${docsRows.size} 行")
                     return@launch
@@ -832,7 +1105,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 binding.lrcView.setLrcData(emptyList())
                 binding.lrcView.visibility = View.GONE
                 Log.d(TAG, "Documents 无歌词，尝试网络下载")
-                fetchLrcFromNetwork(audioPath, myGeneration)
+                fetchLrcFromNetwork(audioPath, myGeneration, syncPosition)
             } catch (e: Exception) {
                 binding.lrcView.visibility = View.GONE
                 Log.e(TAG, "加载歌词失败", e)
@@ -853,8 +1126,14 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     /**
      * 从网络下载歌词，下载成功后刷新 LrcView
+     *
+     * @param syncPosition 非 null 时下载成功后立即定位到该播放位置，避免首帧高亮第一行
      */
-    private fun fetchLrcFromNetwork(audioPath: String, generation: Int) {
+    private fun fetchLrcFromNetwork(
+        audioPath: String,
+        generation: Int,
+        syncPosition: Long? = null
+    ) {
         LrcFetcher.fetchLrc(this@PlayerActivity, audioPath, object : LrcFetcher.LrcFetchCallback {
             override fun onSuccess(lrcFileName: String) {
                 lifecycleScope.launch {
@@ -868,7 +1147,12 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                         if (!lrcRows.isNullOrEmpty()) {
                             showNoLyricsButton = false
                             binding.btnCreateLyrics.visibility = View.GONE
-                            binding.lrcView.setLrcData(applyTimeLabelToRows(lrcRows))
+                            val displayRows = applyTimeLabelToRows(lrcRows)
+                            if (syncPosition != null) {
+                                applyLrcRowsWhenReady(displayRows, syncPosition)
+                            } else {
+                                binding.lrcView.setLrcData(displayRows)
+                            }
                             binding.lrcView.visibility = View.VISIBLE
                             Log.d(TAG, "网络歌词加载成功: ${lrcRows.size} 行")
                         } else {
@@ -915,15 +1199,58 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     /**
      * 观察播放位置变化，同步更新歌词显示
      * 使用 seekLrcToTime 方法，传入当前播放位置（毫秒）
-     * 方法内部会找到 CurrentRowTime <= position 的歌词行并滚动到该位置
+     * 方法内部会找到 CurrentRowTime <= position 的歌词行并滚动到该位置。
+     * 抑制窗口内（亮屏恢复/seekbar 拖动）忽略所有更新，避免旧进度驱动动画跳到错误行
      */
     private fun observeCurrentPosition() {
         musicService?.let { service ->
             service.currentPosition.observe(this) { position ->
+                if (positionUpdateSuppressed) return@observe
                 // 将播放进度（毫秒）传递给 LrcView，滚动到对应歌词行
                 binding.lrcView.seekLrcToTime(position.toLong())
             }
         }
+    }
+
+    /**
+     * 开启进度更新抑制窗口：窗口内观察者忽略一切进度，结束时按实际位置无动画重定位。
+     * 重复调用会重置窗口（拖动 seekbar 时持续续期）。
+     */
+    private fun beginPositionSuppress(durationMs: Long) {
+        positionUpdateSuppressed = true
+        scrollDebounceHandler.removeCallbacks(endSuppressRunnable)
+        scrollDebounceHandler.postDelayed(endSuppressRunnable, durationMs)
+    }
+
+    /**
+     * 抑制窗口结束：按 MediaPlayer 实际位置无动画重新定位歌词，随后恢复正常更新
+     */
+    private fun endPositionSuppress() {
+        positionUpdateSuppressed = false
+        val position = musicService?.getCurrentPosition() ?: return
+        positionLrcImmediate(position.toLong())
+    }
+
+    /**
+     * 用户正在拖动（或点击）seekbar，由 PlayerFragment 在每次 progress 变化时回调：
+     * 1. 续期进度抑制窗口（异步 seek 期间进度线程可能读到旧位置）
+     * 2. 取消可能在播放中的滚动动画（如松手动画未结束又再次拖动）
+     * 拖动期间歌词保持原位不动，避免逐帧跳变；松手时才播放滚动动画
+     */
+    fun onUserSeeking() {
+        beginPositionSuppress(SEEK_SUPPRESS_MS)
+        cancelLrcMoveAnimator()
+    }
+
+    /**
+     * 用户松手结束 seekbar 操作，由 PlayerFragment 在 onStopTrackingTouch 回调。
+     * 调用库的 seekLrcToTime：目标行与当前高亮行不同时，库用 400ms ValueAnimator
+     * 平滑滚动过去（库内部会先取消旧动画）；目标行相同则直接 return（无需滚动）。
+     * 抑制窗口覆盖异步 seek 生效期，窗口结束再按实际位置校正一次终态
+     */
+    fun onUserSeekEnd(position: Int) {
+        beginPositionSuppress(SEEK_SUPPRESS_MS)
+        binding.lrcView.seekLrcToTime(position.toLong())
     }
 
     private fun setupViewPager() {
@@ -1034,8 +1361,15 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     // 如果是初始设置，不处理
                     if (isInitialSetup) return@observe
 
-                    // 加载歌词
-                    loadAndShowLrc(it.path)
+                    // 首次加载（打开 PlayerActivity）：传入当前播放位置即时定位，
+                    // 避免"先高亮第一行、再滚动到当前行"；之后切歌走正常动画流程
+                    if (!hasInitiallyLoadedLrc) {
+                        hasInitiallyLoadedLrc = true
+                        loadAndShowLrc(it.path, service.getCurrentPosition().toLong())
+                    } else {
+                        // 加载歌词
+                        loadAndShowLrc(it.path)
+                    }
 
                     val currentSongs = pagerAdapter.songs
                     if (currentSongs.isNotEmpty()) {
@@ -1239,20 +1573,48 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     override fun onPause() {
         super.onPause()
+        pausedElapsedRealtime = SystemClock.elapsedRealtime()
         musicService?.savePlaybackState()
+    }
+
+    override fun onStart() {
+        // 判断是否为灭屏/长时间后台后恢复。正常播放期间 LiveData 在后台持续累积进度，
+        // 观察者在 super.onStart() 中激活时会粘性派发旧值，可能驱动动画跳到旧行。
+        val wasLongAway = pausedElapsedRealtime != 0L &&
+                SystemClock.elapsedRealtime() - pausedElapsedRealtime >= AWAY_THRESHOLD_MS
+        if (wasLongAway) {
+            // 必须在 super.onStart() 之前抑制：粘性派发发生在 super 调用内部
+            beginPositionSuppress(RESUME_SUPPRESS_MS)
+            // 取消残留的滚动动画
+            cancelLrcMoveAnimator()
+        }
+        super.onStart()
     }
 
     override fun onResume() {
         super.onResume()
-        // 字体大小/时间标签可能在设置页被修改，恢复时即时生效
+        // 字体大小可能在歌词选项中被修改，恢复时即时生效
         applyFontSize()
-        // 恢复时重新同步歌词到当前播放位置
         musicService?.let { service ->
-            val currentPos = service.getCurrentPosition()
-            binding.lrcView.seekLrcToTime(currentPos.toLong())
-            // 重新应用"显示时间标签"设置，让设置页面修改后即时生效
-            if (LrcFetcher.lyricsEnabled) {
-                service.currentSong.value?.let { song -> loadAndShowLrc(song.path) }
+            val currentPos = service.getCurrentPosition().toLong()
+            when {
+                // 从歌词搜索页返回：用户可能下载了新歌词，需要重新加载并即时定位
+                leavingForLrcSearch -> {
+                    leavingForLrcSearch = false
+                    if (LrcFetcher.lyricsEnabled) {
+                        service.currentSong.value?.let { song ->
+                            loadAndShowLrc(song.path, currentPos)
+                        }
+                    }
+                }
+                // 灭屏亮屏等恢复场景：歌词数据仍在内存中，只无动画即时重定位，
+                // 绝不重新加载——setLrcData 的重置 + 异步加载会引入错误帧竞争
+                LrcFetcher.lyricsEnabled -> {
+                    positionLrcImmediate(currentPos)
+                }
+                else -> {
+                    binding.lrcView.seekLrcToTime(currentPos)
+                }
             }
         }
     }

@@ -93,13 +93,20 @@ class PlayerFragment : Fragment() {
 
                     if (isCurrentSongPlaying) {
                         service.seekTo(progress)
+                        // 通知 PlayerActivity：抑制进度观察者（异步 seek 期间
+                        // 可能读到旧位置）并取消滚动动画；拖动中歌词保持原位
+                        (activity as? PlayerActivity)?.onUserSeeking()
                     }
                 }
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
 
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                // 松手：歌词按库自身的 400ms 动画平滑滚动到目标位置
+                val progress = seekBar?.progress ?: return
+                (activity as? PlayerActivity)?.onUserSeekEnd(progress)
+            }
         })
     }
 
