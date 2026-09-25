@@ -164,6 +164,17 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
             // 不用 ItemTouchHelper，避免 SWIPE_SUCCESS 路径产生 RecoverAnimation 孤儿，
             // 从而避免"首次点击无法关闭"的 bug。
             addOnItemTouchListener(SwipeRevealListener())
+            // 监听滚动状态：下拉刷新完成后等列表回到 IDLE 静止再收起已展开的 item
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrollStateChanged(rv: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_IDLE &&
+                        pendingCollapseAfterRefresh
+                    ) {
+                        pendingCollapseAfterRefresh = false
+                        this@PlaylistFragment.adapter.collapseVisibleExpandedItems()
+                    }
+                }
+            })
         }
     }
 
@@ -276,6 +287,11 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         (activity as? MainActivity)?.setViewPagerSwipeEnabled(enabled)
     }
 
+    /**
+     * 标记：下拉刷新数据回来后，等 RecyclerView 回到 IDLE 静止状态再收起已展开的 item
+     */
+    private var pendingCollapseAfterRefresh = false
+
     private fun setupSwipeRefresh() {
         val bezierCircleHeader = BezierCircleHeader(context)
         binding.smartRefreshLayout.setRefreshHeader(bezierCircleHeader)
@@ -288,9 +304,29 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
 
     private fun observeData() {
         viewModel.playlists.observe(viewLifecycleOwner) { playlists ->
+            // 判断是否由下拉刷新触发（isRefreshing 在 finishRefresh 调用后变 false）
+            val wasRefreshing = binding.smartRefreshLayout.isRefreshing
+            if (wasRefreshing) {
+                // 标记延迟收起，等 RecyclerView 回到 IDLE 静止后再收起
+                pendingCollapseAfterRefresh = true
+                // 兜底：刷新头部收回动画（finishRefresh(200) 延迟 + BezierCircleHeader onFinish
+                // 返回 800ms）结束后若 onScrollStateChanged 未触发，直接收起
+                binding.recyclerView.postDelayed({
+                    if (pendingCollapseAfterRefresh) {
+                        pendingCollapseAfterRefresh = false
+                        adapter.collapseVisibleExpandedItems()
+                    }
+                }, 1100)
+            }
+            // 先清除 swiped 状态标记，防止 DiffUtil 让新滑入该位置的 item 继承旧平移
             adapter.forceResetSwipeState()
             adapter.submitList(playlists)
             binding.smartRefreshLayout.finishRefresh(200)
+
+            // 非刷新场景（新建/删除/编辑歌单）立即带动画收起已展开的 item
+            if (!wasRefreshing) {
+                adapter.collapseVisibleExpandedItems()
+            }
 
             if (playlists.isEmpty()) {
                 binding.ivNoData.visibility = View.VISIBLE

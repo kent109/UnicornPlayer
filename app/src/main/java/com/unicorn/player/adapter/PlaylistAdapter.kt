@@ -96,14 +96,50 @@ class PlaylistAdapter(
     }
 
     /**
-     * 强制复位 swiped 状态（无视 swipedPosition，一律清零），
-     * 并在下一次绑定时避免残留平移。
+     * 仅清除 swiped 状态标记，不做任何视图操作。
      *
-     * 调用场景：外部列表写入（编辑/删除/新建/刷新）完成后，
-     * 防止 DiffUtil 让新滑入该位置的 item 继承旧平移。
+     * 调用场景：列表数据更新前清除状态，防止 DiffUtil 让新滑入该位置的 item 继承旧平移。
+     * 视图收起动画由 [collapseExpandedItemWithAnim] 单独控制时机。
      */
     fun forceResetSwipeState() {
         swipedPosition = -1
+    }
+
+    /**
+     * 以动画收起所有可见的已展开 item（translationX != 0 的卡片）。
+     *
+     * 不依赖 [swipedPosition]，直接遍历可见 holder 收回平移，
+     * 因此可在 [forceResetSwipeState] 之后（状态已清零）单独调用。
+     */
+    fun collapseVisibleExpandedItems() {
+        val rv = attachedRecyclerView ?: return
+        val lm = rv.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager ?: return
+        val first = lm.findFirstVisibleItemPosition()
+        val last = lm.findLastVisibleItemPosition()
+        if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return
+        for (pos in first..last) {
+            rv.findViewHolderForAdapterPosition(pos)
+                ?.let { it as? PlaylistHolder }?.let { holder ->
+                    val card = holder.binding.cardContent
+                    if (card.translationX != 0f) {
+                        holder.animateCardTo(0f, REVEAL_ANIM_MS)
+                        holder.lastSwiped = false
+                    }
+                }
+        }
+    }
+
+    /** 由 [onAttachedToRecyclerView] 赋值，供 [forceResetSwipeState] 查找 holder */
+    private var attachedRecyclerView: RecyclerView? = null
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        super.onAttachedToRecyclerView(recyclerView)
+        attachedRecyclerView = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        super.onDetachedFromRecyclerView(recyclerView)
+        attachedRecyclerView = null
     }
 
     fun isSwiped(position: Int): Boolean = swipedPosition == position
