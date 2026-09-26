@@ -1,6 +1,7 @@
 package com.unicorn.player
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
@@ -1218,6 +1219,27 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         // 更新UI状态
         if (musicService != null) {
             updateBottomPlayerUI()
+        }
+        // 同步排序设置：播放页修改排序后写入同一个 SharedPreferences，
+        // 回到本页面时若与当前模式不同，则应用新排序并同步到 MusicService
+        syncSortModeFromPrefs()
+    }
+
+    /**
+     * 从 SharedPreferences 读取排序模式，与当前 ViewModel 的模式不同则应用
+     */
+    private fun syncSortModeFromPrefs() {
+        try {
+            val prefs = getSharedPreferences("sort_mode_prefs", Context.MODE_PRIVATE)
+            val savedOrdinal = prefs.getInt("sort_mode", 0)
+            val savedMode = MusicViewModel.SortMode.entries
+                .getOrElse(savedOrdinal) { MusicViewModel.SortMode.BY_TITLE }
+            if (viewModel.sortMode.value != savedMode) {
+                viewModel.sortSongs(savedMode)
+                updateServiceSongList()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

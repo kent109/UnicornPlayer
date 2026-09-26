@@ -17,6 +17,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.graphics.toColorInt
 import androidx.core.view.doOnPreDraw
 import androidx.datastore.preferences.core.edit
@@ -271,6 +272,12 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         }
         val expandPx = (48 * resources.displayMetrics.density).toInt()
         ViewUtil.expandTouchTarget(binding.dropdown, expandPx)
+
+        // ivShare：分享当前播放歌曲的本地文件（与歌曲信息弹窗"分享本地文件"操作一致）
+        binding.ivShare.setOnClickListener {
+            val song = musicService?.currentSong?.value ?: return@setOnClickListener
+            shareCurrentSong(song)
+        }
 
         // 注册绘制前监听：非全屏时持续把容器顶部锚到当前页 playPauseButton 底部
         binding.root.viewTreeObserver.addOnPreDrawListener(preDrawListener)
@@ -913,9 +920,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         fullscreenSongPath = musicService?.currentSong?.value?.path
         // 进入全屏时隐藏"新建歌词"按钮
         binding.btnCreateLyrics.visibility = View.GONE
-        // 全屏：显示居中收起箭头，隐藏 topBar 向下箭头
+        // 全屏：显示居中收起箭头，隐藏 topBar 向下箭头和分享按钮
         binding.ivCollapse.visibility = View.VISIBLE
         binding.dropdown.visibility = View.GONE
+        binding.ivShare.visibility = View.GONE
 
         // 容器顶部位于 topBar 下方、底部撑满父布局（不使用百分比高度、不设 topMargin）
         val containerParams = binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
@@ -994,9 +1002,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             override fun onAnimationEnd(animation: android.view.animation.Animation?) {
                 // 退出全屏后，若无歌词则重新显示"新建歌词"按钮
                 updateCreateLyricsButtonVisibility()
-                // 退出全屏：隐藏居中收起箭头，恢复 topBar 向下箭头
+                // 退出全屏：隐藏居中收起箭头，恢复 topBar 向下箭头和分享按钮
                 binding.ivCollapse.visibility = View.GONE
                 binding.dropdown.visibility = View.VISIBLE
+                binding.ivShare.visibility = View.VISIBLE
                 // 恢复容器非全屏布局：左右 16dp、底部 24dp；
                 // 顶部动态锚到当前页 playPauseButton 底部（不使用百分比高度）
                 val containerParams =
@@ -1690,6 +1699,53 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     binding.lrcView.seekLrcToTime(currentPos)
                 }
             }
+        }
+    }
+
+    /**
+     * 分享歌曲的本地文件（与歌曲信息弹窗中"分享本地文件"的操作一致）：
+     * 通过 FileProvider 生成 content URI，调起系统分享面板
+     */
+    private fun shareCurrentSong(song: Song) {
+        try {
+            val file = File(song.path)
+            if (!file.exists()) {
+                Toast.makeText(this, "文件不存在", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "audio/*"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "分享文件失败: ${e.message}", e)
+            Toast.makeText(this, "分享失败", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 播放队列在播放页被重新排序后调用：同步刷新 ViewPager 页面顺序，
+     * 并保持停留在当前播放歌曲的页面
+     */
+    fun onPlayQueueReordered() {
+        val service = musicService ?: return
+        val list = service.getSongList()
+        if (list.isEmpty()) return
+        val idx = list.indexOfFirst { it.id == service.currentSong.value?.id }
+            .coerceAtLeast(0)
+        isProgrammaticSetItem = true
+        try {
+            pagerAdapter.updateSongs(list, idx)
+            binding.viewPager.setCurrentItem(idx, false)
+        } finally {
+            isProgrammaticSetItem = false
         }
     }
 
