@@ -71,7 +71,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <com.hw.lrcviewlib.LrcView
+        <com.hw.lrcviewlib.UnicornLrcView
             android:id="@+id/lrcView"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />

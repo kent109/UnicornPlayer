@@ -384,9 +384,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      * 三个元素分别为 { 普通行字号, 高亮行字号, 拖动选中行字号 }。
      */
     private val fontSizeTiers = arrayOf(
-        intArrayOf(13, 16, 14),  // 小
-        intArrayOf(15, 18, 16),  // 中（默认）
-        intArrayOf(19, 22, 20)   // 大
+        intArrayOf(14, 16, 15),  // 小
+        intArrayOf(16, 18, 17),  // 中（默认）
+        intArrayOf(20, 22, 21)   // 大
     )
 
     /**
@@ -444,12 +444,12 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         }
         val selectLineColor = themeColor
         this.highlightRowColor = ThemeSettingActivity.resolveHighlightColor(this)
-        this.trySelectRowColor = (0x55000000.toInt() or (themeColor and 0x00FFFFFF))
+        this.trySelectRowColor = (0x55000000 or (themeColor and 0x00FFFFFF))
 
         // 字号由 applyFontSize() 读取 DataStore 后设置（下方），此处仅提供默认值兜底
-        this.normalRowTextSize = DisplayUtil.sp2px(this, 15)
+        this.normalRowTextSize = DisplayUtil.sp2px(this, 16)
         this.highlightRowTextSize = DisplayUtil.sp2px(this, 18)
-        this.trySelectRowTextSize = DisplayUtil.sp2px(this, 16)
+        this.trySelectRowTextSize = DisplayUtil.sp2px(this, 17)
 
         // 配置歌词显示样式
         // 正常大小时：高亮行恢复醒目颜色（高亮当前播放行）；
