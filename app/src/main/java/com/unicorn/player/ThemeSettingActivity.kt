@@ -51,6 +51,10 @@ class ThemeSettingActivity : BaseActivity() {
         const val HIGHLIGHT_MODE_SYSTEM = 0
         const val HIGHLIGHT_MODE_FIXED = 1
 
+        val SONG_ICON_MODE = intPreferencesKey("song_icon_mode")
+        const val SONG_ICON_MODE_DISC = 0
+        const val SONG_ICON_MODE_CASSETTE = 1
+
         private val COLOR_THEME_RES = intArrayOf(
             R.style.Theme_UnicornPlayer_Color1,
             R.style.Theme_UnicornPlayer_Color2,
@@ -108,6 +112,25 @@ class ThemeSettingActivity : BaseActivity() {
             val mode = prefs[HIGHLIGHT_COLOR_MODE] ?: HIGHLIGHT_MODE_SYSTEM
             return if (mode == HIGHLIGHT_MODE_SYSTEM) 0
             else prefs[HIGHLIGHT_COLOR_INDEX] ?: 0
+        }
+
+        fun resolveIconMode(context: Context): Int {
+            val prefs = runBlocking {
+                try {
+                    context.applicationContext.themeDataStore.data.first()
+                } catch (e: Exception) {
+                    null
+                }
+            } ?: return SONG_ICON_MODE_DISC
+            return prefs[SONG_ICON_MODE] ?: SONG_ICON_MODE_DISC
+        }
+
+        fun getIconModeSummary(context: Context): String {
+            val mode = resolveIconMode(context)
+            return when (mode) {
+                SONG_ICON_MODE_CASSETTE -> "磁带"
+                else -> "唱片"
+            }
         }
 
         fun resolveThemeColorIndex(context: Context): Int {
@@ -242,10 +265,26 @@ class ThemeSettingActivity : BaseActivity() {
                     summary = HighlightColorActivity.getHighlightColorSummary(this),
                     hasChevron = true,
                     isFirst = false,
+                    isLast = false,
+                    type = SettingItemType.NORMAL,
+                    onClick = {
+                        startActivity(
+                            android.content.Intent(
+                                this,
+                                HighlightColorActivity::class.java
+                            )
+                        )
+                    }
+                ),
+                SettingItem(
+                    key = "icon_mode",
+                    title = "图标外观",
+                    hasChevron = true,
+                    isFirst = false,
                     isLast = true,
                     type = SettingItemType.NORMAL,
                     onClick = {
-                        startActivity(android.content.Intent(this, HighlightColorActivity::class.java))
+                        startActivity(android.content.Intent(this, IconSettingActivity::class.java))
                     }
                 )
             )

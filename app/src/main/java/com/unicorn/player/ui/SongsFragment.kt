@@ -10,6 +10,7 @@ import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.R
+import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.adapter.SongAdapter
 import com.unicorn.player.databinding.FragmentSongsBinding
 import com.unicorn.player.model.Song
@@ -96,6 +97,11 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         super.onResume()
         observeMusicService()
         val service = host?.musicService
+        val newCassetteMode = ThemeSettingActivity.resolveIconMode(requireContext()) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
+        if (songAdapter.isCassetteMode != newCassetteMode) {
+            songAdapter.isCassetteMode = newCassetteMode
+            songAdapter.notifyDataSetChanged()
+        }
         if (service != null) {
             songAdapter.isPlaying = service.isPlaying.value == true
             songAdapter.currentPlayingSong = service.currentSong.value
@@ -231,6 +237,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
 
     private fun setupRecyclerView() {
         songAdapter = SongAdapter(this, this)
+        songAdapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(requireContext()) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         recyclerView = binding.recyclerView
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())

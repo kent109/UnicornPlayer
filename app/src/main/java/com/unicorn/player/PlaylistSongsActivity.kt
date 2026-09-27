@@ -191,6 +191,11 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
     override fun onResume() {
         super.onResume()
         observeMusicService()
+        val newCassetteMode = ThemeSettingActivity.resolveIconMode(this) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
+        if (songAdapter.isCassetteMode != newCassetteMode) {
+            songAdapter.isCassetteMode = newCassetteMode
+            songAdapter.notifyDataSetChanged()
+        }
         musicService?.let { service ->
             songAdapter.isPlaying = service.isPlaying.value == true
             songAdapter.currentPlayingSong = service.currentSong.value
@@ -260,6 +265,7 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
 
     private fun setupRecyclerView() {
         songAdapter = SongAdapter(this, this)
+        songAdapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(this) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(this@PlaylistSongsActivity)
             adapter = songAdapter

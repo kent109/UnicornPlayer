@@ -3,10 +3,14 @@ package com.unicorn.player.adapter
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.graphics.Rect
+import android.graphics.drawable.Animatable
 import android.view.LayoutInflater
 import android.view.TouchDelegate
+import android.view.View
 import android.view.ViewGroup
 import android.view.animation.LinearInterpolator
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -23,6 +27,12 @@ class SongAdapter(
 
     companion object {
         const val TAG = "SongAdapter"
+        private const val CASSETTE_WIDTH_DP = 64
+        private const val CASSETTE_HEIGHT_DP = 42
+        private const val DISC_WIDTH_DP = 48
+        private const val DISC_HEIGHT_DP = 48
+        private const val CASSETTE_ART_GAP_DP = 12
+        private const val DISC_ART_GAP_DP = 16
 
         private val DISC_PLAYING_DRAWABLES = intArrayOf(
             com.unicorn.player.R.drawable.ic_disc_playing_1,
@@ -33,14 +43,24 @@ class SongAdapter(
             com.unicorn.player.R.drawable.ic_disc_playing_6,
             com.unicorn.player.R.drawable.ic_disc_playing_7
         )
+
+        private val CASSETTE_PLAYING_DRAWABLES = intArrayOf(
+            com.unicorn.player.R.drawable.avd_cassette_play_1,
+            com.unicorn.player.R.drawable.avd_cassette_play_2,
+            com.unicorn.player.R.drawable.avd_cassette_play_3,
+            com.unicorn.player.R.drawable.avd_cassette_play_4,
+            com.unicorn.player.R.drawable.avd_cassette_play_5,
+            com.unicorn.player.R.drawable.avd_cassette_play_6,
+            com.unicorn.player.R.drawable.avd_cassette_play_7
+        )
     }
 
-    // 保存旋转角度，用于暂停/恢复动画时保持角度
-    private val rotationAngleMap = mutableMapOf<Long, Float>()
     private var recyclerView: RecyclerView? = null
 
-    // 标记是否暂停（MainActivity不可见时）
     var isPaused = false
+    var isCassetteMode = true
+
+    private val rotationAngleMap = mutableMapOf<Long, Float>()
 
     fun setRecyclerView(recyclerView: RecyclerView) {
         this.recyclerView = recyclerView
@@ -48,10 +68,6 @@ class SongAdapter(
 
     fun getRecyclerView(): RecyclerView? = recyclerView
 
-    /**
-     * 暂停当前播放歌曲的动画（保留角度）
-     * 遍历所有可见子视图，找到当前播放歌曲的 ViewHolder 并暂停动画
-     */
     fun pauseCurrentSongAnimation() {
         currentPlayingSong?.let { song ->
             val recyclerView = getRecyclerView() ?: return
@@ -63,10 +79,12 @@ class SongAdapter(
                     if (position != RecyclerView.NO_POSITION) {
                         val currentSong = getItem(position)
                         if (currentSong.id == song.id) {
-                            // 保存当前角度
-                            rotationAngleMap[song.id] = viewHolder.binding.albumArt.rotation
-                            // 暂停动画
-                            viewHolder.pauseRotationAnimation()
+                            if (isCassetteMode) {
+                                viewHolder.stopCassetteAnimation()
+                            } else {
+                                rotationAngleMap[song.id] = viewHolder.binding.albumArt.rotation
+                                viewHolder.pauseDiscAnimation()
+                            }
                             return
                         }
                     }
@@ -75,10 +93,6 @@ class SongAdapter(
         }
     }
 
-    /**
-     * 暂停所有可见 ViewHolder 的动画（MainActivity 进入后台时调用）
-     * 只对当前播放的歌曲暂停动画（保留角度），其他 item 直接停止
-     */
     fun pauseAllAnimations() {
         isPaused = true
         val recyclerView = getRecyclerView() ?: return
@@ -90,22 +104,24 @@ class SongAdapter(
                 if (position != RecyclerView.NO_POSITION) {
                     val song = getItem(position)
                     if (currentPlayingSong?.id == song.id) {
-                        // 保存当前旋转角度
-                        rotationAngleMap[song.id] = viewHolder.binding.albumArt.rotation
-                        // 暂停动画而不是停止，保留角度
-                        viewHolder.pauseRotationAnimation()
+                        if (isCassetteMode) {
+                            viewHolder.stopCassetteAnimation()
+                        } else {
+                            rotationAngleMap[song.id] = viewHolder.binding.albumArt.rotation
+                            viewHolder.pauseDiscAnimation()
+                        }
                     } else {
-                        // 非播放歌曲直接停止动画（重置状态）
-                        viewHolder.stopRotationAnimation()
+                        if (isCassetteMode) {
+                            viewHolder.resetToStaticCassette()
+                        } else {
+                            viewHolder.stopDiscAnimation()
+                        }
                     }
                 }
             }
         }
     }
 
-    /**
-     * 恢复当前播放歌曲的动画（从保存的角度继续）
-     */
     fun resumeCurrentSongAnimation() {
         if (!isPlaying || isPaused) return
         currentPlayingSong?.let { song ->
@@ -114,18 +130,18 @@ class SongAdapter(
                 val recyclerView = getRecyclerView() ?: return
                 val viewHolder = recyclerView.findViewHolderForAdapterPosition(currentPosition)
                 if (viewHolder is SongViewHolder) {
-                    // 从保存的角度继续旋转
-                    val savedAngle = rotationAngleMap[song.id] ?: 0f
-                    viewHolder.binding.albumArt.rotation = savedAngle
-                    viewHolder.startRotationAnimation()
+                    if (isCassetteMode) {
+                        viewHolder.startCassetteAnimation()
+                    } else {
+                        val savedAngle = rotationAngleMap[song.id] ?: 0f
+                        viewHolder.binding.albumArt.rotation = savedAngle
+                        viewHolder.startDiscAnimation()
+                    }
                 }
             }
         }
     }
 
-    /**
-     * 停止当前播放歌曲的动画（重置角度）
-     */
     fun stopCurrentSongAnimation() {
         currentPlayingSong?.let { song ->
             rotationAngleMap.remove(song.id)
@@ -134,7 +150,11 @@ class SongAdapter(
                 val recyclerView = getRecyclerView() ?: return
                 val viewHolder = recyclerView.findViewHolderForAdapterPosition(currentPosition)
                 if (viewHolder is SongViewHolder) {
-                    viewHolder.stopRotationAnimation()
+                    if (isCassetteMode) {
+                        viewHolder.resetToStaticCassette()
+                    } else {
+                        viewHolder.stopDiscAnimation()
+                    }
                 }
             }
         }
@@ -161,86 +181,116 @@ class SongAdapter(
 
         if (currentPlayingSong?.id == song.id) {
             if (isPaused) {
-                // MainActivity 不可见，恢复角度并暂停动画
-                val savedAngle = rotationAngleMap[song.id] ?: 0f
-                holder.binding.albumArt.rotation = savedAngle
-                holder.pauseRotationAnimation()
+                if (isCassetteMode) {
+                    holder.stopCassetteAnimation()
+                } else {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.pauseDiscAnimation()
+                }
             } else if (isPlaying) {
-                // 正在播放，恢复角度并启动动画
                 val currentPlayingPosition =
                     currentList.indexOfFirst { it.id == currentPlayingSong?.id }
                 if (currentPlayingPosition == position) {
-                    val savedAngle = rotationAngleMap[song.id] ?: 0f
-                    holder.binding.albumArt.rotation = savedAngle
-                    holder.startRotationAnimation()
+                    if (isCassetteMode) {
+                        holder.startCassetteAnimation()
+                    } else {
+                        val savedAngle = rotationAngleMap[song.id] ?: 0f
+                        holder.binding.albumArt.rotation = savedAngle
+                        holder.startDiscAnimation()
+                    }
                 }
             } else {
-                // 暂停播放，恢复保存的角度并暂停动画（不重置角度）
-                val savedAngle = rotationAngleMap[song.id] ?: 0f
-                holder.binding.albumArt.rotation = savedAngle
-                holder.pauseRotationAnimation()
+                if (isCassetteMode) {
+                    holder.stopCassetteAnimation()
+                } else {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.pauseDiscAnimation()
+                }
             }
         } else {
-            // 非播放歌曲直接停止动画（重置状态）
-            holder.stopRotationAnimation()
+            if (isCassetteMode) {
+                holder.resetToStaticCassette()
+            } else {
+                holder.stopDiscAnimation()
+            }
         }
     }
 
-    /**
-     * 当ViewHolder附加到窗口时调用 - 用于恢复动画（从不可见变为可见）
-     * 只对当前播放的歌曲恢复动画
-     */
     override fun onViewAttachedToWindow(holder: SongViewHolder) {
         super.onViewAttachedToWindow(holder)
         val position = holder.bindingAdapterPosition
         if (position == RecyclerView.NO_POSITION) return
 
-        // 如果处于暂停状态（MainActivity不可见），不启动动画
         if (isPaused) return
 
         val song = getItem(position)
         if (currentPlayingSong?.id == song.id) {
-            // 恢复保存的角度
-            val savedAngle = rotationAngleMap[song.id] ?: 0f
-            holder.binding.albumArt.rotation = savedAngle
             if (isPlaying) {
-                // 正在播放，确认位置匹配后启动动画
                 val currentPlayingPosition =
                     currentList.indexOfFirst { it.id == currentPlayingSong?.id }
                 if (currentPlayingPosition == position) {
-                    holder.startRotationAnimation()
+                    if (isCassetteMode) {
+                        holder.startCassetteAnimation()
+                    } else {
+                        val savedAngle = rotationAngleMap[song.id] ?: 0f
+                        holder.binding.albumArt.rotation = savedAngle
+                        holder.startDiscAnimation()
+                    }
                 }
             } else {
-                // 暂停播放，暂停动画（不重置角度）
-                holder.pauseRotationAnimation()
+                if (isCassetteMode) {
+                    holder.stopCassetteAnimation()
+                } else {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.pauseDiscAnimation()
+                }
             }
         } else {
-            // 非播放歌曲直接停止动画（重置状态）
-            holder.stopRotationAnimation()
+            if (isCassetteMode) {
+                holder.resetToStaticCassette()
+            } else {
+                holder.stopDiscAnimation()
+            }
         }
     }
 
-    /**
-     * 当ViewHolder从窗口分离时调用 - 用于暂停动画（从可见变为不可见）
-     * 只对当前播放的歌曲暂停动画，其他item直接停止
-     */
     override fun onViewDetachedFromWindow(holder: SongViewHolder) {
         super.onViewDetachedFromWindow(holder)
         val position = holder.bindingAdapterPosition
         if (position != RecyclerView.NO_POSITION) {
             val song = getItem(position)
             if (currentPlayingSong?.id == song.id) {
-                // 保存当前旋转角度（用于恢复）
-                rotationAngleMap[song.id] = holder.binding.albumArt.rotation
-                // 暂停动画而不是停止，保留角度
-                holder.pauseRotationAnimation()
+                if (isCassetteMode) {
+                    holder.stopCassetteAnimation()
+                } else {
+                    rotationAngleMap[song.id] = holder.binding.albumArt.rotation
+                    holder.pauseDiscAnimation()
+                }
             } else {
-                // 非播放歌曲直接停止动画（重置状态）
-                holder.stopRotationAnimation()
+                if (isCassetteMode) {
+                    holder.resetToStaticCassette()
+                } else {
+                    holder.stopDiscAnimation()
+                }
             }
         } else {
-            // 如果 position 是 NO_POSITION，停止所有动画以避免状态污染
-            holder.stopRotationAnimation()
+            if (isCassetteMode) {
+                holder.resetToStaticCassette()
+            } else {
+                holder.stopDiscAnimation()
+            }
+        }
+    }
+
+    override fun onViewRecycled(holder: SongViewHolder) {
+        super.onViewRecycled(holder)
+        if (isCassetteMode) {
+            holder.resetToStaticCassette()
+        } else {
+            holder.stopDiscAnimation()
         }
     }
 
@@ -248,11 +298,9 @@ class SongAdapter(
         internal val binding: ItemSongBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        // 保存当前动画的引用，以便可以停止
         private var currentAnimator: ObjectAnimator? = null
 
         init {
-            // 增大 btnMore 的点击区域
             binding.btnMore.post {
                 val rect = Rect()
                 binding.btnMore.getHitRect(rect)
@@ -271,34 +319,46 @@ class SongAdapter(
                 artistName.text = song.artist
                 albumName.text = song.album
 
-                // 设置品质标签文字
                 quality.setText(song.quality)
 
-                // 获取context
                 val context = binding.root.context
+                val density = context.resources.displayMetrics.density
 
-                // 检查是否是当前播放的歌曲
+                updateAlbumArtLayout(density)
+
+                val gapPx = (if (isCassetteMode) CASSETTE_ART_GAP_DP else DISC_ART_GAP_DP) * density
+                updateStartMarginRelativeToAlbumArt(songTitle, gapPx)
+                updateStartMarginRelativeToAlbumArt(artistName, gapPx)
+                updateStartMarginRelativeToAlbumArt(albumName, gapPx)
+
                 val isCurrentPlaying = currentPlayingSong?.id == song.id
 
-                // 动态设置颜色
                 if (isCurrentPlaying) {
                     val highlightColor = ThemeSettingActivity.resolveHighlightColor(context)
                     songTitle.setTextColor(highlightColor)
                     artistName.setTextColor(highlightColor)
                     albumName.setTextColor(highlightColor)
-                    val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
-                    val resId = DISC_PLAYING_DRAWABLES.getOrElse(colorIndex) { DISC_PLAYING_DRAWABLES[0] }
-                    albumArt.isSelected = false
-                    albumArt.setImageResource(resId)
+                    if (isCassetteMode) {
+                        val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
+                        val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
+                        albumArt.setImageResource(resId)
+                    } else {
+                        val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
+                        val resId = DISC_PLAYING_DRAWABLES.getOrElse(colorIndex) { DISC_PLAYING_DRAWABLES[0] }
+                        albumArt.setImageResource(resId)
+                    }
                 } else {
                     songTitle.setTextColor(context.getColor(com.unicorn.player.R.color.onSurface))
                     artistName.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
                     albumName.setTextColor(context.getColor(com.unicorn.player.R.color.onSurfaceVariant))
-                    albumArt.isSelected = false
-                    albumArt.setImageResource(com.unicorn.player.R.drawable.ic_disc)
+                    if (isCassetteMode) {
+                        resetToStaticCassette()
+                    } else {
+                        stopDiscAnimation()
+                        albumArt.setImageResource(com.unicorn.player.R.drawable.ic_disc)
+                    }
                 }
 
-                // 品质标签颜色根据音频质量固定设置
                 val qualityColor = when (song.quality) {
                     "SQ" -> context.getColor(com.unicorn.player.R.color.quality_sq)
                     "HQ" -> context.getColor(com.unicorn.player.R.color.quality_hq)
@@ -307,8 +367,7 @@ class SongAdapter(
                 }
                 quality.setColor(qualityColor)
 
-                // 只对非当前播放的歌曲重置旋转角度
-                if (!isCurrentPlaying) {
+                if (!isCurrentPlaying && !isCassetteMode) {
                     albumArt.rotation = 0f
                 }
 
@@ -316,19 +375,47 @@ class SongAdapter(
                     listener.onSongClick(song, position)
                 }
 
-                // 更多选项按钮点击事件
                 btnMore.setOnClickListener {
                     moreClickListener?.onMoreClick(song, position)
                 }
             }
         }
 
-        /**
-         * 开始旋转动画（从当前角度继续）
-         */
-        fun startRotationAnimation() {
-            if (currentAnimator != null) return
+        private fun updateAlbumArtLayout(density: Float) {
+            val widthPx = ((if (isCassetteMode) CASSETTE_WIDTH_DP else DISC_WIDTH_DP) * density).toInt()
+            val heightPx = ((if (isCassetteMode) CASSETTE_HEIGHT_DP else DISC_HEIGHT_DP) * density).toInt()
+            val params = binding.albumArt.layoutParams
+            params.width = widthPx
+            params.height = heightPx
+            binding.albumArt.layoutParams = params
+        }
 
+        private fun updateStartMarginRelativeToAlbumArt(view: View, gapPx: Float) {
+            val params = view.layoutParams as ConstraintLayout.LayoutParams
+            params.marginStart = gapPx.toInt()
+            view.layoutParams = params
+        }
+
+        fun startCassetteAnimation() {
+            val context = binding.albumArt.context
+            val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
+            val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
+            val avd = AppCompatResources.getDrawable(context, resId)
+            binding.albumArt.setImageDrawable(avd)
+            (avd as? Animatable)?.start()
+        }
+
+        fun stopCassetteAnimation() {
+            (binding.albumArt.drawable as? Animatable)?.stop()
+        }
+
+        fun resetToStaticCassette() {
+            (binding.albumArt.drawable as? Animatable)?.stop()
+            binding.albumArt.setImageResource(com.unicorn.player.R.drawable.ic_cassette_photo)
+        }
+
+        fun startDiscAnimation() {
+            if (currentAnimator != null) return
             val currentRotation = binding.albumArt.rotation
             val animator = ObjectAnimator.ofFloat(
                 binding.albumArt,
@@ -343,22 +430,14 @@ class SongAdapter(
             currentAnimator = animator
         }
 
-        /**
-         * 暂停旋转动画（保留角度）
-         * 注意：只 cancel 动画，不修改 rotationAngleMap —— 角度由调用方在 cancel 前负责保存。
-         * 重绑定 holder 时 albumArt.rotation 为 0f，若在此写入 map 会覆盖真实角度。
-         */
-        fun pauseRotationAnimation() {
+        fun pauseDiscAnimation() {
             currentAnimator?.let {
                 it.cancel()
                 currentAnimator = null
             }
         }
 
-        /**
-         * 停止旋转动画（重置角度）
-         */
-        fun stopRotationAnimation() {
+        fun stopDiscAnimation() {
             currentAnimator?.cancel()
             currentAnimator = null
             binding.albumArt.rotation = 0f

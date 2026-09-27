@@ -2,10 +2,13 @@ package com.unicorn.player.adapter
 
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.graphics.drawable.Animatable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.LinearInterpolator
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -14,17 +17,18 @@ import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemSongBinding
 import com.unicorn.player.model.Song
 
-/**
- * 播放队列适配器（播放页 ivSongList 弹出的 BottomSheetDialog 使用）。
- * 复用 item_song 布局，但隐藏更多按钮；
- * 当前播放歌曲高亮（文字 + 唱片图标使用主题高亮色），唱片图标带旋转动画，
- * 行为与 SongAdapter 一致：item 可见时旋转、滚动出屏/弹窗关闭/播放暂停时暂停并保留角度。
- */
 class PlayQueueAdapter(
     private val onSongClick: (Song, Int) -> Unit
 ) : ListAdapter<Song, PlayQueueAdapter.QueueViewHolder>(QueueDiffCallback()) {
 
     companion object {
+        private const val CASSETTE_WIDTH_DP = 64
+        private const val CASSETTE_HEIGHT_DP = 42
+        private const val DISC_WIDTH_DP = 48
+        private const val DISC_HEIGHT_DP = 48
+        private const val CASSETTE_ART_GAP_DP = 12
+        private const val DISC_ART_GAP_DP = 16
+
         private val DISC_PLAYING_DRAWABLES = intArrayOf(
             R.drawable.ic_disc_playing_1,
             R.drawable.ic_disc_playing_2,
@@ -34,21 +38,24 @@ class PlayQueueAdapter(
             R.drawable.ic_disc_playing_6,
             R.drawable.ic_disc_playing_7
         )
+
+        private val CASSETTE_PLAYING_DRAWABLES = intArrayOf(
+            R.drawable.avd_cassette_play_1,
+            R.drawable.avd_cassette_play_2,
+            R.drawable.avd_cassette_play_3,
+            R.drawable.avd_cassette_play_4,
+            R.drawable.avd_cassette_play_5,
+            R.drawable.avd_cassette_play_6,
+            R.drawable.avd_cassette_play_7
+        )
     }
 
-    /** 当前正在播放的歌曲，用于高亮 */
     var currentPlayingSong: Song? = null
-
-    /** 当前是否正在播放，决定旋转动画启停 */
     var isPlaying: Boolean = false
-
-    /** 宿主不可见时为 true，可见 item 也保持动画暂停（与 SongAdapter 一致） */
     var isPaused: Boolean = false
+    var isCassetteMode = true
 
-    // 保存旋转角度，暂停/恢复时保持角度连续
     private val rotationAngleMap = mutableMapOf<Long, Float>()
-
-    // 挂载的 RecyclerView，用于遍历可见 holder（弹窗关闭后随视图一起释放）
     private var recyclerView: RecyclerView? = null
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
@@ -72,17 +79,38 @@ class PlayQueueAdapter(
         val song = getItem(position)
         holder.bind(song, position)
 
-        // 动画状态与 SongAdapter.onBindViewHolder 保持一致
         if (currentPlayingSong?.id == song.id) {
-            val savedAngle = rotationAngleMap[song.id] ?: 0f
-            holder.binding.albumArt.rotation = savedAngle
-            when {
-                isPaused -> holder.pauseRotationAnimation()
-                isPlaying -> holder.startRotationAnimation()
-                else -> holder.pauseRotationAnimation()
+            if (isPaused) {
+                if (isCassetteMode) {
+                    holder.stopCassetteAnimation()
+                } else {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.pauseDiscAnimation()
+                }
+            } else if (isPlaying) {
+                if (isCassetteMode) {
+                    holder.startCassetteAnimation()
+                } else {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.startDiscAnimation()
+                }
+            } else {
+                if (isCassetteMode) {
+                    holder.stopCassetteAnimation()
+                } else {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.pauseDiscAnimation()
+                }
             }
         } else {
-            holder.stopRotationAnimation()
+            if (isCassetteMode) {
+                holder.resetToStaticCassette()
+            } else {
+                holder.stopDiscAnimation()
+            }
         }
     }
 
@@ -91,12 +119,30 @@ class PlayQueueAdapter(
         val position = holder.bindingAdapterPosition
         if (position == RecyclerView.NO_POSITION || isPaused) return
         val song = getItem(position)
-        if (currentPlayingSong?.id == song.id && isPlaying) {
-            val savedAngle = rotationAngleMap[song.id] ?: 0f
-            holder.binding.albumArt.rotation = savedAngle
-            holder.startRotationAnimation()
+        if (currentPlayingSong?.id == song.id) {
+            if (isPlaying) {
+                if (isCassetteMode) {
+                    holder.startCassetteAnimation()
+                } else {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.startDiscAnimation()
+                }
+            } else {
+                if (isCassetteMode) {
+                    holder.stopCassetteAnimation()
+                } else {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.pauseDiscAnimation()
+                }
+            }
         } else {
-            holder.stopRotationAnimation()
+            if (isCassetteMode) {
+                holder.resetToStaticCassette()
+            } else {
+                holder.stopDiscAnimation()
+            }
         }
     }
 
@@ -106,29 +152,42 @@ class PlayQueueAdapter(
         if (position != RecyclerView.NO_POSITION) {
             val song = getItem(position)
             if (currentPlayingSong?.id == song.id) {
-                // 保存角度后暂停，重新滑入时从该角度继续
-                rotationAngleMap[song.id] = holder.binding.albumArt.rotation
+                if (isCassetteMode) {
+                    holder.stopCassetteAnimation()
+                } else {
+                    rotationAngleMap[song.id] = holder.binding.albumArt.rotation
+                    holder.pauseDiscAnimation()
+                }
+            } else {
+                if (isCassetteMode) {
+                    holder.resetToStaticCassette()
+                } else {
+                    holder.stopDiscAnimation()
+                }
+            }
+        } else {
+            if (isCassetteMode) {
+                holder.resetToStaticCassette()
+            } else {
+                holder.stopDiscAnimation()
             }
         }
-        holder.pauseRotationAnimation()
     }
 
-    /**
-     * 暂停当前播放歌曲的动画（保留角度）。遍历可见 holder 查找
-     */
     fun pauseCurrentSongAnimation() {
         val song = currentPlayingSong ?: return
         notifyVisibleHolders { holder, position ->
             if (getItem(position).id == song.id) {
-                rotationAngleMap[song.id] = holder.binding.albumArt.rotation
-                holder.pauseRotationAnimation()
+                if (isCassetteMode) {
+                    holder.stopCassetteAnimation()
+                } else {
+                    rotationAngleMap[song.id] = holder.binding.albumArt.rotation
+                    holder.pauseDiscAnimation()
+                }
             }
         }
     }
 
-    /**
-     * 恢复当前播放歌曲的动画（从保存的角度继续）
-     */
     fun resumeCurrentSongAnimation() {
         if (!isPlaying || isPaused) return
         val song = currentPlayingSong ?: return
@@ -136,9 +195,13 @@ class PlayQueueAdapter(
         if (position == -1) return
         notifyVisibleHolders { holder, holderPosition ->
             if (holderPosition == position) {
-                val savedAngle = rotationAngleMap[song.id] ?: 0f
-                holder.binding.albumArt.rotation = savedAngle
-                holder.startRotationAnimation()
+                if (isCassetteMode) {
+                    holder.startCassetteAnimation()
+                } else {
+                    val savedAngle = rotationAngleMap[song.id] ?: 0f
+                    holder.binding.albumArt.rotation = savedAngle
+                    holder.startDiscAnimation()
+                }
             }
         }
     }
@@ -165,7 +228,6 @@ class PlayQueueAdapter(
         private var currentAnimator: ObjectAnimator? = null
 
         init {
-            // 播放队列不提供更多操作，隐藏更多按钮
             binding.btnMore.visibility = View.GONE
         }
 
@@ -177,6 +239,15 @@ class PlayQueueAdapter(
                 quality.setText(song.quality)
 
                 val context = binding.root.context
+                val density = context.resources.displayMetrics.density
+
+                updateAlbumArtLayout(density)
+
+                val gapPx = (if (isCassetteMode) CASSETTE_ART_GAP_DP else DISC_ART_GAP_DP) * density
+                updateStartMarginRelativeToAlbumArt(songTitle, gapPx)
+                updateStartMarginRelativeToAlbumArt(artistName, gapPx)
+                updateStartMarginRelativeToAlbumArt(albumName, gapPx)
+
                 val isCurrentPlaying = currentPlayingSong?.id == song.id
 
                 if (isCurrentPlaying) {
@@ -184,18 +255,29 @@ class PlayQueueAdapter(
                     songTitle.setTextColor(highlightColor)
                     artistName.setTextColor(highlightColor)
                     albumName.setTextColor(highlightColor)
-                    val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
-                    val resId =
-                        DISC_PLAYING_DRAWABLES.getOrElse(colorIndex) { DISC_PLAYING_DRAWABLES[0] }
-                    albumArt.setImageResource(resId)
+                    if (isCassetteMode) {
+                        val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
+                        val resId =
+                            CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
+                        albumArt.setImageResource(resId)
+                    } else {
+                        val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
+                        val resId =
+                            DISC_PLAYING_DRAWABLES.getOrElse(colorIndex) { DISC_PLAYING_DRAWABLES[0] }
+                        albumArt.setImageResource(resId)
+                    }
                 } else {
                     songTitle.setTextColor(context.getColor(R.color.onSurface))
                     artistName.setTextColor(context.getColor(R.color.onSurfaceVariant))
                     albumName.setTextColor(context.getColor(R.color.onSurfaceVariant))
-                    albumArt.setImageResource(R.drawable.ic_disc)
+                    if (isCassetteMode) {
+                        resetToStaticCassette()
+                    } else {
+                        stopDiscAnimation()
+                        albumArt.setImageResource(R.drawable.ic_disc)
+                    }
                 }
 
-                // 品质标签颜色根据音频质量固定设置
                 val qualityColor = when (song.quality) {
                     "SQ" -> context.getColor(R.color.quality_sq)
                     "HQ" -> context.getColor(R.color.quality_hq)
@@ -204,13 +286,50 @@ class PlayQueueAdapter(
                 }
                 quality.setColor(qualityColor)
 
+                if (!isCurrentPlaying && !isCassetteMode) {
+                    albumArt.rotation = 0f
+                }
+
                 root.setOnClickListener {
                     onSongClick(song, position)
                 }
             }
         }
 
-        fun startRotationAnimation() {
+        private fun updateAlbumArtLayout(density: Float) {
+            val widthPx = ((if (isCassetteMode) CASSETTE_WIDTH_DP else DISC_WIDTH_DP) * density).toInt()
+            val heightPx = ((if (isCassetteMode) CASSETTE_HEIGHT_DP else DISC_HEIGHT_DP) * density).toInt()
+            val params = binding.albumArt.layoutParams
+            params.width = widthPx
+            params.height = heightPx
+            binding.albumArt.layoutParams = params
+        }
+
+        private fun updateStartMarginRelativeToAlbumArt(view: View, gapPx: Float) {
+            val params = view.layoutParams as ConstraintLayout.LayoutParams
+            params.marginStart = gapPx.toInt()
+            view.layoutParams = params
+        }
+
+        fun startCassetteAnimation() {
+            val context = binding.albumArt.context
+            val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
+            val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
+            val avd = AppCompatResources.getDrawable(context, resId)
+            binding.albumArt.setImageDrawable(avd)
+            (avd as? Animatable)?.start()
+        }
+
+        fun stopCassetteAnimation() {
+            (binding.albumArt.drawable as? Animatable)?.stop()
+        }
+
+        fun resetToStaticCassette() {
+            (binding.albumArt.drawable as? Animatable)?.stop()
+            binding.albumArt.setImageResource(R.drawable.ic_cassette_photo)
+        }
+
+        fun startDiscAnimation() {
             if (currentAnimator != null) return
             val currentRotation = binding.albumArt.rotation
             val animator = ObjectAnimator.ofFloat(
@@ -226,12 +345,12 @@ class PlayQueueAdapter(
             currentAnimator = animator
         }
 
-        fun pauseRotationAnimation() {
+        fun pauseDiscAnimation() {
             currentAnimator?.cancel()
             currentAnimator = null
         }
 
-        fun stopRotationAnimation() {
+        fun stopDiscAnimation() {
             currentAnimator?.cancel()
             currentAnimator = null
             binding.albumArt.rotation = 0f

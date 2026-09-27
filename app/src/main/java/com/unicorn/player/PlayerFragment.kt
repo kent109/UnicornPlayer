@@ -35,7 +35,6 @@ import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.util.AudioTagEditor
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -299,6 +298,7 @@ class PlayerFragment : Fragment() {
             service.updateNotification()
             bottomSheetDialog.dismiss()
         }
+        adapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(requireContext()) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         adapter.currentPlayingSong = service.currentSong.value
         adapter.isPlaying = service.isPlaying.value == true
         adapter.submitList(songs)

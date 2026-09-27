@@ -124,6 +124,11 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
         // 重新注册观察者（onPause 中已移除），LiveData 会立即把当前值投递给新观察者，
         // 触发 notifyDataSetChanged()，刷新高亮与动画，使列表与当前播放歌曲一致。
         observeMusicService()
+        val newCassetteMode = ThemeSettingActivity.resolveIconMode(this) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
+        if (songAdapter.isCassetteMode != newCassetteMode) {
+            songAdapter.isCassetteMode = newCassetteMode
+            songAdapter.notifyDataSetChanged()
+        }
         musicService?.let { service ->
             songAdapter.isPlaying = service.isPlaying.value == true
             songAdapter.currentPlayingSong = service.currentSong.value
@@ -187,6 +192,7 @@ class ArtistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, 
 
     private fun setupRecyclerView() {
         songAdapter = SongAdapter(this, this)
+        songAdapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(this) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(this@ArtistSongsActivity)
             adapter = songAdapter
