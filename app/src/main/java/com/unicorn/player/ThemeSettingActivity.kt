@@ -121,8 +121,8 @@ class ThemeSettingActivity : BaseActivity() {
                 } catch (e: Exception) {
                     null
                 }
-            } ?: return SONG_ICON_MODE_DISC
-            return prefs[SONG_ICON_MODE] ?: SONG_ICON_MODE_DISC
+            } ?: return SONG_ICON_MODE_CASSETTE
+            return prefs[SONG_ICON_MODE] ?: SONG_ICON_MODE_CASSETTE
         }
 
         fun getIconModeSummary(context: Context): String {

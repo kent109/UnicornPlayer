@@ -21,8 +21,8 @@ class IconSettingActivity : BaseActivity() {
     }
 
     private lateinit var binding: ActivityIconSettingBinding
-    private var currentMode = ThemeSettingActivity.SONG_ICON_MODE_DISC
-    private val optionViews = mutableListOf<Pair<View, ImageView>>()
+    private var currentMode = ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
+    private val optionViews = mutableListOf<Triple<View, ImageView, Int>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,14 +68,14 @@ class IconSettingActivity : BaseActivity() {
 
         val options = listOf(
             IconOption(
-                ThemeSettingActivity.SONG_ICON_MODE_DISC,
-                "唱片",
-                R.drawable.ic_disc_normal
-            ),
-            IconOption(
                 ThemeSettingActivity.SONG_ICON_MODE_CASSETTE,
                 "磁带",
                 R.drawable.ic_cassette_photo
+            ),
+            IconOption(
+                ThemeSettingActivity.SONG_ICON_MODE_DISC,
+                "唱片",
+                R.drawable.ic_disc_normal
             )
         )
 
@@ -103,7 +103,7 @@ class IconSettingActivity : BaseActivity() {
             }
 
             contentContainer.addView(itemView)
-            optionViews.add(itemView to ivCheck)
+            optionViews.add(Triple(itemView, ivCheck, option.mode))
 
             if (index < options.size - 1) {
                 val divider =
@@ -138,13 +138,8 @@ class IconSettingActivity : BaseActivity() {
         val highlightColor = ThemeSettingActivity.resolveHighlightColor(this)
         val normalColor = ContextCompat.getColor(this, R.color.onSurface)
 
-        for ((view, ivCheck) in optionViews) {
+        for ((view, ivCheck, mode) in optionViews) {
             val tvName = view.findViewById<TextView>(R.id.tvName)
-            val mode = if (view == optionViews[0].first) {
-                ThemeSettingActivity.SONG_ICON_MODE_DISC
-            } else {
-                ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
-            }
             val isSelected = currentMode == mode
             updateOptionState(ivCheck, isSelected)
             tvName.setTextColor(if (isSelected) highlightColor else normalColor)
