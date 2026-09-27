@@ -219,6 +219,7 @@ class LyricsOptionsActivity : BaseActivity() {
         // 设置摘要
         val tvSummary = view.findViewById<android.widget.TextView>(R.id.tvSummary)
         if (item.summary != null) {
+            view.findViewById<LinearLayout>(R.id.summaryRow).visibility = View.VISIBLE
             tvSummary.text = item.summary
             tvSummary.visibility = View.VISIBLE
             tvSummary.tag = "${item.key}_summary"

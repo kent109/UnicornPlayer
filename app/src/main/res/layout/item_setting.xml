@@ -22,15 +22,31 @@
             android:textColor="@color/onSurface"
             android:textSize="16sp" />
 
-        <TextView
-            android:id="@+id/tvSummary"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:id="@+id/summaryRow"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:alpha="0.6"
-            android:paddingTop="2dp"
-            android:textColor="@color/onSurfaceVariant"
-            android:textSize="13sp"
-            android:visibility="gone" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvSummary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:alpha="0.6"
+                android:textColor="@color/onSurfaceVariant"
+                android:textSize="13sp" />
+
+            <View
+                android:id="@+id/colorPreview"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:layout_marginStart="6dp"
+                android:layout_marginTop="1dp"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
     </LinearLayout>
 

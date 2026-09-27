@@ -1,6 +1,7 @@
 package com.unicorn.player
 
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -109,6 +110,22 @@ class ThemeSettingActivity : BaseActivity() {
             else prefs[HIGHLIGHT_COLOR_INDEX] ?: 0
         }
 
+        fun resolveThemeColorIndex(context: Context): Int {
+            val prefs = runBlocking {
+                try {
+                    context.applicationContext.themeDataStore.data.first()
+                } catch (e: Exception) {
+                    null
+                }
+            } ?: return 0
+            val mode = prefs[THEME_COLOR_MODE] ?: COLOR_MODE_SYSTEM
+            return when (mode) {
+                COLOR_MODE_FIXED -> prefs[THEME_COLOR_INDEX] ?: 0
+                COLOR_MODE_RANDOM -> prefs[THEME_COLOR_INDEX] ?: 0
+                else -> 0
+            }
+        }
+
         fun getHighlightColorSummary(context: Context): String {
             val mode = runBlocking {
                 try {
@@ -168,6 +185,25 @@ class ThemeSettingActivity : BaseActivity() {
         binding.settingsContainer
             .findViewWithTag<android.widget.TextView>("highlight_color_summary")
             ?.text = HighlightColorActivity.getHighlightColorSummary(this)
+        updateColorPreview("theme_color")
+        updateColorPreview("highlight_color")
+    }
+
+    private fun updateColorPreview(key: String) {
+        val preview = binding.settingsContainer.findViewWithTag<View>("${key}_color_preview")
+            ?: return
+        val color = when (key) {
+            "theme_color" -> {
+                val idx = resolveThemeColorIndex(this)
+                getColorValues(this).getOrElse(idx) { getColorValues(this)[0] } or 0xFF000000.toInt()
+            }
+
+            "highlight_color" -> resolveHighlightColor(this)
+            else -> return
+        }
+        preview.background = GradientDrawable().apply {
+            setColor(color)
+        }
     }
 
     private fun setupSettingsItems() {
@@ -266,11 +302,30 @@ class ThemeSettingActivity : BaseActivity() {
 
         view.findViewById<android.widget.TextView>(R.id.tvTitle).text = item.title
 
+        val summaryRow = view.findViewById<LinearLayout>(R.id.summaryRow)
         val tvSummary = view.findViewById<android.widget.TextView>(R.id.tvSummary)
         if (item.summary != null) {
+            summaryRow.visibility = View.VISIBLE
             tvSummary.text = item.summary
-            tvSummary.visibility = View.VISIBLE
             tvSummary.tag = "${item.key}_summary"
+
+            val colorPreview = view.findViewById<View>(R.id.colorPreview)
+            if (item.key == "theme_color" || item.key == "highlight_color") {
+                colorPreview.visibility = View.VISIBLE
+                val color = when (item.key) {
+                    "theme_color" -> {
+                        val idx = resolveThemeColorIndex(this)
+                        getColorValues(this).getOrElse(idx) { getColorValues(this)[0] } or 0xFF000000.toInt()
+                    }
+
+                    "highlight_color" -> resolveHighlightColor(this)
+                    else -> 0
+                }
+                colorPreview.background = GradientDrawable().apply {
+                    setColor(color)
+                }
+                colorPreview.tag = "${item.key}_color_preview"
+            }
         }
 
         val ivChevron = view.findViewById<android.widget.ImageView>(R.id.ivChevron)
