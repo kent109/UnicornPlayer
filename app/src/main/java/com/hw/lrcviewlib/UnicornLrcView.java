@@ -41,7 +41,7 @@ public class UnicornLrcView extends View implements ILrcView {
     /**
      * 断句后左右各预留的视口宽度比例（高亮行与普通行共用的安全边距）
      */
-    private static final float ROW_EDGE_PADDING_RATIO = 0.06f;
+    private static final float ROW_EDGE_PADDING_RATIO = 0.05f;
 
     private String NoDataMessage = "加载歌词中";
     private LrcViewContext lrcContext;
@@ -366,7 +366,7 @@ public class UnicornLrcView extends View implements ILrcView {
                         r.getShowRows().add(showRow);
                     }
                 } else {
-                    int showRowHeight = this.getTextFontHeight(this.lrcContext.NormalRowPaint, "A") * 2;
+                    int showRowHeight = (int) (this.getTextFontHeight(this.lrcContext.NormalRowPaint, "A") * 0.1);
                     r.ContentHeight = r.ContentHeight + showRowHeight + this.getLrcSetting().LinePadding;
                     LrcShowRow showRow = new LrcShowRow(index++, " ", showRowHeight, this.getLrcSetting().LinePadding);
                     r.getShowRows().add(showRow);
