@@ -3,6 +3,7 @@ package com.unicorn.player.ui
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.R
@@ -17,6 +18,13 @@ class MultiChoiceFragmentAdapter(
     private var selectedSongIds: MutableSet<Long>,
     private var fragmentType: Int = 0
 ) : ListAdapter<Any, MultiChoiceFragmentAdapter.ViewHolder>(DiffCallback()) {
+
+    companion object {
+        private const val CASSETTE_ART_GAP_DP = 12
+        private const val DISC_ART_GAP_DP = 16
+    }
+
+    var isCassetteMode = true
 
     interface OnCheckChangedListener {
         fun onCheckChanged()
@@ -38,17 +46,32 @@ class MultiChoiceFragmentAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(getItem(position))
+        holder.bind(getItem(position), isCassetteMode)
     }
 
     inner class ViewHolder(
         private val binding: ItemMultiChoiceBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(item: Any) {
+        fun bind(item: Any, isCassetteMode: Boolean) {
             when (item) {
                 is Song -> {
                     binding.ivIcon.imageTintList = null
+                    val density = binding.root.resources.displayMetrics.density
+                    val widthPx = ((if (isCassetteMode) 64 else 48) * density).toInt()
+                    val heightPx = ((if (isCassetteMode) 42 else 48) * density).toInt()
+                    val params = binding.ivIcon.layoutParams
+                    params.width = widthPx
+                    params.height = heightPx
+                    binding.ivIcon.layoutParams = params
+                    if (isCassetteMode) {
+                        binding.ivIcon.setImageResource(R.drawable.ic_cassette_photo)
+                    } else {
+                        binding.ivIcon.setImageResource(R.drawable.ic_disc)
+                    }
+                    val gapPx = (if (isCassetteMode) CASSETTE_ART_GAP_DP else DISC_ART_GAP_DP) * density
+                    updateStartMarginRelativeToAlbumArt(binding.tvTitle, gapPx)
+                    updateStartMarginRelativeToAlbumArt(binding.subtitleLayout, gapPx)
                     binding.tvTitle.text = item.title
                     binding.tvSubtitle.text = item.artist
                     binding.tvSubtitle2.visibility = View.VISIBLE
@@ -56,18 +79,30 @@ class MultiChoiceFragmentAdapter(
                 }
 
                 is Artist -> {
+                    val params = binding.ivIcon.layoutParams
+                    params.width = ViewGroup.LayoutParams.WRAP_CONTENT
+                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    binding.ivIcon.layoutParams = params
                     binding.ivIcon.setImageResource(R.drawable.ic_artist)
                     binding.tvTitle.text = item.name
                     binding.tvSubtitle.text = "${item.songCount} 首"
                 }
 
                 is Album -> {
+                    val params = binding.ivIcon.layoutParams
+                    params.width = ViewGroup.LayoutParams.WRAP_CONTENT
+                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    binding.ivIcon.layoutParams = params
                     binding.ivIcon.setImageResource(R.drawable.ic_album)
                     binding.tvTitle.text = item.name
                     binding.tvSubtitle.text = "${item.artist} - ${"${item.songCount} 首"}"
                 }
 
                 is PlaylistInfo -> {
+                    val params = binding.ivIcon.layoutParams
+                    params.width = ViewGroup.LayoutParams.WRAP_CONTENT
+                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    binding.ivIcon.layoutParams = params
                     binding.ivIcon.setImageResource(R.drawable.ic_playlist)
                     binding.tvTitle.text = item.name
                     binding.tvSubtitle.text = "${item.songCount} 首"
@@ -123,6 +158,12 @@ class MultiChoiceFragmentAdapter(
             itemView.setOnClickListener {
                 binding.checkBox.isChecked = !binding.checkBox.isChecked
             }
+        }
+
+        private fun updateStartMarginRelativeToAlbumArt(view: View, gapPx: Float) {
+            val params = view.layoutParams as ConstraintLayout.LayoutParams
+            params.marginStart = gapPx.toInt()
+            view.layoutParams = params
         }
     }
 

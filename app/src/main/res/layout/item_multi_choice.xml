@@ -12,16 +12,17 @@
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:background="@color/surface"
+        android:paddingStart="12dp"
         android:paddingTop="3dp"
+        android:paddingEnd="12dp"
         android:paddingBottom="3dp">
 
         <ImageView
             android:id="@+id/ivIcon"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
             android:contentDescription="图标"
-            android:scaleType="centerCrop"
+            android:scaleType="fitCenter"
             android:src="@drawable/ic_disc"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintStart_toStartOf="parent"

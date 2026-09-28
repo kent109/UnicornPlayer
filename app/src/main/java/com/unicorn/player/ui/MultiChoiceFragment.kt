@@ -9,6 +9,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.R
+import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.FragmentMultiChoiceBinding
 import com.unicorn.player.model.Album
 import com.unicorn.player.model.Artist
@@ -173,6 +174,7 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
 
     private fun setupRecyclerView() {
         adapter = MultiChoiceFragmentAdapter(selectedIds, selectedSongIds, currentFragmentType)
+        adapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(requireContext()) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         adapter.setOnCheckChangedListener(this)
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
