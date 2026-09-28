@@ -75,7 +75,7 @@ class IconSettingActivity : BaseActivity() {
             IconOption(
                 ThemeSettingActivity.SONG_ICON_MODE_DISC,
                 "唱片",
-                R.drawable.ic_disc_normal
+                R.drawable.ic_disc_normal_s
             )
         )
 
