@@ -165,4 +165,7 @@ dependencies {
 
     // TagLib
     implementation 'io.github.amanrajaryan:TagLib:1.0.2'
+
+    // Kyrie
+    implementation 'com.github.alexjlockwood:kyrie:0.2.1'
 }

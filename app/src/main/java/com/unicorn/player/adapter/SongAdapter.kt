@@ -3,17 +3,16 @@ package com.unicorn.player.adapter
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.graphics.Rect
-import android.graphics.drawable.Animatable
 import android.view.LayoutInflater
 import android.view.TouchDelegate
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.LinearInterpolator
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.unicorn.player.util.KyrieDrawable
 import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemSongBinding
 import com.unicorn.player.model.Song
@@ -61,6 +60,7 @@ class SongAdapter(
     var isCassetteMode = true
 
     private val rotationAngleMap = mutableMapOf<Long, Float>()
+    private val cassettePauseTimeMap = mutableMapOf<Long, Long>()
 
     fun setRecyclerView(recyclerView: RecyclerView) {
         this.recyclerView = recyclerView
@@ -80,7 +80,7 @@ class SongAdapter(
                         val currentSong = getItem(position)
                         if (currentSong.id == song.id) {
                             if (isCassetteMode) {
-                                viewHolder.stopCassetteAnimation()
+                                cassettePauseTimeMap[song.id] = viewHolder.pauseCassetteAnimation()
                             } else {
                                 rotationAngleMap[song.id] = viewHolder.binding.albumArt.rotation
                                 viewHolder.pauseDiscAnimation()
@@ -105,7 +105,7 @@ class SongAdapter(
                     val song = getItem(position)
                     if (currentPlayingSong?.id == song.id) {
                         if (isCassetteMode) {
-                            viewHolder.stopCassetteAnimation()
+                            cassettePauseTimeMap[song.id] = viewHolder.pauseCassetteAnimation()
                         } else {
                             rotationAngleMap[song.id] = viewHolder.binding.albumArt.rotation
                             viewHolder.pauseDiscAnimation()
@@ -131,7 +131,7 @@ class SongAdapter(
                 val viewHolder = recyclerView.findViewHolderForAdapterPosition(currentPosition)
                 if (viewHolder is SongViewHolder) {
                     if (isCassetteMode) {
-                        viewHolder.startCassetteAnimation()
+                        viewHolder.resumeCassetteAnimation(cassettePauseTimeMap[song.id])
                     } else {
                         val savedAngle = rotationAngleMap[song.id] ?: 0f
                         viewHolder.binding.albumArt.rotation = savedAngle
@@ -145,6 +145,7 @@ class SongAdapter(
     fun stopCurrentSongAnimation() {
         currentPlayingSong?.let { song ->
             rotationAngleMap.remove(song.id)
+            cassettePauseTimeMap.remove(song.id)
             val currentPosition = currentList.indexOfFirst { it.id == song.id }
             if (currentPosition != -1) {
                 val recyclerView = getRecyclerView() ?: return
@@ -182,7 +183,7 @@ class SongAdapter(
         if (currentPlayingSong?.id == song.id) {
             if (isPaused) {
                 if (isCassetteMode) {
-                    holder.stopCassetteAnimation()
+                    holder.showPausedCassette(cassettePauseTimeMap[song.id])
                 } else {
                     val savedAngle = rotationAngleMap[song.id] ?: 0f
                     holder.binding.albumArt.rotation = savedAngle
@@ -193,7 +194,7 @@ class SongAdapter(
                     currentList.indexOfFirst { it.id == currentPlayingSong?.id }
                 if (currentPlayingPosition == position) {
                     if (isCassetteMode) {
-                        holder.startCassetteAnimation()
+                        holder.resumeCassetteAnimation(cassettePauseTimeMap[song.id])
                     } else {
                         val savedAngle = rotationAngleMap[song.id] ?: 0f
                         holder.binding.albumArt.rotation = savedAngle
@@ -202,7 +203,7 @@ class SongAdapter(
                 }
             } else {
                 if (isCassetteMode) {
-                    holder.stopCassetteAnimation()
+                    holder.showPausedCassette(cassettePauseTimeMap[song.id])
                 } else {
                     val savedAngle = rotationAngleMap[song.id] ?: 0f
                     holder.binding.albumArt.rotation = savedAngle
@@ -232,7 +233,7 @@ class SongAdapter(
                     currentList.indexOfFirst { it.id == currentPlayingSong?.id }
                 if (currentPlayingPosition == position) {
                     if (isCassetteMode) {
-                        holder.startCassetteAnimation()
+                        holder.resumeCassetteAnimation(cassettePauseTimeMap[song.id])
                     } else {
                         val savedAngle = rotationAngleMap[song.id] ?: 0f
                         holder.binding.albumArt.rotation = savedAngle
@@ -241,7 +242,7 @@ class SongAdapter(
                 }
             } else {
                 if (isCassetteMode) {
-                    holder.stopCassetteAnimation()
+                    holder.showPausedCassette(cassettePauseTimeMap[song.id])
                 } else {
                     val savedAngle = rotationAngleMap[song.id] ?: 0f
                     holder.binding.albumArt.rotation = savedAngle
@@ -264,7 +265,7 @@ class SongAdapter(
             val song = getItem(position)
             if (currentPlayingSong?.id == song.id) {
                 if (isCassetteMode) {
-                    holder.stopCassetteAnimation()
+                    cassettePauseTimeMap[song.id] = holder.pauseCassetteAnimation()
                 } else {
                     rotationAngleMap[song.id] = holder.binding.albumArt.rotation
                     holder.pauseDiscAnimation()
@@ -400,17 +401,68 @@ class SongAdapter(
             val context = binding.albumArt.context
             val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
             val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
-            val avd = AppCompatResources.getDrawable(context, resId)
-            binding.albumArt.setImageDrawable(avd)
-            (avd as? Animatable)?.start()
+            val drawable = KyrieDrawable.create(context, resId)
+            binding.albumArt.setImageDrawable(drawable)
+            drawable.start()
+        }
+
+        fun pauseCassetteAnimation(): Long {
+            val drawable = binding.albumArt.drawable as? KyrieDrawable
+            val time = drawable?.currentPlayTime ?: 0L
+            drawable?.pause()
+            return time
+        }
+
+        fun resumeCassetteAnimation(savedTime: Long?) {
+            val context = binding.albumArt.context
+            val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
+            val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
+            val currentDrawable = binding.albumArt.drawable as? KyrieDrawable
+            if (currentDrawable != null) {
+                if (currentDrawable.isPaused()) {
+                    currentDrawable.resume()
+                } else if (!currentDrawable.isRunning()) {
+                    if (savedTime != null && savedTime > 0) {
+                        currentDrawable.currentPlayTime = savedTime
+                    }
+                    currentDrawable.start()
+                }
+            } else {
+                val drawable = KyrieDrawable.create(context, resId)
+                binding.albumArt.setImageDrawable(drawable)
+                if (savedTime != null && savedTime > 0) {
+                    drawable.currentPlayTime = savedTime
+                }
+                drawable.start()
+            }
+        }
+
+        fun showPausedCassette(savedTime: Long?) {
+            val context = binding.albumArt.context
+            val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
+            val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
+            val currentDrawable = binding.albumArt.drawable as? KyrieDrawable
+            if (currentDrawable != null) {
+                currentDrawable.stop()
+                if (savedTime != null && savedTime > 0) {
+                    currentDrawable.currentPlayTime = savedTime
+                }
+            } else {
+                val drawable = KyrieDrawable.create(context, resId)
+                binding.albumArt.setImageDrawable(drawable)
+                if (savedTime != null && savedTime > 0) {
+                    drawable.currentPlayTime = savedTime
+                }
+            }
         }
 
         fun stopCassetteAnimation() {
-            (binding.albumArt.drawable as? Animatable)?.stop()
+            val drawable = binding.albumArt.drawable as? KyrieDrawable
+            drawable?.stop()
         }
 
         fun resetToStaticCassette() {
-            (binding.albumArt.drawable as? Animatable)?.stop()
+            (binding.albumArt.drawable as? KyrieDrawable)?.stop()
             binding.albumArt.setImageResource(com.unicorn.player.R.drawable.ic_cassette_photo)
         }
 
