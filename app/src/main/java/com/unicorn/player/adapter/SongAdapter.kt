@@ -26,12 +26,12 @@ class SongAdapter(
 
     companion object {
         const val TAG = "SongAdapter"
-        private const val CASSETTE_WIDTH_DP = 64
-        private const val CASSETTE_HEIGHT_DP = 42
+        private const val CASSETTE_WIDTH_DP = 48
+        private const val CASSETTE_HEIGHT_DP = 32
         private const val DISC_WIDTH_DP = 48
         private const val DISC_HEIGHT_DP = 48
         private const val CASSETTE_ART_GAP_DP = 12
-        private const val DISC_ART_GAP_DP = 16
+        private const val DISC_ART_GAP_DP = 12
 
         private val DISC_PLAYING_DRAWABLES = intArrayOf(
             com.unicorn.player.R.drawable.ic_disc_playing_1,

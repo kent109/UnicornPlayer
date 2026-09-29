@@ -21,7 +21,7 @@ class MultiChoiceFragmentAdapter(
 
     companion object {
         private const val CASSETTE_ART_GAP_DP = 12
-        private const val DISC_ART_GAP_DP = 16
+        private const val DISC_ART_GAP_DP = 12
     }
 
     var isCassetteMode = true
@@ -58,8 +58,8 @@ class MultiChoiceFragmentAdapter(
                 is Song -> {
                     binding.ivIcon.imageTintList = null
                     val density = binding.root.resources.displayMetrics.density
-                    val widthPx = ((if (isCassetteMode) 64 else 48) * density).toInt()
-                    val heightPx = ((if (isCassetteMode) 42 else 48) * density).toInt()
+                    val widthPx = ((if (isCassetteMode) 48 else 48) * density).toInt()
+                    val heightPx = ((if (isCassetteMode) 32 else 48) * density).toInt()
                     val params = binding.ivIcon.layoutParams
                     params.width = widthPx
                     params.height = heightPx
@@ -79,30 +79,18 @@ class MultiChoiceFragmentAdapter(
                 }
 
                 is Artist -> {
-                    val params = binding.ivIcon.layoutParams
-                    params.width = ViewGroup.LayoutParams.WRAP_CONTENT
-                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    binding.ivIcon.layoutParams = params
                     binding.ivIcon.setImageResource(R.drawable.ic_artist)
                     binding.tvTitle.text = item.name
                     binding.tvSubtitle.text = "${item.songCount} 首"
                 }
 
                 is Album -> {
-                    val params = binding.ivIcon.layoutParams
-                    params.width = ViewGroup.LayoutParams.WRAP_CONTENT
-                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    binding.ivIcon.layoutParams = params
                     binding.ivIcon.setImageResource(R.drawable.ic_album)
                     binding.tvTitle.text = item.name
                     binding.tvSubtitle.text = "${item.artist} - ${"${item.songCount} 首"}"
                 }
 
                 is PlaylistInfo -> {
-                    val params = binding.ivIcon.layoutParams
-                    params.width = ViewGroup.LayoutParams.WRAP_CONTENT
-                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    binding.ivIcon.layoutParams = params
                     binding.ivIcon.setImageResource(R.drawable.ic_playlist)
                     binding.tvTitle.text = item.name
                     binding.tvSubtitle.text = "${item.songCount} 首"

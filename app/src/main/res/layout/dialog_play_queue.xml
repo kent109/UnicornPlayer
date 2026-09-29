@@ -19,7 +19,7 @@
         android:id="@+id/tvQueueTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
+        android:layout_marginBottom="12dp"
         android:layout_gravity="center_horizontal"
         android:text="播放队列"
         android:textColor="@color/onSurface"

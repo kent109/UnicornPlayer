@@ -16,7 +16,7 @@ class SongMultiChoiceFragmentAdapter(
 
     companion object {
         private const val CASSETTE_ART_GAP_DP = 12
-        private const val DISC_ART_GAP_DP = 16
+        private const val DISC_ART_GAP_DP = 12
     }
 
     var isCassetteMode = true
@@ -51,8 +51,8 @@ class SongMultiChoiceFragmentAdapter(
                 is Song -> {
                     binding.ivIcon.imageTintList = null
                     val density = binding.root.resources.displayMetrics.density
-                    val widthPx = ((if (isCassetteMode) 64 else 48) * density).toInt()
-                    val heightPx = ((if (isCassetteMode) 42 else 48) * density).toInt()
+                    val widthPx = ((if (isCassetteMode) 48 else 48) * density).toInt()
+                    val heightPx = ((if (isCassetteMode) 32 else 48) * density).toInt()
                     val params = binding.ivIcon.layoutParams
                     params.width = widthPx
                     params.height = heightPx

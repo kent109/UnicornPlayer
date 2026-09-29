@@ -1,191 +1,197 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="240dp"
-    android:height="160dp"
-    android:viewportWidth="240"
-    android:viewportHeight="160">
+    android:width="192dp"
+    android:height="128dp"
+    android:viewportWidth="192"
+    android:viewportHeight="128">
 
-    <!-- 整图旋转180度（绕画布中心 120,80） -->
+    <!-- 裁剪空白：把内容平移到原点（偏移 24,16） -->
     <group
-        android:name="root_rot"
-        android:pivotX="120"
-        android:pivotY="80"
-        android:rotation="180">
-        <!-- 透明外壳（浅灰塑料；非凹槽一侧收矮: y=20~144，高度124，底部不动） -->
-        <path
-            android:fillColor="#D7DBE0"
-            android:pathData="M36,20 H204 A12,12 0 0 1 216,32 V132 A12,12 0 0 1 204,144 H36 A12,12 0 0 1 24,132 V32 A12,12 0 0 1 36,20 Z"
-            android:strokeWidth="2"
-            android:strokeColor="@color/disc_playing_color_4" />
-
-        <!-- 四角螺丝（贴角落） -->
-        <path
-            android:fillColor="#8A9099"
-            android:pathData="M30.4,28 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 Z" />
-        <path
-            android:fillColor="#8A9099"
-            android:pathData="M204.4,28 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 Z" />
-        <path
-            android:fillColor="#8A9099"
-            android:pathData="M30.4,136 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 Z" />
-        <path
-            android:fillColor="#8A9099"
-            android:pathData="M204.4,136 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 Z" />
-
-        <!-- 窗口（米色；无圆角，顶部两角斜切：与水平夹角30°、与垂直夹角60°，水平边10/垂直边5.77，底部两角直角；左右各加宽3: x=32~208） -->
-        <path
-            android:fillColor="@color/disc_playing_color_4"
-            android:pathData="M42,31 H198 L208,36.77 V111 H32 V36.77 Z" />
-
-        <!-- 两根黑线：底端平齐灰色背景底边(y=111)并向外偏移5，顶端沿原方向延长贴在卷轴最外层黑环上，平头线帽 -->
-        <path
-            android:fillColor="#00000000"
-            android:strokeWidth="3"
-            android:pathData="M38,111 L45.6,68.0 M202,111 L194.4,68.0"
-            android:strokeColor="#15171F" />
-
-        <!-- 左卷轴（五层同心环 + 中心黑圆 + 圆周六白辐条，随窗口扩大已放大，旋转） -->
+        android:name="crop"
+        android:translateX="-24"
+        android:translateY="-14">
+        <!-- 整图旋转180度（绕画布中心 120,80） -->
         <group
-            android:name="reel_left"
-            android:pivotX="80"
-            android:pivotY="71">
-            <!-- 1.最外黑色圆环 -->
+            android:name="root_rot"
+            android:pivotX="120"
+            android:pivotY="80"
+            android:rotation="180">
+            <!-- 透明外壳（浅灰塑料；非凹槽一侧收矮: y=20~144，高度124，底部不动） -->
             <path
-                android:fillColor="#15171F"
-                android:pathData="M44,71 a36,36 0 1,0 72,0 a36,36 0 1,0 -72,0 Z" />
-            <!-- 2.白色圆环 -->
+                android:fillColor="#D7DBE0"
+                android:pathData="M37,19 H203 A12,12 0 0 1 215,31 V133 A12,12 0 0 1 203,145 H37 A12,12 0 0 1 25,133 V31 A12,12 0 0 1 37,19 Z"
+                android:strokeWidth="2"
+                android:strokeColor="@color/disc_playing_color_4" />
+
+            <!-- 四角螺丝（贴角落） -->
             <path
-                android:fillColor="#FFFFFF"
-                android:pathData="M58,71 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0 Z" />
-            <!-- 3.灰色圆环 -->
+                android:fillColor="#8A9099"
+                android:pathData="M30.4,28 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 Z" />
             <path
-                android:fillColor="#C9CDD4"
-                android:pathData="M60,71 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z" />
-            <!-- 4.白色圆环(已删除,被放大的中心黑圆覆盖) -->
-            <!-- 5.最里面黑色圆(r=13) -->
+                android:fillColor="#8A9099"
+                android:pathData="M204.4,28 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 Z" />
             <path
-                android:fillColor="#15171F"
-                android:pathData="M67,71 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0 Z" />
-            <!-- 6.圆周上六根辐条(暗灰色,指向圆心) -->
+                android:fillColor="#8A9099"
+                android:pathData="M30.4,136 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 Z" />
             <path
-                android:strokeColor="#C9CDD4"
-                android:strokeWidth="3.2"
-                android:pathData="M93.000,71.000 L89.750,71.000 M86.500,82.258 L84.875,79.444 M73.500,82.258 L75.125,79.444 M67.000,71.000 L70.250,71.000 M73.500,59.742 L75.125,62.556 M86.500,59.742 L84.875,62.556"
+                android:fillColor="#8A9099"
+                android:pathData="M204.4,136 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 Z" />
+
+            <!-- 窗口（米色；无圆角，顶部两角斜切：与水平夹角30°、与垂直夹角60°，水平边10/垂直边5.77，底部两角直角；左右各加宽3: x=32~208） -->
+            <path
+                android:fillColor="@color/disc_playing_color_4"
+                android:pathData="M42,31 H198 L208,36.77 V111 H32 V36.77 Z" />
+
+            <!-- 两根黑线：底端平齐灰色背景底边(y=111)并向外偏移5，顶端沿原方向延长贴在卷轴最外层黑环上，平头线帽 -->
+            <path
                 android:fillColor="#00000000"
-                android:strokeLineCap="round" />
-        </group>
+                android:pathData="M38,111 L45.6,68.0 M202,111 L194.6,68.0"
+                android:strokeWidth="3"
+                android:strokeColor="#15171F" />
 
-        <!-- 右卷轴（五层同心环 + 中心黑圆 + 圆周六白辐条，放大，旋转） -->
-        <group
-            android:name="reel_right"
-            android:pivotX="160"
-            android:pivotY="71">
-            <!-- 1.最外黑色圆环 -->
+            <!-- 左卷轴（五层同心环 + 中心黑圆 + 圆周六白辐条，随窗口扩大已放大，旋转） -->
+            <group
+                android:name="reel_left"
+                android:pivotX="80"
+                android:pivotY="71">
+                <!-- 1.最外黑色圆环 -->
+                <path
+                    android:fillColor="#15171F"
+                    android:pathData="M44,71 a36,36 0 1,0 72,0 a36,36 0 1,0 -72,0 Z" />
+                <!-- 2.白色圆环 -->
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M58,71 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0 Z" />
+                <!-- 3.灰色圆环 -->
+                <path
+                    android:fillColor="#C9CDD4"
+                    android:pathData="M60,71 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z" />
+                <!-- 4.白色圆环(已删除,被放大的中心黑圆覆盖) -->
+                <!-- 5.最里面黑色圆(r=13) -->
+                <path
+                    android:fillColor="#15171F"
+                    android:pathData="M67,71 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0 Z" />
+                <!-- 6.圆周上六根辐条(暗灰色,指向圆心) -->
+                <path
+                    android:fillColor="#00000000"
+                    android:pathData="M93.000,71.000 L89.750,71.000 M86.500,82.258 L84.875,79.444 M73.500,82.258 L75.125,79.444 M67.000,71.000 L70.250,71.000 M73.500,59.742 L75.125,62.556 M86.500,59.742 L84.875,62.556"
+                    android:strokeWidth="3.2"
+                    android:strokeColor="#C9CDD4"
+                    android:strokeLineCap="round" />
+            </group>
+
+            <!-- 右卷轴（五层同心环 + 中心黑圆 + 圆周六白辐条，放大，旋转） -->
+            <group
+                android:name="reel_right"
+                android:pivotX="160"
+                android:pivotY="71">
+                <!-- 1.最外黑色圆环 -->
+                <path
+                    android:fillColor="#15171F"
+                    android:pathData="M124,71 a36,36 0 1,0 72,0 a36,36 0 1,0 -72,0 Z" />
+                <!-- 2.白色圆环 -->
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M138,71 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0 Z" />
+                <!-- 3.灰色圆环 -->
+                <path
+                    android:fillColor="#C9CDD4"
+                    android:pathData="M140,71 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z" />
+                <!-- 4.白色圆环(已删除) -->
+                <!-- 5.最里面黑色圆(r=13) -->
+                <path
+                    android:fillColor="#15171F"
+                    android:pathData="M147,71 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0 Z" />
+                <!-- 6.圆周上六根辐条(暗灰色,指向圆心) -->
+                <path
+                    android:fillColor="#00000000"
+                    android:pathData="M173.000,71.000 L169.750,71.000 M166.500,82.258 L164.875,79.444 M153.500,82.258 L155.125,79.444 M147.000,71.000 L150.250,71.000 M153.500,59.742 L155.125,62.556 M166.500,59.742 L164.875,62.556"
+                    android:strokeWidth="3.2"
+                    android:strokeColor="#C9CDD4"
+                    android:strokeLineCap="round" />
+            </group>
+
+            <!-- 底部走带机构 -->
+            <!-- 左转轮（同心圆 + 6 根均分辐条） -->
             <path
-                android:fillColor="#15171F"
-                android:pathData="M124,71 a36,36 0 1,0 72,0 a36,36 0 1,0 -72,0 Z" />
-            <!-- 2.白色圆环 -->
-            <path
-                android:fillColor="#FFFFFF"
-                android:pathData="M138,71 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0 Z" />
-            <!-- 3.灰色圆环 -->
-            <path
-                android:fillColor="#C9CDD4"
-                android:pathData="M140,71 a20,20 0 1,0 40,0 a20,20 0 1,0 -40,0 Z" />
-            <!-- 4.白色圆环(已删除) -->
-            <!-- 5.最里面黑色圆(r=13) -->
-            <path
-                android:fillColor="#15171F"
-                android:pathData="M147,71 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0 Z" />
-            <!-- 6.圆周上六根辐条(暗灰色,指向圆心) -->
-            <path
-                android:strokeColor="#C9CDD4"
-                android:strokeWidth="3.2"
                 android:fillColor="#00000000"
-                android:pathData="M173.000,71.000 L169.750,71.000 M166.500,82.258 L164.875,79.444 M153.500,82.258 L155.125,79.444 M147.000,71.000 L150.250,71.000 M153.500,59.742 L155.125,62.556 M166.500,59.742 L164.875,62.556"
-                android:strokeLineCap="round" />
+                android:pathData="M40,130 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z"
+                android:strokeWidth="1.5"
+                android:strokeColor="#EDEFF3" />
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M44,130 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z"
+                android:strokeWidth="1.5"
+                android:strokeColor="#EDEFF3" />
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M52.00,130.00 L56.00,130.00 M50.00,133.46 L52.00,136.93 M46.00,133.46 L44.00,136.93 M44.00,130.00 L40.00,130.00 M46.00,126.54 L44.00,123.07 M50.00,126.54 L52.00,123.07"
+                android:strokeWidth="1.5"
+                android:strokeColor="#EDEFF3" />
+            <path
+                android:fillColor="#15171F"
+                android:pathData="M46.2,130 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" />
+            <!-- 右转轮（同心圆 + 6 根均分辐条） -->
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M184,130 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z"
+                android:strokeWidth="1.5"
+                android:strokeColor="#EDEFF3" />
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M188,130 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z"
+                android:strokeWidth="1.5"
+                android:strokeColor="#EDEFF3" />
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M196.00,130.00 L200.00,130.00 M194.00,133.46 L196.00,136.93 M190.00,133.46 L188.00,136.93 M188.00,130.00 L184.00,130.00 M190.00,126.54 L188.00,123.07 M194.00,126.54 L196.00,123.07"
+                android:strokeWidth="1.5"
+                android:strokeColor="#EDEFF3" />
+            <path
+                android:fillColor="#15171F"
+                android:pathData="M190.2,130 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" />
+            <!-- 底部中央凹槽（磁头/压带毛毡位，已加回：此前误删） -->
+            <path
+                android:fillColor="#15171F"
+                android:pathData="M108,130 L132,130 L134,144 L106,144 Z"
+                android:strokeWidth="1"
+                android:strokeColor="#3A3D47" />
+            <!-- 压带毛毡垫 -->
+            <path
+                android:fillColor="#B5654A"
+                android:pathData="M114,136 H126 V141 H114 Z" />
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M120,136 V141"
+                android:strokeWidth="1"
+                android:strokeColor="#7A4636" />
+            <!-- 凹槽上方的螺丝钉（在梯形线框包围内、凹槽之外，已上移） -->
+            <path
+                android:fillColor="#8A9099"
+                android:pathData="M117.2,123 a2.8,2.8 0 1,0 5.6,0 a2.8,2.8 0 1,0 -5.6,0 Z" />
+            <!-- 凹槽左右两侧的小圆孔（在凹槽外，上边与凹槽上边平齐） -->
+            <path
+                android:fillColor="#15171F"
+                android:pathData="M92,132.5 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
+            <path
+                android:fillColor="#15171F"
+                android:pathData="M140,132.5 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
+            <!-- 外侧小圆孔（向中心多移、向上少移） -->
+            <path
+                android:fillColor="#15171F"
+                android:pathData="M76,135 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
+            <path
+                android:fillColor="#15171F"
+                android:pathData="M156,135 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
+
+            <!-- 底部梯形线框（两侧斜边+顶边，不含底边；斜边略斜于凹槽、顶边与贴纸留空） -->
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M60,145 L68,117 L172,117 L180,145"
+                android:strokeWidth="1.5"
+                android:strokeColor="@color/disc_playing_color_4"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round" />
         </group>
-
-        <!-- 底部走带机构 -->
-        <!-- 左转轮（同心圆 + 6 根均分辐条） -->
-        <path
-            android:fillColor="#00000000"
-            android:pathData="M40,130 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z"
-            android:strokeWidth="1.5"
-            android:strokeColor="#EDEFF3" />
-        <path
-            android:fillColor="#00000000"
-            android:pathData="M44,130 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z"
-            android:strokeWidth="1.5"
-            android:strokeColor="#EDEFF3" />
-        <path
-            android:fillColor="#00000000"
-            android:strokeWidth="1.5"
-            android:pathData="M52.00,130.00 L56.00,130.00 M50.00,133.46 L52.00,136.93 M46.00,133.46 L44.00,136.93 M44.00,130.00 L40.00,130.00 M46.00,126.54 L44.00,123.07 M50.00,126.54 L52.00,123.07"
-            android:strokeColor="#EDEFF3" />
-        <path
-            android:fillColor="#15171F"
-            android:pathData="M46.2,130 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" />
-        <!-- 右转轮（同心圆 + 6 根均分辐条） -->
-        <path
-            android:fillColor="#00000000"
-            android:pathData="M184,130 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0 Z"
-            android:strokeWidth="1.5"
-            android:strokeColor="#EDEFF3" />
-        <path
-            android:fillColor="#00000000"
-            android:pathData="M188,130 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z"
-            android:strokeWidth="1.5"
-            android:strokeColor="#EDEFF3" />
-        <path
-            android:fillColor="#00000000"
-            android:strokeWidth="1.5"
-            android:pathData="M196.00,130.00 L200.00,130.00 M194.00,133.46 L196.00,136.93 M190.00,133.46 L188.00,136.93 M188.00,130.00 L184.00,130.00 M190.00,126.54 L188.00,123.07 M194.00,126.54 L196.00,123.07"
-            android:strokeColor="#EDEFF3" />
-        <path
-            android:fillColor="#15171F"
-            android:pathData="M190.2,130 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0 Z" />
-        <!-- 底部中央凹槽（磁头/压带毛毡位，已加回：此前误删） -->
-        <path
-            android:fillColor="#15171F"
-            android:pathData="M108,130 L132,130 L134,144 L106,144 Z"
-            android:strokeWidth="1"
-            android:strokeColor="#3A3D47" />
-        <!-- 压带毛毡垫 -->
-        <path
-            android:fillColor="#B5654A"
-            android:pathData="M114,136 H126 V141 H114 Z" />
-        <path
-            android:fillColor="#00000000"
-            android:strokeWidth="1"
-            android:pathData="M120,136 V141"
-            android:strokeColor="#7A4636" />
-        <!-- 凹槽上方的螺丝钉（在梯形线框包围内、凹槽之外，已上移） -->
-        <path
-            android:fillColor="#8A9099"
-            android:pathData="M117.2,123 a2.8,2.8 0 1,0 5.6,0 a2.8,2.8 0 1,0 -5.6,0 Z" />
-        <!-- 凹槽左右两侧的小圆孔（在凹槽外，上边与凹槽上边平齐） -->
-        <path
-            android:fillColor="#15171F"
-            android:pathData="M92,132.5 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
-        <path
-            android:fillColor="#15171F"
-            android:pathData="M140,132.5 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
-        <!-- 外侧小圆孔（向中心多移、向上少移） -->
-        <path
-            android:fillColor="#15171F"
-            android:pathData="M76,135 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
-        <path
-            android:fillColor="#15171F"
-            android:pathData="M156,135 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 Z" />
-
-        <!-- 底部梯形线框（两侧斜边+顶边，不含底边；斜边略斜于凹槽、顶边与贴纸留空） -->
-        <path
-            android:strokeColor="@color/disc_playing_color_4"
-            android:fillColor="#00000000"
-            android:pathData="M60,144 L68,117 L172,117 L180,144"
-            android:strokeLineCap="round"
-            android:strokeWidth="1.5"
-            android:strokeLineJoin="round" />
     </group>
 </vector>
