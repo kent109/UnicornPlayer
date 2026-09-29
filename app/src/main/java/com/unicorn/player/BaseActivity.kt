@@ -2,7 +2,10 @@ package com.unicorn.player
 
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -27,6 +30,50 @@ abstract class BaseActivity : AppCompatActivity() {
         }
         currentHighlightColor = ThemeSettingActivity.resolveHighlightColor(this)
         super.onCreate(savedInstanceState)
+    }
+
+    /**
+     * 重写 setContentView，为根视图应用状态栏 insets 的顶部 padding。
+     *
+     * 问题背景：targetSdk 35（Android 15+）强制启用 edge-to-edge，
+     * 内容会延伸到系统状态栏下方。主题设了 fitsSystemWindows=false 和透明状态栏，
+     * 但没有代码层 insets 处理，导致界面顶部延伸进状态栏。
+     *
+     * 此处统一在根视图上监听 WindowInsets，将状态栏高度作为顶部 padding，
+     * 所有继承 BaseActivity 的 Activity 自动获得正确的状态栏避让。
+     */
+    override fun setContentView(layoutResID: Int) {
+        super.setContentView(layoutResID)
+        applyStatusBarInsets()
+    }
+
+    override fun setContentView(view: View) {
+        super.setContentView(view)
+        applyStatusBarInsets()
+    }
+
+    /**
+     * 子类可重写此方法返回 false，以禁用自动状态栏 padding
+     * （例如需要全屏沉浸且自行处理 insets 的播放器页面）。
+     */
+    protected open val applySystemBarInsets: Boolean
+        get() = true
+
+    private fun applyStatusBarInsets() {
+        if (!applySystemBarInsets) return
+        val rootView = findViewById<View>(android.R.id.content) ?: return
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(
+                v.paddingLeft,
+                systemBars.top,
+                v.paddingRight,
+                v.paddingBottom
+            )
+            insets
+        }
+        // 强制请求一次 insets 派发，确保 listener 被触发
+        ViewCompat.requestApplyInsets(rootView)
     }
 
     override fun onResume() {
