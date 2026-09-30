@@ -140,7 +140,12 @@ class MusicService : Service() {
 
     // 公共方法设置当前歌曲
     fun setCurrentSong(song: Song) {
+        val isSongChanged = _currentSong.value?.id != song.id
         _currentSong.value = song
+        // 仅在真正切歌时重置进度为 0，避免打开 PlayerActivity 时进度条从实际位置跳到 0
+        if (isSongChanged) {
+            _currentPosition.value = 0
+        }
         // 切到普通歌曲（路径不在排除目录内）时清除临时播放态，
         // 标志着从临时播放回到正常队列。路径动态判断，不依赖持久化字段。
         if (!isPathExcludedSync(song.path)) {
@@ -509,8 +514,10 @@ class MusicService : Service() {
                     return@setOnCompletionListener
                 }
                 // 强制更新进度为100%，避免最后一次进度更新不到位
+                // 必须用 value（同步）而非 postValue（异步），否则会与 setCurrentSong 里的
+                // value=0 产生竞态，导致新歌曲动画从旧进度开始
                 try {
-                    _currentPosition.postValue(mediaPlayer.duration)
+                    _currentPosition.value = mediaPlayer.duration
                 } catch (_: Exception) {
                     // MediaPlayer可能已释放，忽略
                 }

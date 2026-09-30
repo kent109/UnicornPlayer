@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectAnimator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="240000"
+    android:propertyName="pathData"
+    android:valueFrom="M36.56,110.58 L49.06,68.08 L51.46,61.35 L53.00,60.00 L53.96,60.28 L51.94,68.92 L39.44,111.42 Z M203.44,110.58 L190.94,68.08 L188.54,61.35 L187.00,60.00 L186.04,60.28 L188.06,68.92 L200.56,111.42 Z"
+    android:valueTo="M36.56,110.58 L52.39,68.08 L55.35,61.31 L57.00,60.00 L57.96,60.28 L55.27,68.92 L39.44,111.42 Z M203.44,110.58 L194.27,68.08 L192.42,61.39 L191.00,60.00 L190.04,60.28 L191.39,68.92 L200.56,111.42 Z"
+    android:valueType="pathType" />

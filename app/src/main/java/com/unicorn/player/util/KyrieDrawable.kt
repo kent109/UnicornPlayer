@@ -80,6 +80,56 @@ class KyrieDrawable private constructor(
         listeners.remove(listener)
     }
 
+    fun setAnimationDuration(durationMs: Long) {
+        try {
+            val timelineField = kyrieDrawable.javaClass.getDeclaredField("timeline")
+            timelineField.isAccessible = true
+            val timeline = timelineField.get(kyrieDrawable)
+
+            val propertiesField = timeline.javaClass.getDeclaredField("properties")
+            propertiesField.isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            val properties = propertiesField.get(timeline) as List<Any>
+
+            for (property in properties) {
+                val animationsField = property.javaClass.getDeclaredField("animations")
+                animationsField.isAccessible = true
+                @Suppress("UNCHECKED_CAST")
+                val animations = animationsField.get(property) as List<Any>
+
+                for (animation in animations) {
+                    val repeatCountField = try {
+                        animation.javaClass.getDeclaredField("repeatCount")
+                    } catch (e: NoSuchFieldException) {
+                        null
+                    }
+
+                    if (repeatCountField != null) {
+                        repeatCountField.isAccessible = true
+                        val repeatCount = repeatCountField.getInt(animation)
+                        if (repeatCount != 0) {
+                            continue
+                        }
+                    }
+
+                    val durationField = animation.javaClass.getDeclaredField("duration")
+                    durationField.isAccessible = true
+                    durationField.setLong(animation, durationMs)
+                }
+
+                val propertyTotalDurationField = property.javaClass.getDeclaredField("totalDuration")
+                propertyTotalDurationField.isAccessible = true
+                propertyTotalDurationField.setLong(property, durationMs)
+            }
+
+            val timelineTotalDurationField = timeline.javaClass.getDeclaredField("totalDuration")
+            timelineTotalDurationField.isAccessible = true
+            timelineTotalDurationField.setLong(timeline, durationMs)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override fun draw(canvas: Canvas) {
         kyrieDrawable.draw(canvas)
     }

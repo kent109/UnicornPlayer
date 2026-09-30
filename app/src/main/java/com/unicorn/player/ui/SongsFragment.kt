@@ -38,6 +38,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
     // 用于移除观察者
     private var currentSongObserver: Observer<Song?>? = null
     private var isPlayingObserver: Observer<Boolean>? = null
+    private var currentPositionObserver: Observer<Int>? = null
 
     // 扫描相关状态
     private var isScanning = false
@@ -107,6 +108,9 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
             songAdapter.currentPlayingSong = service.currentSong.value
             songAdapter.isPaused = false
             songAdapter.resumeCurrentSongAnimation()
+            service.currentPosition.value?.let { position ->
+                songAdapter.updateCassetteAnimationProgress(position.toLong())
+            }
         }
     }
 
@@ -144,6 +148,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         currentSongObserver = Observer { song ->
             song?.let {
                 songAdapter.currentPlayingSong = it
+                songAdapter.currentPlaybackPositionMs = 0L
                 songAdapter.notifyDataSetChanged()
             }
         }
@@ -155,8 +160,12 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
                 songAdapter.pauseCurrentSongAnimation()
             }
         }
+        currentPositionObserver = Observer { position ->
+            songAdapter.currentPlaybackPositionMs = position.toLong()
+        }
         service.currentSong.observe(viewLifecycleOwner, currentSongObserver!!)
         service.isPlaying.observe(viewLifecycleOwner, isPlayingObserver!!)
+        service.currentPosition.observe(viewLifecycleOwner, currentPositionObserver!!)
     }
 
     /**
@@ -179,8 +188,10 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         val service = host?.musicService
         currentSongObserver?.let { service?.currentSong?.removeObserver(it) }
         isPlayingObserver?.let { service?.isPlaying?.removeObserver(it) }
+        currentPositionObserver?.let { service?.currentPosition?.removeObserver(it) }
         currentSongObserver = null
         isPlayingObserver = null
+        currentPositionObserver = null
     }
 
     // 标记 ViewModel 已完成首次数据加载，此前不操作 emptyView 以防止启动闪现

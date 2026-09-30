@@ -61,6 +61,7 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
     // 服务观察者
     private var currentSongObserver: Observer<Song?>? = null
     private var isPlayingObserver: Observer<Boolean>? = null
+    private var currentPositionObserver: Observer<Int>? = null
 
     companion object {
         const val TAG = "PlaylistSongsActivity"
@@ -201,6 +202,9 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
             songAdapter.currentPlayingSong = service.currentSong.value
             songAdapter.isPaused = false
             songAdapter.resumeCurrentSongAnimation()
+            service.currentPosition.value?.let { position ->
+                songAdapter.updateCassetteAnimationProgress(position.toLong())
+            }
             bottomPlayerController.updateUI(service)
         }
     }
@@ -310,6 +314,7 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
         currentSongObserver = Observer { song ->
             song?.let {
                 songAdapter.currentPlayingSong = it
+                songAdapter.currentPlaybackPositionMs = 0L
                 songAdapter.notifyDataSetChanged()
             }
         }
@@ -321,8 +326,12 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
                 songAdapter.pauseCurrentSongAnimation()
             }
         }
+        currentPositionObserver = Observer { position ->
+            songAdapter.currentPlaybackPositionMs = position.toLong()
+        }
         service.currentSong.observe(this, currentSongObserver!!)
         service.isPlaying.observe(this, isPlayingObserver!!)
+        service.currentPosition.observe(this, currentPositionObserver!!)
 
         bottomPlayerController.observe(service)
     }
@@ -332,8 +341,10 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
         val service = musicService
         currentSongObserver?.let { service?.currentSong?.removeObserver(it) }
         isPlayingObserver?.let { service?.isPlaying?.removeObserver(it) }
+        currentPositionObserver?.let { service?.currentPosition?.removeObserver(it) }
         currentSongObserver = null
         isPlayingObserver = null
+        currentPositionObserver = null
     }
 
     // ==================== OnSongClickListener ====================

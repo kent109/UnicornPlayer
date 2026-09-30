@@ -54,6 +54,7 @@ class PlayerFragment : Fragment() {
     // 弹窗期间观察播放状态/当前歌曲的观察者，dismiss 时移除
     private var queueIsPlayingObserver: androidx.lifecycle.Observer<Boolean>? = null
     private var queueCurrentSongObserver: androidx.lifecycle.Observer<Song?>? = null
+    private var queueCurrentPositionObserver: androidx.lifecycle.Observer<Int>? = null
 
     // 歌曲信息弹窗帮助类（ivMore 点击后弹出），从 PlayerActivity 迁移
     private lateinit var songInfoHelper: SongInfoHelper
@@ -302,6 +303,9 @@ class PlayerFragment : Fragment() {
         adapter.currentPlayingSong = service.currentSong.value
         adapter.isPlaying = service.isPlaying.value == true
         adapter.submitList(songs)
+        service.currentPosition.value?.let { position ->
+            adapter.updateCassetteAnimationProgress(position.toLong())
+        }
         queueAdapter = adapter
 
         dialogBinding.rvPlayQueue.layoutManager = LinearLayoutManager(requireContext())
@@ -319,12 +323,18 @@ class PlayerFragment : Fragment() {
         // 观察当前歌曲变化（弹窗未关闭时由其他入口切歌），同步高亮与动画位置
         val currentSongObserver = androidx.lifecycle.Observer<Song?> { song ->
             adapter.currentPlayingSong = song
+            adapter.currentPlaybackPositionMs = 0L
             adapter.notifyDataSetChanged()
+        }
+        val currentPositionObserver = androidx.lifecycle.Observer<Int> { position ->
+            adapter.currentPlaybackPositionMs = position.toLong()
         }
         service.isPlaying.observe(viewLifecycleOwner, isPlayingObserver)
         service.currentSong.observe(viewLifecycleOwner, currentSongObserver)
+        service.currentPosition.observe(viewLifecycleOwner, currentPositionObserver)
         queueIsPlayingObserver = isPlayingObserver
         queueCurrentSongObserver = currentSongObserver
+        queueCurrentPositionObserver = currentPositionObserver
 
         // 捕获当前 Activity 引用：dismiss 监听是 Handler 异步回调，
         // 触发时 Fragment 可能已 detach，不能再调用 requireActivity()
@@ -344,6 +354,9 @@ class PlayerFragment : Fragment() {
                 // 回到前台：从保存的角度继续
                 adapter.isPaused = false
                 adapter.resumeCurrentSongAnimation()
+                service.currentPosition.value?.let { position ->
+                    adapter.updateCassetteAnimationProgress(position.toLong())
+                }
             }
         }
         hostActivity.lifecycle.addObserver(activityLifecycleObserver)
@@ -351,9 +364,11 @@ class PlayerFragment : Fragment() {
         bottomSheetDialog.setOnDismissListener {
             service.isPlaying.removeObserver(isPlayingObserver)
             service.currentSong.removeObserver(currentSongObserver)
+            service.currentPosition.removeObserver(currentPositionObserver)
             hostActivity.lifecycle.removeObserver(activityLifecycleObserver)
             queueIsPlayingObserver = null
             queueCurrentSongObserver = null
+            queueCurrentPositionObserver = null
             queueAdapter = null
         }
 

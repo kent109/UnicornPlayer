@@ -83,6 +83,12 @@
 -dontwarn com.github.bifan_wei.lrcview.**
 
 # ============================================================
+# Kyrie (矢量动画库，反射访问私有字段)
+# ============================================================
+-keep class com.github.alexjlockwood.kyrie.** { *; }
+-dontwarn com.github.alexjlockwood.kyrie.**
+
+# ============================================================
 # SmartRefreshLayout
 # ============================================================
 -keep class com.scwang.smart.refresh.** { *; }

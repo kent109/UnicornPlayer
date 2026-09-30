@@ -24,6 +24,8 @@ class SongAdapter(
     var isPlaying: Boolean = false
 ) : ListAdapter<Song, SongAdapter.SongViewHolder>(SongDiffCallback()) {
 
+    var currentPlaybackPositionMs: Long = 0L
+
     companion object {
         const val TAG = "SongAdapter"
         private const val CASSETTE_WIDTH_DP = 48
@@ -131,7 +133,7 @@ class SongAdapter(
                 val viewHolder = recyclerView.findViewHolderForAdapterPosition(currentPosition)
                 if (viewHolder is SongViewHolder) {
                     if (isCassetteMode) {
-                        viewHolder.resumeCassetteAnimation(cassettePauseTimeMap[song.id])
+                        viewHolder.resumeCassetteAnimation(currentPlaybackPositionMs, song.duration)
                     } else {
                         val savedAngle = rotationAngleMap[song.id] ?: 0f
                         viewHolder.binding.albumArt.rotation = savedAngle
@@ -161,6 +163,26 @@ class SongAdapter(
         }
     }
 
+    fun updateCassetteAnimationProgress(currentPositionMs: Long) {
+        if (!isCassetteMode) return
+        val song = currentPlayingSong ?: return
+        val position = currentList.indexOfFirst { it.id == song.id }
+        if (position == -1) return
+        val animationTime = if (song.duration > 0) {
+            (currentPositionMs.toFloat() / song.duration * song.duration).toLong()
+        } else {
+            0L
+        }
+        val recyclerView = getRecyclerView() ?: return
+        val viewHolder = recyclerView.findViewHolderForAdapterPosition(position)
+        if (viewHolder is SongViewHolder) {
+            val drawable = viewHolder.binding.albumArt.drawable as? KyrieDrawable
+            if (drawable != null) {
+                drawable.currentPlayTime = animationTime
+            }
+        }
+    }
+
     interface OnSongClickListener {
         fun onSongClick(song: Song, position: Int)
     }
@@ -183,7 +205,7 @@ class SongAdapter(
         if (currentPlayingSong?.id == song.id) {
             if (isPaused) {
                 if (isCassetteMode) {
-                    holder.showPausedCassette(cassettePauseTimeMap[song.id])
+                    holder.showPausedCassette(cassettePauseTimeMap[song.id], song.duration)
                 } else {
                     val savedAngle = rotationAngleMap[song.id] ?: 0f
                     holder.binding.albumArt.rotation = savedAngle
@@ -194,7 +216,7 @@ class SongAdapter(
                     currentList.indexOfFirst { it.id == currentPlayingSong?.id }
                 if (currentPlayingPosition == position) {
                     if (isCassetteMode) {
-                        holder.resumeCassetteAnimation(cassettePauseTimeMap[song.id])
+                        holder.resumeCassetteAnimation(currentPlaybackPositionMs, song.duration)
                     } else {
                         val savedAngle = rotationAngleMap[song.id] ?: 0f
                         holder.binding.albumArt.rotation = savedAngle
@@ -203,7 +225,7 @@ class SongAdapter(
                 }
             } else {
                 if (isCassetteMode) {
-                    holder.showPausedCassette(cassettePauseTimeMap[song.id])
+                    holder.showPausedCassette(cassettePauseTimeMap[song.id], song.duration)
                 } else {
                     val savedAngle = rotationAngleMap[song.id] ?: 0f
                     holder.binding.albumArt.rotation = savedAngle
@@ -233,7 +255,12 @@ class SongAdapter(
                     currentList.indexOfFirst { it.id == currentPlayingSong?.id }
                 if (currentPlayingPosition == position) {
                     if (isCassetteMode) {
-                        holder.resumeCassetteAnimation(cassettePauseTimeMap[song.id])
+                        val animationTime = if (song.duration > 0) {
+                            (currentPlaybackPositionMs.toFloat() / song.duration * song.duration).toLong()
+                        } else {
+                            0L
+                        }
+                        holder.resumeCassetteAnimation(animationTime, song.duration)
                     } else {
                         val savedAngle = rotationAngleMap[song.id] ?: 0f
                         holder.binding.albumArt.rotation = savedAngle
@@ -242,7 +269,12 @@ class SongAdapter(
                 }
             } else {
                 if (isCassetteMode) {
-                    holder.showPausedCassette(cassettePauseTimeMap[song.id])
+                    val animationTime = if (song.duration > 0) {
+                        (currentPlaybackPositionMs.toFloat() / song.duration * song.duration).toLong()
+                    } else {
+                        0L
+                    }
+                    holder.showPausedCassette(animationTime, song.duration)
                 } else {
                     val savedAngle = rotationAngleMap[song.id] ?: 0f
                     holder.binding.albumArt.rotation = savedAngle
@@ -397,11 +429,12 @@ class SongAdapter(
             view.layoutParams = params
         }
 
-        fun startCassetteAnimation() {
+        fun startCassetteAnimation(durationMs: Long) {
             val context = binding.albumArt.context
             val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
             val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
             val drawable = KyrieDrawable.create(context, resId)
+            drawable.setAnimationDuration(durationMs)
             binding.albumArt.setImageDrawable(drawable)
             drawable.start()
         }
@@ -413,22 +446,23 @@ class SongAdapter(
             return time
         }
 
-        fun resumeCassetteAnimation(savedTime: Long?) {
+        fun resumeCassetteAnimation(savedTime: Long?, durationMs: Long) {
             val context = binding.albumArt.context
             val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
             val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
             val currentDrawable = binding.albumArt.drawable as? KyrieDrawable
             if (currentDrawable != null) {
+                if (savedTime != null && savedTime > 0) {
+                    currentDrawable.currentPlayTime = savedTime
+                }
                 if (currentDrawable.isPaused()) {
                     currentDrawable.resume()
                 } else if (!currentDrawable.isRunning()) {
-                    if (savedTime != null && savedTime > 0) {
-                        currentDrawable.currentPlayTime = savedTime
-                    }
                     currentDrawable.start()
                 }
             } else {
                 val drawable = KyrieDrawable.create(context, resId)
+                drawable.setAnimationDuration(durationMs)
                 binding.albumArt.setImageDrawable(drawable)
                 if (savedTime != null && savedTime > 0) {
                     drawable.currentPlayTime = savedTime
@@ -437,7 +471,7 @@ class SongAdapter(
             }
         }
 
-        fun showPausedCassette(savedTime: Long?) {
+        fun showPausedCassette(savedTime: Long?, durationMs: Long) {
             val context = binding.albumArt.context
             val colorIndex = ThemeSettingActivity.resolveHighlightColorIndex(context)
             val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
@@ -449,6 +483,7 @@ class SongAdapter(
                 }
             } else {
                 val drawable = KyrieDrawable.create(context, resId)
+                drawable.setAnimationDuration(durationMs)
                 binding.albumArt.setImageDrawable(drawable)
                 if (savedTime != null && savedTime > 0) {
                     drawable.currentPlayTime = savedTime
