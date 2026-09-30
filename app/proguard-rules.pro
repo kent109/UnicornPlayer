@@ -40,6 +40,7 @@
 -keep class com.unicorn.player.service.** { *; }
 -keep class com.unicorn.player.viewmodel.** { *; }
 -keep class com.unicorn.player.util.** { *; }
+-keep class com.unicorn.player.equalizer.** { *; }
 
 -keepclassmembers class ** {
     @androidx.room.* <fields>;
@@ -133,3 +134,8 @@
     volatile <fields>;
 }
 -dontwarn kotlinx.coroutines.**
+
+# ============================================================
+# Kotlinx Serialization
+# ============================================================
+-dontwarn kotlinx.serialization.**
