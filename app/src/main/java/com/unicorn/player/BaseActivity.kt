@@ -3,6 +3,7 @@ package com.unicorn.player
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -33,43 +34,58 @@ abstract class BaseActivity : AppCompatActivity() {
     }
 
     /**
-     * 重写 setContentView，为根视图应用状态栏 insets 的顶部 padding。
+     * 重写 setContentView，为根视图应用系统栏 insets 的 padding。
      *
      * 问题背景：targetSdk 35（Android 15+）强制启用 edge-to-edge，
-     * 内容会延伸到系统状态栏下方。主题设了 fitsSystemWindows=false 和透明状态栏，
-     * 但没有代码层 insets 处理，导致界面顶部延伸进状态栏。
+     * 内容会延伸到系统状态栏和导航栏下方。主题设了 fitsSystemWindows=false 和透明状态栏，
+     * 但没有代码层 insets 处理，导致界面顶部延伸进状态栏、底部播放条被虚拟导航键遮挡。
      *
-     * 此处统一在根视图上监听 WindowInsets，将状态栏高度作为顶部 padding，
-     * 所有继承 BaseActivity 的 Activity 自动获得正确的状态栏避让。
+     * 此处统一在根视图上监听 WindowInsets：
+     * - 顶部：状态栏高度作为 paddingTop，所有 Activity 自动避让状态栏
+     * - 底部：导航栏高度作为 paddingBottom，内容不被虚拟导航键遮挡
+     * - 当检测到有虚拟导航键时，去掉底部播放条的 8dp marginBottom，避免双重间距
      */
     override fun setContentView(layoutResID: Int) {
         super.setContentView(layoutResID)
-        applyStatusBarInsets()
+        applySystemBarInsets()
     }
 
     override fun setContentView(view: View) {
         super.setContentView(view)
-        applyStatusBarInsets()
+        applySystemBarInsets()
     }
 
     /**
-     * 子类可重写此方法返回 false，以禁用自动状态栏 padding
+     * 子类可重写此方法返回 false，以禁用自动系统栏 padding
      * （例如需要全屏沉浸且自行处理 insets 的播放器页面）。
      */
     protected open val applySystemBarInsets: Boolean
         get() = true
 
-    private fun applyStatusBarInsets() {
+    private fun applySystemBarInsets() {
         if (!applySystemBarInsets) return
         val rootView = findViewById<View>(android.R.id.content) ?: return
+        val density = resources.displayMetrics.density
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(
                 v.paddingLeft,
                 systemBars.top,
                 v.paddingRight,
-                v.paddingBottom
+                systemBars.bottom
             )
+            // 有虚拟导航键时，去掉底部播放条的底部 margin（8dp），
+            // 由根视图的 paddingBottom 避让导航键，避免双重间距；
+            // 手势导航时恢复 8dp marginBottom。
+            val bottomPlayer = findViewById<View>(R.id.bottomPlayer)
+            if (bottomPlayer != null) {
+                val mbDp = if (systemBars.bottom > 0) 0 else 8
+                val lp = bottomPlayer.layoutParams
+                if (lp is ViewGroup.MarginLayoutParams) {
+                    lp.bottomMargin = (mbDp * density).toInt()
+                    bottomPlayer.layoutParams = lp
+                }
+            }
             insets
         }
         // 强制请求一次 insets 派发，确保 listener 被触发
