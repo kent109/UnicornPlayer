@@ -400,7 +400,7 @@ class SongAdapter(
                 }
                 quality.setColor(qualityColor)
 
-                if (!isCurrentPlaying && !isCassetteMode) {
+                if (!isCurrentPlaying) {
                     albumArt.rotation = 0f
                 }
 
@@ -498,6 +498,7 @@ class SongAdapter(
 
         fun resetToStaticCassette() {
             (binding.albumArt.drawable as? KyrieDrawable)?.stop()
+            binding.albumArt.rotation = 0f
             binding.albumArt.setImageResource(com.unicorn.player.R.drawable.ic_cassette_photo)
         }
 

@@ -317,7 +317,7 @@ class PlayQueueAdapter(
                 }
                 quality.setColor(qualityColor)
 
-                if (!isCurrentPlaying && !isCassetteMode) {
+                if (!isCurrentPlaying) {
                     albumArt.rotation = 0f
                 }
 
@@ -410,6 +410,7 @@ class PlayQueueAdapter(
 
         fun resetToStaticCassette() {
             (binding.albumArt.drawable as? KyrieDrawable)?.stop()
+            binding.albumArt.rotation = 0f
             binding.albumArt.setImageResource(R.drawable.ic_cassette_photo)
         }
 
