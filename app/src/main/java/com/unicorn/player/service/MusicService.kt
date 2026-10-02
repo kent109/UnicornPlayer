@@ -135,6 +135,11 @@ class MusicService : Service() {
     @Volatile
     private var isRestoringState = false
 
+    // 防止 playNext/playPrevious 并发调用：歌曲即将播完时用户点击下一首，
+    // onCompletion 和按钮点击可能同时触发，导致跳过两首歌
+    @Volatile
+    private var isNavigating = false
+
     private val _currentSong = MutableLiveData<Song?>()
     val currentSong: LiveData<Song?> = _currentSong
 
@@ -1423,107 +1428,127 @@ class MusicService : Service() {
     }
 
     fun playNext() {
-        // 临时播放态：用户主动点"下一首"（UI 按钮/通知/耳机）→ 回到上次保存的歌曲从头播放
-        // 单曲队列下，不守卫会重播这首临时歌曲
-        if (isTempPlayback) {
-            resumeLastSavedSong()
+        // 防止并发调用：歌曲即将播完时用户点击下一首，onCompletion 和按钮点击可能同时触发
+        if (isNavigating) {
+            Log.d(TAG, "playNext ignored: already navigating")
             return
         }
-        if (songList.isEmpty()) {
-            // 如果songList为空，通知MainActivity重新设置歌曲列表
-            // 这样可以确保播放顺序与用户界面一致
-            Log.d(TAG, "songList is empty, requesting MainActivity to reset song list")
-            _requestSongList.postValue(Event(true))
-            return
-        }
-        realignCurrentIndex()
-
-        when (playMode) {
-            PlayMode.ALL_LOOP -> {
-                // 全部循环：到最后一首回到第一首
-                currentIndex = if (currentIndex < songList.size - 1) {
-                    currentIndex + 1
-                } else {
-                    0
-                }
+        isNavigating = true
+        try {
+            // 临时播放态：用户主动点"下一首"（UI 按钮/通知/耳机）→ 回到上次保存的歌曲从头播放
+            // 单曲队列下，不守卫会重播这首临时歌曲
+            if (isTempPlayback) {
+                resumeLastSavedSong()
+                return
             }
-
-            PlayMode.SINGLE_LOOP -> {
-                // 单曲循环：保持当前索引不变
+            if (songList.isEmpty()) {
+                // 如果songList为空，通知MainActivity重新设置歌曲列表
+                // 这样可以确保播放顺序与用户界面一致
+                Log.d(TAG, "songList is empty, requesting MainActivity to reset song list")
+                _requestSongList.postValue(Event(true))
+                return
             }
+            realignCurrentIndex()
 
-            PlayMode.RANDOM -> {
-                // 随机播放：随机选择一首（尽量不选当前）
-                if (songList.size > 1) {
-                    val newIndex = (0 until songList.size).random()
-                    currentIndex = if (newIndex == currentIndex && songList.size > 1) {
-                        (currentIndex + 1) % songList.size
+            when (playMode) {
+                PlayMode.ALL_LOOP -> {
+                    // 全部循环：到最后一首回到第一首
+                    currentIndex = if (currentIndex < songList.size - 1) {
+                        currentIndex + 1
                     } else {
-                        newIndex
+                        0
                     }
                 }
-            }
 
-            PlayMode.SEQUENCE -> {
-                // 顺序播放：到达最后一首后点击下一首不做处理
-                if (currentIndex >= songList.size - 1) {
-                    return
+                PlayMode.SINGLE_LOOP -> {
+                    // 单曲循环：保持当前索引不变
                 }
-                currentIndex++
+
+                PlayMode.RANDOM -> {
+                    // 随机播放：随机选择一首（尽量不选当前）
+                    if (songList.size > 1) {
+                        val newIndex = (0 until songList.size).random()
+                        currentIndex = if (newIndex == currentIndex && songList.size > 1) {
+                            (currentIndex + 1) % songList.size
+                        } else {
+                            newIndex
+                        }
+                    }
+                }
+
+                PlayMode.SEQUENCE -> {
+                    // 顺序播放：到达最后一首后点击下一首不做处理
+                    if (currentIndex >= songList.size - 1) {
+                        return
+                    }
+                    currentIndex++
+                }
             }
+            // 直接调用playCurrentSong，它会自动更新通知
+            playCurrentSong()
+            // 保存进度
+            savePlaybackState()
+        } finally {
+            isNavigating = false
         }
-        // 直接调用playCurrentSong，它会自动更新通知
-        playCurrentSong()
-        // 保存进度
-        savePlaybackState()
     }
 
     fun playPrevious() {
-        // 临时播放态：用户主动点"上一首"（UI 按钮/通知/耳机）→ 回到上次保存的歌曲从头播放
-        if (isTempPlayback) {
-            resumeLastSavedSong()
+        // 防止并发调用
+        if (isNavigating) {
+            Log.d(TAG, "playPrevious ignored: already navigating")
             return
         }
-        if (songList.isEmpty()) {
-            // 如果songList为空，通知MainActivity重新设置歌曲列表
-            // 这样可以确保播放顺序与用户界面一致
-            Log.d(TAG, "songList is empty, requesting MainActivity to reset song list")
-            _requestSongList.postValue(Event(true))
-            return
-        }
-        realignCurrentIndex()
-
-        currentIndex = when {
-            // 顺序播放模式：到达第一首后点击上一首不做处理
-            playMode == PlayMode.SEQUENCE && currentIndex == 0 -> return
-            // 单曲循环模式：重新播放当前歌曲
-            playMode == PlayMode.SINGLE_LOOP -> currentIndex
-            // 随机播放模式：随机选择一首（尽量不选当前）
-            playMode == PlayMode.RANDOM -> {
-                if (songList.size > 1) {
-                    val newIndex = (0 until songList.size).random()
-                    if (newIndex == currentIndex && songList.size > 1) {
-                        (currentIndex + 1) % songList.size
-                    } else {
-                        newIndex
-                    }
-                } else {
-                    currentIndex
-                }
+        isNavigating = true
+        try {
+            // 临时播放态：用户主动点"上一首"（UI 按钮/通知/耳机）→ 回到上次保存的歌曲从头播放
+            if (isTempPlayback) {
+                resumeLastSavedSong()
+                return
             }
+            if (songList.isEmpty()) {
+                // 如果songList为空，通知MainActivity重新设置歌曲列表
+                // 这样可以确保播放顺序与用户界面一致
+                Log.d(TAG, "songList is empty, requesting MainActivity to reset song list")
+                _requestSongList.postValue(Event(true))
+                return
+            }
+            realignCurrentIndex()
 
-            currentIndex > 0 -> currentIndex - 1
-            else -> songList.size - 1
+            currentIndex = when {
+                // 顺序播放模式：到达第一首后点击上一首不做处理
+                playMode == PlayMode.SEQUENCE && currentIndex == 0 -> return
+                // 单曲循环模式：重新播放当前歌曲
+                playMode == PlayMode.SINGLE_LOOP -> currentIndex
+                // 随机播放模式：随机选择一首（尽量不选当前）
+                playMode == PlayMode.RANDOM -> {
+                    if (songList.size > 1) {
+                        val newIndex = (0 until songList.size).random()
+                        if (newIndex == currentIndex && songList.size > 1) {
+                            (currentIndex + 1) % songList.size
+                        } else {
+                            newIndex
+                        }
+                    } else {
+                        currentIndex
+                    }
+                }
+
+                currentIndex > 0 -> currentIndex - 1
+                else -> songList.size - 1
+            }
+            // 先获取上一首的歌曲信息，更新歌曲信息，再播放
+            val previousSong = songList[currentIndex]
+            _currentSong.postValue(previousSong)
+            playCurrentSong()
+            // 立即更新通知和MediaSession状态
+            updateNotification(previousSong)
+            updateMediaSessionPlaybackState()
+            // 保存进度
+            savePlaybackState()
+        } finally {
+            isNavigating = false
         }
-        // 先获取上一首的歌曲信息，更新歌曲信息，再播放
-        val previousSong = songList[currentIndex]
-        _currentSong.postValue(previousSong)
-        playCurrentSong()
-        // 立即更新通知和MediaSession状态
-        updateNotification(previousSong)
-        updateMediaSessionPlaybackState()
-        // 保存进度
-        savePlaybackState()
     }
 
     fun requestAudioFocusAndPlayNext() {
