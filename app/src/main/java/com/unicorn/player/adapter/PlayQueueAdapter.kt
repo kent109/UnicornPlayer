@@ -365,12 +365,12 @@ class PlayQueueAdapter(
             val resId = CASSETTE_PLAYING_DRAWABLES.getOrElse(colorIndex) { CASSETTE_PLAYING_DRAWABLES[0] }
             val currentDrawable = binding.albumArt.drawable as? KyrieDrawable
             if (currentDrawable != null) {
-                if (savedTime != null && savedTime > 0) {
-                    currentDrawable.currentPlayTime = savedTime
-                }
                 if (currentDrawable.isPaused()) {
                     currentDrawable.resume()
                 } else if (!currentDrawable.isRunning()) {
+                    if (savedTime != null && savedTime > 0) {
+                        currentDrawable.currentPlayTime = savedTime
+                    }
                     currentDrawable.start()
                 }
             } else {
