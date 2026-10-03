@@ -9,6 +9,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Binder
 import android.os.Build
@@ -300,6 +302,32 @@ class MusicService : Service() {
 
     // 音频管理器（保留用于蓝牙/音量控制等）
     private lateinit var audioManager: AudioManager
+
+    // 手动音频焦点管理（替代 ExoPlayer handleAudioFocus=true 的自动管理，
+    // 避免 Activity 重建时重新请求焦点导致音频停顿）：
+    // 播放前请求焦点，其他应用抢占焦点时暂停，焦点恢复且之前在播放时续播。
+    // 逻辑与 MediaPlayer 时代一致。
+    private var wasPlayingBeforeFocusLoss = false
+
+    private lateinit var audioFocusRequest: AudioFocusRequest
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                // 重新获得焦点：仅在焦点丢失前正在播放时恢复播放
+                if (wasPlayingBeforeFocusLoss) {
+                    wasPlayingBeforeFocusLoss = false
+                    play()
+                }
+            }
+
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT, AudioManager.AUDIOFOCUS_LOSS -> {
+                // 其他应用抢占焦点（短暂或永久）：暂停播放并记录之前是否在播放
+                wasPlayingBeforeFocusLoss = player.isPlaying
+                pause()
+            }
+        }
+    }
 
     var currentIndex = 0
     var isChangingSong = false
@@ -821,6 +849,11 @@ class MusicService : Service() {
 
         // 取消注册广播接收器
         unregisterReceiver(notificationButtonReceiver)
+
+        // 放弃手动管理的音频焦点
+        if (::audioFocusRequest.isInitialized) {
+            audioManager.abandonAudioFocusRequest(audioFocusRequest)
+        }
         // 修复：注销 audioDeviceReceiver，防止 IntentReceiverLeaked
         // 之前遗漏导致 service 销毁时 receiver 泄露，系统重建 service 时
         // onCreate 中的 ContextCompat.registerReceiver 抛出 IntentReceiverLeaked，
@@ -1103,10 +1136,27 @@ class MusicService : Service() {
         startPlayStateObserver()
     }
 
+    private fun requestAudioFocus(): Int {
+        if (!::audioFocusRequest.isInitialized) {
+            audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .build()
+                )
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                .build()
+        }
+        return audioManager.requestAudioFocus(audioFocusRequest)
+    }
+
     fun requestAudioFocusAndPlayCurrentSong() {
-        // ExoPlayer 不接管音频焦点（handleAudioFocus=false），由系统按 STREAM_MUSIC 自动管理。
-        // 手动管理会导致 Activity 重建时重新请求焦点，产生可闻的音频停顿。
-        playCurrentSong()
+        // 手动请求音频焦点（handleAudioFocus=false，见 audioFocusChangeListener），
+        // 获得焦点后才播放；焦点丢失时由 listener 暂停。
+        if (requestAudioFocus() == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            playCurrentSong()
+        }
     }
 
     /**
@@ -1312,8 +1362,10 @@ class MusicService : Service() {
     }
 
     fun requestAudioFocusAndPlay() {
-        // ExoPlayer 接管音频焦点（handleAudioFocus=true），直接播放
-        play()
+        // 手动请求音频焦点（handleAudioFocus=false），获得焦点后才播放
+        if (requestAudioFocus() == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            play()
+        }
     }
 
     fun pause() {
@@ -1585,17 +1637,21 @@ class MusicService : Service() {
     }
 
     fun requestAudioFocusAndPlayNext() {
-        // ExoPlayer 接管音频焦点（handleAudioFocus=true），直接播放下一首
-        playNext()
-        updateNotification(_currentSong.value)
-        updateMediaSessionPlaybackState()
+        // 手动请求音频焦点（handleAudioFocus=false），获得焦点后才播放下一首
+        if (requestAudioFocus() == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            playNext()
+            updateNotification(_currentSong.value)
+            updateMediaSessionPlaybackState()
+        }
     }
 
     fun requestAudioFocusAndPlayPrevious() {
-        // ExoPlayer 接管音频焦点（handleAudioFocus=true），直接播放上一首
-        playPrevious()
-        updateNotification(_currentSong.value)
-        updateMediaSessionPlaybackState()
+        // 手动请求音频焦点（handleAudioFocus=false），获得焦点后才播放上一首
+        if (requestAudioFocus() == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            playPrevious()
+            updateNotification(_currentSong.value)
+            updateMediaSessionPlaybackState()
+        }
     }
 
     fun seekTo(position: Int) {
