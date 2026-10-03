@@ -4,7 +4,9 @@ import android.app.AlertDialog
 import android.os.Bundle
 import android.util.Log
 import android.util.TypedValue
+import android.view.LayoutInflater
 import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -97,21 +99,53 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         super.onStart()
 
         if (musicService != null) {
-            val sessionId = musicService?.getAudioSessionId() ?: 0
-
-            if (sessionId == 0) {
-                Log.e(TAG, "Invalid audio session ID: 0")
-                return
-            }
-
+            // 即使当前没有 audioSession（从未播放），也创建 Fragment：
+            // Fragment 自身从持久化渲染上次的开关/模式/频段/旋钮状态，
+            // 仅以遮罩置灰；待 session 可用时 tryRefreshEffects() 自动解除
             setupEqualizerFragment()
-
-            if (Settings.isEqualizerEnabled) {
-                AudioEffectManager.enableEffects(this)
-            } else {
-                AudioEffectManager.disableEffects()
-            }
+            tryRefreshEffects()
         }
+    }
+
+    /**
+     * 确保系统音效对象已按当前 audioSessionId 创建。
+     * AudioEffectManager.initialize 幂等（已初始化时直接返回）。
+     */
+    private fun ensureEffectsInitialized(sessionId: Int) {
+        if (!AudioEffectManager.areEffectsEnabled()) {
+            Log.d(
+                TAG,
+                "ensureEffectsInitialized: initializing AudioEffectManager for session=$sessionId"
+            )
+            AudioEffectManager.initialize(applicationContext, sessionId)
+        }
+    }
+
+    /**
+     * audioSession 可用时：创建系统音效、按开关 enable/disable、通知 Fragment 解除遮罩。
+     * session 尚为 0（未播放、ExoPlayer 未 prepare）时静默等待 LiveData 下次回调。
+     */
+    private fun tryRefreshEffects() {
+        val service = musicService ?: return
+        val sessionId = service.getAudioSessionId()
+        if (sessionId == 0) {
+            return
+        }
+        ensureEffectsInitialized(sessionId)
+        if (Settings.isEqualizerEnabled) {
+            AudioEffectManager.enableEffects(this)
+        } else {
+            AudioEffectManager.disableEffects()
+        }
+        notifyFragmentEffectsReady()
+    }
+
+    /**
+     * 通知已添加的 EqualizerFragment 音效已就绪，解除未播放遮罩。
+     */
+    private fun notifyFragmentEffectsReady() {
+        val fragment = supportFragmentManager.findFragmentByTag("f_eq") as? EqualizerFragment
+        fragment?.refreshAudioEffectsState()
     }
 
     private fun setupTitleBar() {
@@ -356,6 +390,47 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         dialog.show()
     }
 
+    /**
+     * 导入配置失败时弹出确认框，提示是否删除该无效配置。
+     *
+     * @param reason 具体错误原因（原 Toast 文案，作为 message 首行）
+     * @param fileName 出错的配置文件名（含 .json），点击删除时传给 EqualizerConfigManager
+     */
+    private fun showImportErrorDialog(reason: String, fileName: String) {
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_clear_cache, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(view)
+            .setCancelable(true)
+            .create()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        view.findViewById<TextView>(R.id.tvTitle).text = "导入错误"
+        // 展示名去掉 .json 后缀
+        val displayName = fileName.removeSuffix(".json")
+        view.findViewById<TextView>(R.id.tvMessage).text =
+            "$reason，是否删除配置『$displayName』？"
+        val btnConfirm = view.findViewById<TextView>(R.id.btnConfirm)
+        btnConfirm.text = "删除"
+        btnConfirm.setOnClickListener {
+            dialog.dismiss()
+            lifecycleScope.launch(Dispatchers.IO) {
+                val deleted =
+                    EqualizerConfigManager.deleteConfig(this@EqualizerActivity, fileName)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@EqualizerActivity,
+                        if (deleted) "已删除配置『$displayName』" else "删除失败",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+        val btnCancel = view.findViewById<TextView>(R.id.btnCancel)
+        btnCancel.text = "取消"
+        btnCancel.setOnClickListener { dialog.dismiss() }
+        dialog.show()
+    }
+
     /** 执行导入：读取 JSON -> 反序列化 -> 调用 EqualizerFragment.applyImportedConfig。 */
     private fun performImport(fileName: String) {
         lifecycleScope.launch(Dispatchers.IO) {
@@ -371,19 +446,22 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             } catch (e: Exception) {
                 Log.e(TAG, "解析配置失败", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@EqualizerActivity, "配置文件格式错误", Toast.LENGTH_SHORT).show()
+                    showImportErrorDialog("配置文件格式错误", fileName)
                 }
                 return@launch
             }
             if (config.version < EqualizerConfig.CURRENT_VERSION) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@EqualizerActivity, "配置版本不兼容（需 v${EqualizerConfig.CURRENT_VERSION}）", Toast.LENGTH_SHORT).show()
+                    showImportErrorDialog(
+                        "配置版本不兼容（需 v${EqualizerConfig.CURRENT_VERSION}）",
+                        fileName
+                    )
                 }
                 return@launch
             }
             if (config.bandLevels.size != 10) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@EqualizerActivity, "频段数据不完整（需 10 段）", Toast.LENGTH_SHORT).show()
+                    showImportErrorDialog("频段数据不完整（需 10 段）", fileName)
                 }
                 return@launch
             }
@@ -421,18 +499,15 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     override fun onServiceConnected(service: MusicService?) {
         musicService = service ?: return
-        // 服务连接后立即设置均衡器
-        val sessionId = musicService?.getAudioSessionId() ?: 0
-        if (sessionId == 0) {
-            Log.e(TAG, "Invalid audio session ID: 0")
-            return
-        }
+
+        // 先创建 Fragment（无 session 时以遮罩只读展示上次状态）
         setupEqualizerFragment()
-        if (Settings.isEqualizerEnabled) {
-            AudioEffectManager.enableEffects(this)
-        } else {
-            AudioEffectManager.disableEffects()
-        }
+        tryRefreshEffects()
+
+        // 观察歌曲切换/播放状态：冷启动后从未播放（session=0）时，
+        // 用户一旦选歌播放（player prepare → session 非零），立即初始化音效并解除遮罩
+        service.currentSong.observe(this) { tryRefreshEffects() }
+        service.isPlaying.observe(this) { tryRefreshEffects() }
     }
 
     override fun onServiceDisconnected() {
@@ -441,10 +516,6 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     private fun setupEqualizerFragment() {
         val sessionId = musicService?.getAudioSessionId() ?: 0
-        if (sessionId == 0) {
-            finish()
-            return
-        }
 
         var equalizerFragment =
             supportFragmentManager.findFragmentByTag("f_eq") as? EqualizerFragment
@@ -462,6 +533,8 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             typedValue.data
         }
 
+        // sessionId 可能为 0（从未播放）：Fragment 以遮罩只读态展示持久化状态，
+        // 音效初始化由 tryRefreshEffects() 在 session 可用后完成
         equalizerFragment = EqualizerFragment.newBuilder()
             .setAccentColor(accentColor)
             .setAudioSessionId(sessionId)
@@ -475,13 +548,8 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     override fun onResume() {
         super.onResume()
         if (musicService != null) {
-            val sessionId = musicService?.getAudioSessionId() ?: 0
-            if (sessionId != 0) {
-                val existingFragment = supportFragmentManager.findFragmentById(R.id.eqFrame)
-                if (existingFragment == null || !existingFragment.isVisible) {
-                    setupEqualizerFragment()
-                }
-            }
+            setupEqualizerFragment()
+            tryRefreshEffects()
         }
     }
 

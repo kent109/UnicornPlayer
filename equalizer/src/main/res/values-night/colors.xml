@@ -14,4 +14,8 @@
 
     <color name="eq_enable_color">#D0BCFF</color>
     <color name="eq_disable_color">#858385</color>
+
+    <!-- 音频效果未就绪（未播放）时覆盖控件的置灰遮罩（夜间） -->
+    <color name="eq_blocker_scrim">#FF141414</color>
+
 </resources>

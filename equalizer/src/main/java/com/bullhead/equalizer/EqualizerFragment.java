@@ -119,6 +119,19 @@ public class EqualizerFragment extends Fragment {
 
     private boolean customModifyFlag;
 
+    /**
+     * 抑制 Spinner 监听器：用户拖动 seekbar 时立即把 Spinner 切到"自定义"，
+     * 但此时不应触发 onItemSelected 的自定义恢复逻辑（会从持久化读 custom_preset
+     * 覆盖当前拖动的电平）。设置标志后 setSelection(0)，监听器首行检查并跳过。
+     */
+    private boolean suppressSpinnerListener;
+
+    /**
+     * 本次手指拖动是否已完成"预设 → 自定义"切换（含自定义频段加载）。
+     * 一次拖动只加载一次，onStartTrackingTouch 时复位。
+     */
+    private boolean trackingTouchSwitchedToCustom;
+
     private boolean isAudioEffectsAvailable = false;
 
     public EqualizerFragment() {
@@ -200,27 +213,32 @@ public class EqualizerFragment extends Fragment {
             mEqualizer.setEnabled(false);
         }
 
-        if (isAudioEffectsAvailable) {
-            Log.d(TAG, "onCreate: Loading custom preset from persistent storage");
-            int pos = Settings.loadPresetPos(ctx);
-            if (pos >= 0) {
-                Settings.presetPos = pos;
+        // 预设/频段/旋钮的持久化加载不依赖系统音效对象是否已创建：
+        // 冷启动未播放直接进页面时 AudioEffectManager 尚未初始化（三个对象为 null），
+        // 但 UI 仍需完整展示上次状态（仅不可交互，由 equalizerBlocker 遮罩拦截）。
+        Log.d(TAG, "onCreate: Loading preset from persistent storage, effectsAvailable="
+                + isAudioEffectsAvailable);
+        int pos = Settings.loadPresetPos(ctx);
+        if (pos >= 0) {
+            Settings.presetPos = pos;
+        }
+        if (Settings.presetPos >= 1 && Settings.presetPos < PRESET_LEVELS.length) {
+            // 内置预设：直接查预设表，保证未播放场景也能还原各频段与曲线
+            for (short i = 0; i < NUM_BANDS; i++) {
+                Settings.seekbarpos[i] = PRESET_LEVELS[Settings.presetPos][i];
             }
-            if (Settings.presetPos == 0) {
-                int[] customPreset = Settings.loadCustomPreset(ctx);
-                if (customPreset != null) {
-                    Settings.seekbarpos = customPreset;
-                }
+        } else if (Settings.presetPos == 0) {
+            int[] customPreset = Settings.loadCustomPreset(ctx);
+            if (customPreset != null) {
+                Settings.seekbarpos = customPreset;
             }
-            // 频段电平交由自研 TenBandEqualizerProcessor 处理（通过桥接回调），
-            // 系统 mEqualizer 仅作为 audioSession 锚点存在，不再调用其频段 API。
-            // 开关关闭时下发全零：AudioProcessor 不受系统 EQ enable 控制，
-            // 不进页面的场景由 MusicService 冷启动恢复负责，二者保持一致。
-            if (Settings.isEqualizerEnabled) {
-                TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
-            } else {
-                TenBandEqBridge.applyBandLevels(new int[NUM_BANDS]);
-            }
+        }
+        // 频段电平交由自研 TenBandEqualizerProcessor 处理（通过桥接回调，无播放时安全空转，
+        // 待音频管线 configure 时生效）；开关关闭时下发全零。
+        if (Settings.isEqualizerEnabled) {
+            TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+        } else {
+            TenBandEqBridge.applyBandLevels(new int[NUM_BANDS]);
         }
     }
 
@@ -253,21 +271,28 @@ public class EqualizerFragment extends Fragment {
 
         equalizerSwitch = view.findViewById(R.id.equalizer_switch);
         equalizerTouchBlocker = view.findViewById(R.id.equalizerTouchBlocker);
+        equalizerBlocker = view.findViewById(R.id.equalizerBlocker);
 
-        if (!isAudioEffectsAvailable) {
-            equalizerSwitch.setChecked(false);
-            setControlsEnabled(false);
-            return;
-        }
-
+        // 无论音效是否就绪都完整构建 UI（未播放时展示上次状态但不可交互，
+        // 由 equalizerBlocker 统一遮罩）。开关反映持久化的真实状态。
         equalizerSwitch.setChecked(Settings.isEqualizerEnabled);
         equalizerSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            mEqualizer.setEnabled(isChecked);
-            bassBoost.setEnabled(isChecked);
-            presetReverb.setEnabled(isChecked);
+            // 系统音效对象可能尚未创建（未播放），仅在存在时操作
+            if (mEqualizer != null) {
+                mEqualizer.setEnabled(isChecked);
+            }
+            if (bassBoost != null) {
+                bassBoost.setEnabled(isChecked);
+            }
+            if (presetReverb != null) {
+                presetReverb.setEnabled(isChecked);
+            }
             Settings.isEqualizerEnabled = isChecked;
             Settings.equalizerModel.setEqualizerEnabled(isChecked);
-            setControlsEnabled(isChecked);
+            // 遮罩显示中（音效未就绪）时不改变控件可用性，只持久化开关意图
+            if (isAudioEffectsAvailable) {
+                setControlsEnabled(isChecked);
+            }
             if (isChecked) {
                 // 打开瞬间从 Settings 重新应用全部值：覆盖"开关未开时导入、之后打开开关"的场景，
                 // 否则音效参数和 seekbar/旋钮都停留在 onCreate/onViewCreated 时的旧值
@@ -280,7 +305,9 @@ public class EqualizerFragment extends Fragment {
             }
         });
 
-        setControlsEnabled(Settings.isEqualizerEnabled);
+        if (isAudioEffectsAvailable) {
+            setControlsEnabled(Settings.isEqualizerEnabled);
+        }
 
         spinnerDropDownIcon = view.findViewById(R.id.spinner_dropdown_icon);
         spinnerDropDownIcon.setOnClickListener(v -> presetSpinner.performClick());
@@ -292,9 +319,6 @@ public class EqualizerFragment extends Fragment {
         // 收起时重新获得焦点）
         presetSpinner.setOnDropdownOpenedListener(() -> rotateDropdownIcon(true));
         presetSpinner.setOnDropdownDismissedListener(() -> rotateDropdownIcon(false));
-
-        equalizerBlocker = view.findViewById(R.id.equalizerBlocker);
-        equalizerTouchBlocker = view.findViewById(R.id.equalizerTouchBlocker);
 
         chart = view.findViewById(R.id.lineChart);
         paint = new Paint();
@@ -359,12 +383,15 @@ public class EqualizerFragment extends Fragment {
             // 避免负 strength 传入 BassBoost.setStrength 抛 RuntimeException
             int p = Math.max(progress, 0);
             Settings.bassStrength = (short) (((float) 1000 / 19) * (p));
-            try {
-                bassBoost.setStrength(Settings.bassStrength);
-                Settings.equalizerModel.setBassStrength(Settings.bassStrength);
-                Settings.saveBassProgress(ctx, p);
-            } catch (Exception e) {
-                e.printStackTrace();
+            Settings.equalizerModel.setBassStrength(Settings.bassStrength);
+            Settings.saveBassProgress(ctx, p);
+            // 系统音效未初始化（未播放）时仅持久化，待播放后随效果初始化生效
+            if (bassBoost != null) {
+                try {
+                    bassBoost.setStrength(Settings.bassStrength);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
         });
 
@@ -374,11 +401,13 @@ public class EqualizerFragment extends Fragment {
             int p = Math.max(progress, 0);
             Settings.reverbPreset = (short) ((p * 6) / 19);
             Settings.equalizerModel.setReverbPreset(Settings.reverbPreset);
-            try {
-                presetReverb.setPreset(Settings.reverbPreset);
-                Settings.saveReverbProgress(ctx, p);
-            } catch (Exception e) {
-                e.printStackTrace();
+            Settings.saveReverbProgress(ctx, p);
+            if (presetReverb != null) {
+                try {
+                    presetReverb.setPreset(Settings.reverbPreset);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
             y = p;
         });
@@ -394,10 +423,7 @@ public class EqualizerFragment extends Fragment {
 
         points = new float[numberOfFrequencyBands];
 
-        if (!isAudioEffectsAvailable) {
-            return;
-        }
-
+        // 10 个 seekbar 始终动态构建（音效未就绪时也完整展示上次频段值，仅不可拖动）。
         // 频段电平上下限固定（不再读 mEqualizer.getBandLevelRange()），与自研
         // TenBandEqualizerProcessor 的 -15 ~ +15 dB 范围对应。
         final short lowerEqualizerBandLevel = (short) LOWER_BAND_LEVEL_MB;
@@ -518,6 +544,13 @@ public class EqualizerFragment extends Fragment {
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    // 用户首次拖动：从预设模式立即切到"自定义"，并把已保存的自定义各频段
+                    // 值加载到其余 9 个频段（当前拖动频段保持手指值）。必须在图表更新前完成。
+                    if (fromUser && Settings.presetPos != 0 && !trackingTouchSwitchedToCustom) {
+                        trackingTouchSwitchedToCustom = true;
+                        switchToCustomFromPreset(equalizerBandIndex);
+                    }
+
                     // 更新值显示
                     int mb = progress + lowerEqualizerBandLevel;
                     bandValueTextView.setText(formatBandLevelDb(mb));
@@ -545,18 +578,12 @@ public class EqualizerFragment extends Fragment {
 
                 @Override
                 public void onStartTrackingTouch(SeekBar seekBar) {
-                    // 切换到自定义预设的时机移到 onStopTrackingTouch，
-                    // 避免拖动开始就触发 spinner listener 重置所有频段 UI。
+                    trackingTouchSwitchedToCustom = false;
                 }
 
                 @Override
                 public void onStopTrackingTouch(SeekBar seekBar) {
-                    // 拖动结束后切换到自定义预设
-                    if (presetSpinner != null) {
-                        presetSpinner.setSelection(0);
-                        Settings.presetPos = 0;
-                        Settings.equalizerModel.setPresetPos(0);
-                    }
+                    // 拖动结束后的自定义持久化由 onPause/saveCustomPreset 处理
                 }
             });
 
@@ -584,7 +611,9 @@ public class EqualizerFragment extends Fragment {
         chart.addData(dataset);
         chart.show();
 
-        updateComponentColors(Settings.isEqualizerEnabled);
+        // 音频效果未就绪（未播放、无 audioSession）：显示遮罩置灰并拦截全部控件触摸；
+        // 就绪后由 refreshAudioEffectsState() 解除
+        applyEffectsAvailabilityUi();
 
         Button mEndButton = new Button(getContext());
         mEndButton.setBackgroundColor(themeColor);
@@ -912,9 +941,8 @@ public class EqualizerFragment extends Fragment {
     }
 
     public void equalizeSound() {
-        if (!isAudioEffectsAvailable) {
-            return;
-        }
+        // Spinner/曲线构建不依赖系统音效对象（预设表为内置 10 段固定表），
+        // 未播放时也要还原上次模式与频响曲线。
 
         ArrayList<String> equalizerPresetNames = new ArrayList<>();
         ArrayAdapter<String> equalizerPresetSpinnerAdapter = new ArrayAdapter<String>(ctx, R.layout.spinner_item, equalizerPresetNames) {
@@ -985,6 +1013,11 @@ public class EqualizerFragment extends Fragment {
         presetSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (suppressSpinnerListener) {
+                    suppressSpinnerListener = false;
+                    Log.d(TAG, "onItemSelected suppressed (custom transition from seekbar)");
+                    return;
+                }
                 Log.d(TAG, "onItemSelected: position=" + position);
                 Log.d(TAG, "Settings.seekbarpos BEFORE: " + Arrays.toString(Settings.seekbarpos));
                 try {
@@ -1039,6 +1072,47 @@ public class EqualizerFragment extends Fragment {
 
             }
         });
+    }
+
+    /**
+     * 用户在预设模式下首次拖动某个 seekbar 时调用：立即切到"自定义"，
+     * 并把已保存的自定义各频段电平加载到除拖动频段外的其余 9 个频段
+     * （拖动中的频段保持用户手指值，由本次 onProgressChanged 后续逻辑写入）。
+     *
+     * @param draggedBandIndex 用户正在拖动的频段索引，该频段不加载自定义值
+     */
+    private void switchToCustomFromPreset(int draggedBandIndex) {
+        final short lowerEqualizerBandLevel = (short) LOWER_BAND_LEVEL_MB;
+        int[] customPreset = Settings.loadCustomPreset(ctx);
+        if (customPreset != null) {
+            for (short i = 0; i < NUM_BANDS; i++) {
+                if (i == draggedBandIndex) {
+                    continue; // 正在拖动的频段保持手指值
+                }
+                int mb = customPreset[i];
+                Settings.seekbarpos[i] = mb;
+                if (Settings.equalizerModel != null
+                        && Settings.equalizerModel.getSeekbarpos() != null
+                        && i < Settings.equalizerModel.getSeekbarpos().length) {
+                    Settings.equalizerModel.getSeekbarpos()[i] = mb;
+                }
+                seekBarFinal[i].setProgress(mb - lowerEqualizerBandLevel);
+                points[i] = mb - lowerEqualizerBandLevel;
+            }
+        }
+        // customPreset 为 null（从未保存过自定义）时保留当前预设值作为自定义起点
+
+        Settings.presetPos = 0;
+        Settings.equalizerModel.setPresetPos(0);
+        Settings.savePresetPos(ctx, 0);
+        if (presetSpinner != null) {
+            // 抑制本次 setSelection 触发的 onItemSelected：
+            // 其 position=0 分支会重新加载 custom_preset 覆盖正在拖动的频段
+            suppressSpinnerListener = true;
+            presetSpinner.setSelection(0);
+        }
+        Log.d(TAG, "switchToCustomFromPreset: dragged band=" + draggedBandIndex
+                + ", customLoaded=" + (customPreset != null));
     }
 
     /**
@@ -1110,6 +1184,57 @@ public class EqualizerFragment extends Fragment {
 
     public static Builder newBuilder() {
         return new Builder();
+    }
+
+    /**
+     * 按 {@link #isAudioEffectsAvailable} 刷新遮罩与控件可用性：
+     * - 未就绪（冷启动未播放）：equalizerBlocker 显示置灰遮罩并拦截触摸，控件全部 disable；
+     * - 已就绪：隐藏遮罩，控件可用性跟随均衡器总开关。
+     */
+    private void applyEffectsAvailabilityUi() {
+        if (equalizerBlocker == null) {
+            return;
+        }
+        if (isAudioEffectsAvailable) {
+            equalizerBlocker.setVisibility(View.GONE);
+            setControlsEnabled(Settings.isEqualizerEnabled);
+        } else {
+            equalizerBlocker.setBackgroundColor(
+                    getResources().getColor(R.color.eq_blocker_scrim, requireContext().getTheme()));
+            equalizerBlocker.setVisibility(View.VISIBLE);
+            setControlsEnabled(false);
+        }
+    }
+
+    /**
+     * 供 Activity 在播放开始、系统音效初始化完成后回调：
+     * 重新获取音效对象，就绪则解除遮罩并把开关/低音/混响状态同步到系统音效。
+     */
+    public void refreshAudioEffectsState() {
+        if (isAudioEffectsAvailable) {
+            return;
+        }
+        mEqualizer = AudioEffectManager.getEqualizer();
+        bassBoost = AudioEffectManager.getBassBoost();
+        presetReverb = AudioEffectManager.getPresetReverb();
+        if (mEqualizer == null || bassBoost == null || presetReverb == null) {
+            return;
+        }
+        isAudioEffectsAvailable = true;
+        Log.d(TAG, "refreshAudioEffectsState: effects now available");
+
+        boolean enabled = Settings.isEqualizerEnabled;
+        mEqualizer.setEnabled(enabled);
+        bassBoost.setEnabled(enabled);
+        presetReverb.setEnabled(enabled);
+
+        // 解除遮罩，恢复控件（可用性跟随开关）
+        applyEffectsAvailabilityUi();
+
+        if (enabled) {
+            // 与开关打开逻辑一致：把持久化的频段/低音/混响全部重新应用
+            refreshFromSettingsOnEnable();
+        }
     }
 
     private void setControlsEnabled(boolean enabled) {

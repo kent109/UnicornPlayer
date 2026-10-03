@@ -120,14 +120,18 @@ public class AudioEffectManager {
                 Settings.equalizerModel.setBassStrength((short) (1000 / 19));
             }
 
-            if (Settings.presetPos == 0) {
-                short numberOfBands = sEqualizer.getNumberOfBands();
-                for (short bandIdx = 0; bandIdx < numberOfBands; bandIdx++) {
-                    int savedLevel = Settings.seekbarpos[bandIdx];
-                    sEqualizer.setBandLevel(bandIdx, (short) savedLevel);
+            // 系统 Equalizer 仅作为 audioSession 锚点存在，频段电平由自研 AudioProcessor 处理。
+            // 但系统 EQ 的预设数量通常只有约 10 个（厂商实现），当用户选择索引 ≥11 的预设时
+            // usePreset 会越界抛 IllegalArgumentException。因此无论哪种情况都直接按 seekbarpos
+            // 手动设值（自研 Processor 的预设电平已在 restoreEqualizerSettings / Fragment 中同步到
+            // Settings.seekbarpos，此处只需把相同值写给系统 EQ，保持两边一致）。
+            short numberOfBands = sEqualizer.getNumberOfBands();
+            for (short bandIdx = 0; bandIdx < numberOfBands; bandIdx++) {
+                // 系统 EQ 通常只有 5 段，而自研 Processor 有 10 段；
+                // 这里按系统段数上限写入，避免 IndexOutOfBounds
+                if (bandIdx < Settings.seekbarpos.length) {
+                    sEqualizer.setBandLevel(bandIdx, (short) Settings.seekbarpos[bandIdx]);
                 }
-            } else {
-                sEqualizer.usePreset((short) (Settings.presetPos - 1));
             }
 
             if (sBassBoost != null) {
