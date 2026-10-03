@@ -83,47 +83,14 @@ public class EqualizerFragment extends Fragment {
     /**
      * 内置 10 段预设（毫贝 mB），索引与 {@link #PRESET_NAMES} 对应。
      * 第 0 项为"自定义"占位（不会被作为预设应用，仅用于 Spinner 显示）。
-     * 与 app 模块 TenBandEqualizerProcessor 文档约定的频点表保持一致。
+     * 预设表统一维护在 {@link EqualizerPresets}，供 MusicService 冷启动恢复时共用。
      */
-    private static final int[][] PRESET_LEVELS = {
-            {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},                               // 0: 自定义（占位）
-            {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},                               // 1: 平直
-            {-100, 200, 400, 500, 100, -100, -100, -100, 0, -100},       // 2: 流行
-            {500, 400, 200, -100, -200, 0, 200, 500, 600, 500},           // 3: 摇滚
-            {300, 200, 100, 200, -100, -100, 0, 100, 200, 300},          // 4: 爵士
-            {400, 300, 200, 0, -100, -100, 0, 200, 300, 400},            // 5: 古典
-            {600, 500, 200, 0, 0, -200, -200, 0, 100, 300},              // 6: 舞曲
-            {600, 500, 300, 0, -100, -200, 0, 300, 500, 500},            // 7: 重金属
-            {500, 400, 100, 200, -100, -100, 0, 100, 200, 300},          // 8: 嘻哈
-            {300, 300, 200, 0, -100, -100, 0, 200, 300, 300},            // 9: 民谣
-            {-300, -200, -100, 100, 300, 400, 400, 300, 100, 0},         // 10: 人声（衰减低频，提升 500Hz~4kHz 人声基频与齿音区）
-            {500, 500, 200, -200, -300, 0, 100, 300, 400, 400},          // 11: 电子（强化低频与高频，中部凹陷突出合成器层次）
-            {200, 200, 100, -100, -100, 0, 100, 200, 300, 300},          // 12: 蓝调（温和微笑曲线）
-            {300, 300, 100, 100, -100, -100, 0, 200, 300, 300},          // 13: 原声（提升低高频质感，中频略收）
-            {600, 500, 400, 200, 100, 0, 0, 0, 0, 0},                    // 14: 低音（仅增强低频）
-            {0, 0, 0, 0, 0, 100, 200, 400, 500, 600},                     // 15: 高音（仅增强高频）
-            {300, 200, 100, 0, -100, 0, 100, 200, 300, 300},              // 16: 乡村（温和微笑曲线，中频略收）
-            {300, 200, 0, -200, -100, 100, 200, 300, 200, 100},           // 17: 雷鬼（突出低音，压低 250~500Hz 浑浊区）
-            {300, 300, 100, 100, -100, -100, 0, 100, 200, 300},           // 18: R&B（柔和厚实，中频顺滑）
-            {400, 300, 100, -200, -100, 100, 300, 400, 300, 200},         // 19: 放克（低音有弹性，2kHz 起强调切分节奏）
-            {300, 200, 0, 100, -100, -100, 0, 200, 300, 300},             // 20: 拉丁（打击乐明亮，整体轻快）
-            {200, 100, -100, -100, 0, 0, 100, 200, 300, 400},             // 21: 新世纪（空灵飘逸，高频空气感）
-            {500, 400, 300, 100, 0, -100, 100, 300, 500, 500},            // 22: 朋克（比摇滚更猛的双端提升，中频微凹）
-            {400, 300, 0, 0, 100, 100, 0, 200, 300, 400},                 // 23: 派对（等响曲线，嘈杂环境下保持活力）
-            {-600, -400, -200, 0, 200, 400, 400, 300, 100, 0},            // 24: 播客（切除低频轰鸣，强化人声清晰度）
-            {300, 200, 100, 0, 0, 100, 100, 200, 300, 400}                // 25: 音乐厅（模拟现场空间感与泛音）
-    };
+    private static final int[][] PRESET_LEVELS = EqualizerPresets.PRESET_LEVELS;
 
     /**
      * 预设名称列表（Spinner 显示顺序，position 0 = 自定义）。
-     * 新增预设只能追加在末尾：Settings.presetPos 按索引持久化，
-     * 中间插入会导致老用户保存的预设错位。
      */
-    private static final String[] PRESET_NAMES = {
-            "自定义", "平直", "流行", "摇滚", "爵士", "古典", "舞曲", "重金属", "嘻哈", "民谣",
-            "人声", "电子", "蓝调", "原声", "低音", "高音",
-            "乡村", "雷鬼", "R&B", "放克", "拉丁", "新世纪", "朋克", "派对", "播客", "音乐厅"
-    };
+    private static final String[] PRESET_NAMES = EqualizerPresets.PRESET_NAMES;
 
     static int themeColor = Color.parseColor("#B24242");
     public Equalizer mEqualizer;
@@ -247,7 +214,13 @@ public class EqualizerFragment extends Fragment {
             }
             // 频段电平交由自研 TenBandEqualizerProcessor 处理（通过桥接回调），
             // 系统 mEqualizer 仅作为 audioSession 锚点存在，不再调用其频段 API。
-            TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+            // 开关关闭时下发全零：AudioProcessor 不受系统 EQ enable 控制，
+            // 不进页面的场景由 MusicService 冷启动恢复负责，二者保持一致。
+            if (Settings.isEqualizerEnabled) {
+                TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+            } else {
+                TenBandEqBridge.applyBandLevels(new int[NUM_BANDS]);
+            }
         }
     }
 
@@ -299,6 +272,11 @@ public class EqualizerFragment extends Fragment {
                 // 打开瞬间从 Settings 重新应用全部值：覆盖"开关未开时导入、之后打开开关"的场景，
                 // 否则音效参数和 seekbar/旋钮都停留在 onCreate/onViewCreated 时的旧值
                 refreshFromSettingsOnEnable();
+            } else {
+                // 关闭开关：系统 EQ/低音/混响已在上面 disable，自研 10 段 AudioProcessor
+                // 不受系统 enable 控制，必须显式下发全零电平停止染色（Settings 中的预设值保留，
+                // 下次打开开关由 refreshFromSettingsOnEnable 恢复）
+                TenBandEqBridge.applyBandLevels(new int[NUM_BANDS]);
             }
         });
 

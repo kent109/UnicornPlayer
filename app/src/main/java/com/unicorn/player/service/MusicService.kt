@@ -294,9 +294,38 @@ class MusicService : Service() {
                 Settings.equalizerModel.reverbPreset = reverbPreset
                 Settings.equalizerModel.bassStrength = Settings.bassStrength
             }
+            // 频段电平以 equalizer 模块的即时持久化（EqualizerPrefs）为准重新解析：
+            // 用户在均衡器页选择预设/保存自定义时立即写入该存储，而上方 DataStore 的
+            // bandLevels 仅在播放状态保存时更新——选完预设立刻杀进程（尤其未播放时）
+            // 会读到旧电平，表现为不进入均衡器页预设不生效。
+            // pos=-1 表示从未进入过均衡器页，保留 DataStore/默认全零结果。
+            val savedPresetPos =
+                com.bullhead.equalizer.EqualizerPresets.loadPresetPosition(applicationContext)
+            if (savedPresetPos >= 0) {
+                Settings.presetPos = savedPresetPos
+                val resolved =
+                    com.bullhead.equalizer.EqualizerPresets.resolveLevels(applicationContext)
+                for (i in resolved.indices) {
+                    Settings.seekbarpos[i] = resolved[i]
+                }
+            }
             Log.d(TAG, "restoreEqualizerSettings: enabled=${Settings.isEqualizerEnabled}, presetPos=${Settings.presetPos}, bass=${Settings.bassStrength}, reverb=$reverbPreset")
         } catch (e: Exception) {
             LogWriter.writeError(TAG, "restoreEqualizerSettings failed", e)
+        }
+    }
+
+    /**
+     * 按均衡器总开关状态向自研 10 段 AudioProcessor 下发电平：
+     * 开关打开 → 当前预设/自定义电平；开关关闭 → 全零（AudioProcessor 不受
+     * 系统 Equalizer.enable 控制，关闭开关时必须显式清零，否则音效仍在染色）。
+     * Settings.seekbarpos 中的预设值始终保留，下次打开开关可直接恢复。
+     */
+    private fun applyEqProcessorLevels() {
+        if (Settings.isEqualizerEnabled) {
+            eqProcessor.setBandLevels(Settings.seekbarpos)
+        } else {
+            eqProcessor.setBandLevels(IntArray(10))
         }
     }
 
@@ -1219,7 +1248,7 @@ class MusicService : Service() {
             // isSettingExternalSong 提前 return 跳过，导致 Settings.isEqualizerEnabled 为默认 false，
             // initializeAudioEffects() 初始化后均衡器实际未启用。这里同步恢复保证播放前就位。
             restoreEqualizerSettings()
-            eqProcessor.setBandLevels(Settings.seekbarpos)
+            applyEqProcessorLevels()
 
             if (isTemp) {
                 withContext(Dispatchers.Main) {
@@ -2132,7 +2161,7 @@ class MusicService : Service() {
                 // 但均衡器参数必须恢复，否则冷启动外部播放时 Settings.isEqualizerEnabled 为默认 false，
                 // initializeAudioEffects() 初始化后均衡器实际未启用。
                 restoreEqualizerSettings()
-                eqProcessor.setBandLevels(Settings.seekbarpos)
+                applyEqProcessorLevels()
 
                 // 如果正在设置外部歌曲，跳过歌曲恢复，避免覆盖外部歌曲
                 if (isSettingExternalSong) {
