@@ -661,7 +661,11 @@ class MusicService : Service() {
                             "STATE_ENDED: natural song end, index=$currentIndex, mode=$playMode"
                         )
                         // 强制更新进度为100%，避免最后一次进度更新不到位
-                        _currentPosition.postValue(player.duration.toInt())
+                        // 使用 setValue（而非 postValue）同步更新：
+                        // postValue 会异步派发，在后续 playNext→setCurrentSong 的 setValue(0) 之后
+                        // 才到达观察者，导致 currentPlaybackPositionMs 被旧歌曲的最大进度覆盖，
+                        // 新歌曲的磁带动画会从上一首的结束进度开始播放。
+                        _currentPosition.value = player.duration.toInt()
 
                         // 临时播放结束：回到上次保存进度的歌曲从头播放（恢复全库队列）
                         if (isTempPlayback) {
