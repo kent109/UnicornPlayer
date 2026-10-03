@@ -9,15 +9,17 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.MediaPlayer
 import android.os.Binder
+import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.Parcelable
 import android.os.SystemClock
 import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
+import androidx.annotation.OptIn
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -31,6 +33,16 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.bullhead.equalizer.AudioEffectManager
 import com.bullhead.equalizer.EqualizerModel
 import com.bullhead.equalizer.Settings
@@ -38,6 +50,7 @@ import com.unicorn.player.MainActivity
 import com.unicorn.player.R
 import com.unicorn.player.ScanFilterActivity
 import com.unicorn.player.database.MusicDatabase
+import com.unicorn.player.equalizer.TenBandEqualizerProcessor
 import com.unicorn.player.model.Song
 import com.unicorn.player.scanFiltersDataStore
 import com.unicorn.player.util.LogWriter
@@ -48,12 +61,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.media3.common.AudioAttributes as Media3AudioAttributes
 
 // 使用全局Application Context的DataStore
 val Context.applicationDataStore: DataStore<Preferences> by preferencesDataStore(name = "music_player_state")
@@ -120,20 +133,28 @@ object PlaySource {
     }
 }
 
+@OptIn(markerClass = [UnstableApi::class])
 class MusicService : Service() {
 
     private val binder = MusicBinder()
-    private lateinit var mediaPlayer: MediaPlayer
+    private lateinit var player: ExoPlayer
+    private lateinit var eqProcessor: TenBandEqualizerProcessor
     private lateinit var mediaSession: MediaSessionCompat
 
-    // 播放状态恢复窗口标志：loadPlaybackState 开始准备媒体播放器起，到 songList 从数据库回填
-    // 对齐止，该标志为 true。窗口内：
-    // - MediaPlayer 异步错误被 OnErrorListener 吞掉（部分 ROM 如 OPPO NuPlayer 上同步
-    //   prepare()+seekTo 会竞态触发 -38，框架在无 OnErrorListener 时会把错误转成 onCompletion，
-    //   误触发 playNext 自动跳到下一首——即"杀进程重启后自动播放下一首"的根因）；
-    // - onCompletion / MediaSession 回调被忽略，防止 songList 尚未回填时导航到错误位置。
+    // 恢复流程标志：loadPlaybackState 调用 player.prepare() 后置 true，
+    // 在 Player.Listener.onPlaybackStateChanged(STATE_READY) 中消费，执行 seek + 可选自动播放。
+    // ExoPlayer 状态机干净，无需旧的 isRestoringState 守卫，但需要在该回调中拿到 STATE_READY
+    // 后才能执行 seekTo（prepared 前 duration 不可用）。
     @Volatile
-    private var isRestoringState = false
+    private var isPendingRestore = false
+    private var pendingRestorePosition = 0
+    private var pendingAutoPlay = false
+
+    // 恢复流程中是否抑制通知（task removed 且用户未重新打开应用时不显示通知）
+    private var pendingSuppressNotification = false
+
+    // 恢复流程中用于通知的歌曲（STATE_READY 时传入 updateNotification）
+    private var pendingRestoreSong: Song? = null
 
     // 防止 playNext/playPrevious 并发调用：歌曲即将播完时用户点击下一首，
     // onCompletion 和按钮点击可能同时触发，导致跳过两首歌
@@ -189,6 +210,10 @@ class MusicService : Service() {
     private val _playModeLiveData = MutableLiveData<PlayMode>(PlayMode.ALL_LOOP)
     val playModeLiveData: LiveData<PlayMode> = _playModeLiveData
 
+    // 播放错误状态：true = 当前歌曲格式不支持/播放失败，UI 应禁用进度条并置灰
+    private val _isPlayableError = MutableLiveData(false)
+    val isPlayableError: LiveData<Boolean> = _isPlayableError
+
     private var songList = mutableListOf<Song>()
     private val _songList = MutableLiveData<List<Song>>(emptyList())
 
@@ -201,7 +226,6 @@ class MusicService : Service() {
     private var isTempPlayback = false
     private var tempSong: Song? = null
     private val _tempPlayback = MutableLiveData(false)
-    val tempPlayback: LiveData<Boolean> = _tempPlayback
 
     // 用户配置的排除目录缓存（onCreate 同步加载）。
     // 用于动态判断当前歌曲是否为临时播放：路径在排除目录内 → 临时（不保存进度）。
@@ -241,17 +265,24 @@ class MusicService : Service() {
             val savedBandLevels = preferences[DataStoreKeys.EQUALIZER_BAND_LEVELS]
             if (savedBandLevels != null) {
                 val bandLevelsArray = savedBandLevels.split(",")
-                for (i in bandLevelsArray.indices) {
-                    Settings.seekbarpos[i] = bandLevelsArray[i].toInt()
+                // 丢弃旧 5 段配置，仅接受 10 段格式
+                if (bandLevelsArray.size == 10) {
+                    for (i in bandLevelsArray.indices) {
+                        Settings.seekbarpos[i] = bandLevelsArray[i].toInt()
+                    }
+                } else {
+                    Log.w(TAG, "Discarding old ${bandLevelsArray.size}-band config (expected 10)")
                 }
             }
             Settings.presetPos = preferences[DataStoreKeys.EQUALIZER_PRESET_POS] ?: 0
             // 兜底：DataStore 可能残留旧版本写入的 -1，强制收敛到合法范围 [0, 1000]
             val rawBass = preferences[DataStoreKeys.BASS_STRENGTH]?.toShort() ?: 0
-            Settings.bassStrength = if (rawBass < 0 || rawBass > 1000) 0 else rawBass
+            Settings.bassStrength = if (rawBass !in 0..1000) 0 else rawBass
             // 兜底：reverbPreset 合法范围 [0, 6]，-1 视为未设置 → PRESET_NONE
             val rawReverb = preferences[DataStoreKeys.REVERB_PRESET]?.toShort() ?: 0
-            val reverbPreset = if (rawReverb < 0 || rawReverb > 6) 0 else rawReverb
+            val reverbPreset = if (rawReverb !in 0..6) {
+                0
+            } else rawReverb
             if (Settings.equalizerModel == null) {
                 Settings.equalizerModel = EqualizerModel()
                 Settings.equalizerModel.reverbPreset = reverbPreset
@@ -263,17 +294,14 @@ class MusicService : Service() {
         }
     }
 
-    // 音频管理器
+    // 音频管理器（保留用于蓝牙/音量控制等）
     private lateinit var audioManager: AudioManager
 
-    private var _wasPlayingBeforeFocusLoss = false
-
-    private lateinit var audioFocusRequest: AudioFocusRequest
-
-    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     var currentIndex = 0
     var isChangingSong = false
-    var isSkippingFailedSong = false
+
+    @Volatile
+    private var isProcessingSongEnd = false
 
     // 广播接收器用于处理通知栏按钮点击
     private val notificationButtonReceiver = object : BroadcastReceiver() {
@@ -309,25 +337,13 @@ class MusicService : Service() {
         }
     }
 
-    // 广播接收器用于监听耳机插拔和蓝牙连接状态
+    // 广播接收器用于监听蓝牙连接状态（耳机拔出由 ExoPlayer setHandleAudioBecomingNoisy 接管）
     private val audioDeviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
             Log.d(TAG, "Audio device event: $action")
 
             when (action) {
-                // 有线耳机插拔
-                Intent.ACTION_HEADSET_PLUG -> {
-                    val state = intent.getIntExtra("state", 0)
-                    Log.d(TAG, "Headset plug state: $state")
-                    if (state == 0) { // 0表示断开，1表示插入
-                        // 有线耳机断开，暂停播放
-                        if (_isPlaying.value == true) {
-                            pause()
-                        }
-                    }
-                }
-
                 // 蓝牙设备连接状态变化
                 android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                     handleBluetoothDeviceDisconnect(intent, "disconnected")
@@ -496,54 +512,195 @@ class MusicService : Service() {
 
         createNotificationChannel()
 
-        mediaPlayer = MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .setUsage(AudioAttributes.USAGE_MEDIA).build()
-            )
-            // 必须设置 OnErrorListener：框架在错误未被处理（无监听器或返回 false）时会把
-            // 异步错误转成 onCompletion 回调，恢复窗口外的真实错误借由该路径走 playNext
-            // 跳过坏歌曲；恢复窗口内的错误返回 true 吞掉，防止误触发 playNext
-            setOnErrorListener { _, what, extra ->
-                Log.e(
-                    TAG,
-                    "MediaPlayer onError: what=$what, extra=$extra, isRestoringState=$isRestoringState"
-                )
-                isRestoringState
-            }
-            setOnCompletionListener {
-                // 恢复窗口内的 onCompletion 一律忽略：它可能不是真正的播放完成，而是异步
-                // 错误被框架转成的伪完成；此刻 songList 尚未回填对齐，playNext 会跳到错误的歌曲
-                if (isRestoringState) {
-                    Log.d(TAG, "onCompletion ignored during state restore")
-                    return@setOnCompletionListener
-                }
-                // 强制更新进度为100%，避免最后一次进度更新不到位
-                // 必须用 value（同步）而非 postValue（异步），否则会与 setCurrentSong 里的
-                // value=0 产生竞态，导致新歌曲动画从旧进度开始
-                try {
-                    _currentPosition.value = mediaPlayer.duration
-                } catch (_: Exception) {
-                    // MediaPlayer可能已释放，忽略
-                }
-
-                // 临时播放结束：回到上次保存进度的歌曲从头播放（恢复全库队列）
-                if (isTempPlayback) {
-                    resumeLastSavedSong()
-                    return@setOnCompletionListener
-                }
-
-                // 顺序播放模式下最后一首自然播放完毕，只更新 UI 状态，不操作 MediaPlayer
-                if (playMode == PlayMode.SEQUENCE && currentIndex >= songList.size - 1) {
-                    _isPlaying.value = false
-                    updateNotification()
-                    updateMediaSessionPlaybackState()
-                    savePlaybackState()
-                } else {
-                    playNext()
-                }
+        // ExoPlayer 接管音频焦点（handleAudioFocus=true）和耳机拔出（handleAudioBecomingNoisy=true），
+        // 并通过 WAKE_MODE_LOCAL 在播放期间持有 partial wake lock（本地文件播放）。
+        // 自研 10 段 EQ 通过 AudioProcessor 注入，频点固定不依赖系统均衡器。
+        eqProcessor = TenBandEqualizerProcessor()
+        TenBandEqualizerProcessor.instance = eqProcessor
+        // 注入桥接：让 equalizer 库模块的 EqualizerFragment 可以调用自研 AudioProcessor，
+        // 而不引入 equalizer → app 的反向依赖（app 依赖 equalizer 单向）。
+        com.bullhead.equalizer.TenBandEqBridge.setApplier { levels ->
+            eqProcessor.setBandLevels(levels)
+        }
+        val renderersFactory = object : DefaultRenderersFactory(this@MusicService) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(arrayOf<AudioProcessor>(eqProcessor))
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .build()
             }
         }
+        player = ExoPlayer.Builder(this)
+            .setRenderersFactory(renderersFactory)
+            .setAudioAttributes(
+                Media3AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setUsage(C.USAGE_MEDIA).build(), /* handleAudioFocus= */ false
+            ).setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
+
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                when (state) {
+                    Player.STATE_IDLE -> {
+                        // STATE_IDLE 可能来自 setMediaItem（正常）或 onPlayerError 后（错误）
+                        // 仅处理 suppressed error 后的 STATE_IDLE
+                        if (hasSuppressedError) {
+                            hasSuppressedError = false
+                            if (errorRetryCount < 1) {
+                                errorRetryCount++
+                                Log.w(TAG, "STATE_IDLE after suppressed error, retrying prepare")
+                                player.prepare()
+                            } else {
+                                errorRetryCount = 0
+                                isProcessingSongEnd = false
+                                Log.w(TAG, "Retry limit exceeded, showing unsupported format toast")
+                                android.widget.Toast.makeText(
+                                    this@MusicService,
+                                    "暂不支持播放该格式",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                                _isPlaying.value = false
+                                _isPlayableError.value = true
+                                player.pause()
+                                updateNotification()
+                                updateMediaSessionPlaybackState()
+                                savePlaybackState()
+                                stopPlayStateObserver()
+                            }
+                        }
+                    }
+
+                    Player.STATE_BUFFERING -> {
+                        // 新歌曲正在准备，不清除 isProcessingSongEnd
+                        // （旧解码器的 onPlayerError 可能在此之后异步到达）
+                    }
+
+                    Player.STATE_READY -> {
+                        // 新歌曲准备就绪，清除所有标志
+                        isProcessingSongEnd = false
+                        hasSuppressedError = false
+                        errorRetryCount = 0
+                        _isPlayableError.value = false
+                        // 切歌后新歌曲准备就绪，同步 MediaSession 状态（此时 isPlaying 已稳定为 true）
+                        updateMediaSessionPlaybackState()
+                        updateNotification()
+                        // 恢复流程：prepare 完成后执行 seek + 可选自动播放 + 通知
+                        if (isPendingRestore) {
+                            isPendingRestore = false
+                            if (pendingRestorePosition > 0) {
+                                player.seekTo(pendingRestorePosition.toLong())
+                            }
+                            // 恢复 seek 后立即更新通知栏进度
+                            updateMediaSessionPlaybackState()
+                            // 立即同步 position 到 LiveData，让 seekBar 显示正确进度。
+                            // startPositionUpdates 线程仅在 isPlaying 时 post，恢复不自动播放时
+                            // LiveData 不更新，seekBar 会停在 0
+                            _currentPosition.postValue(player.currentPosition.toInt())
+                            // 显示通知的条件：
+                            // 1. 用户没有从最近任务移除（isTaskRemoved=false）
+                            // 2. 或者用户已从最近任务移除但重新打开了应用（pendingNotificationToShow=true）
+                            if (!pendingSuppressNotification) {
+                                updateNotification(pendingRestoreSong)
+                                pendingNotificationToShow = false
+                            }
+                            pendingRestoreSong = null
+                            updateMediaSessionPlaybackState()
+                            if (pendingAutoPlay) {
+                                player.play()
+                            }
+                        }
+                    }
+
+                    Player.STATE_ENDED -> {
+                        // 防重入：切歌过渡期间可能收到重复的 STATE_ENDED 回调
+                        if (isProcessingSongEnd) {
+                            Log.w(TAG, "STATE_ENDED already being processed, skip")
+                            return
+                        }
+                        isProcessingSongEnd = true
+                        Log.d(
+                            TAG,
+                            "STATE_ENDED: natural song end, index=$currentIndex, mode=$playMode"
+                        )
+                        // 强制更新进度为100%，避免最后一次进度更新不到位
+                        _currentPosition.postValue(player.duration.toInt())
+
+                        // 临时播放结束：回到上次保存进度的歌曲从头播放（恢复全库队列）
+                        if (isTempPlayback) {
+                            resumeLastSavedSong()
+                            return
+                        }
+
+                        // 顺序播放模式下最后一首自然播放完毕，只更新 UI 状态，不操作播放器
+                        if (playMode == PlayMode.SEQUENCE && currentIndex >= songList.size - 1) {
+                            _isPlaying.value = false
+                            updateNotification()
+                            updateMediaSessionPlaybackState()
+                            savePlaybackState()
+                        } else {
+                            playNext()
+                        }
+                    }
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // ExoPlayer 内部自动暂停/恢复（handleAudioBecomingNoisy / audio focus）
+                // 不会走 pause()/play()，必须在此同步 _isPlaying，否则 UI 和通知栏状态脱节。
+                // 注意：isPlaying=false 可能是切歌/seek 过渡期间的短暂状态，而非真实暂停。
+                // 用 playWhenReady 区分真实暂停（用户意图）和过渡状态。
+                if (!isPlaying && !player.playWhenReady) {
+                    // 真实暂停（用户暂停或音频焦点丢失）
+                    if (_isPlaying.value != false) {
+                        Log.d(TAG, "onIsPlayingChanged: paused (external)")
+                        _isPlaying.value = false
+                        updateNotification()
+                        updateMediaSessionPlaybackState()
+                        savePlaybackState()
+                        stopPlayStateObserver()
+                    }
+                } else if (isPlaying) {
+                    // 播放恢复
+                    if (_isPlaying.value != true) {
+                        Log.d(TAG, "onIsPlayingChanged: resumed (external)")
+                        _isPlaying.value = true
+                        startPlayStateObserver()
+                        updateMediaSessionPlaybackState()
+                    }
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                LogWriter.writeError(TAG, "ExoPlayer onPlayerError: ${error.message}", error)
+
+                // 切歌过渡期间（isProcessingSongEnd 仍为 true），
+                // 旧解码器 teardown 可能异步抛出错误，抑制避免误触发 playNext。
+                // 抑制后 ExoPlayer 会转 STATE_IDLE，由 STATE_IDLE 处理重试或跳过。
+                if (isProcessingSongEnd) {
+                    hasSuppressedError = true
+                    Log.w(
+                        TAG,
+                        "onPlayerError during song transition, suppressing (likely old decoder)"
+                    )
+                    return
+                }
+
+                // 非过渡期的播放错误（格式不支持等），提示并恢复为暂停状态
+                android.widget.Toast.makeText(
+                    this@MusicService, "暂不支持播放该格式", android.widget.Toast.LENGTH_SHORT
+                ).show()
+                _isPlaying.value = false
+                _isPlayableError.value = true
+                player.pause()
+                updateNotification()
+                updateMediaSessionPlaybackState()
+                savePlaybackState()
+                stopPlayStateObserver()
+            }
+        })
 
         mediaSession = MediaSessionCompat(this, "MusicService")
 
@@ -576,7 +733,7 @@ class MusicService : Service() {
           mediaSession.isActive = true
 
           // 初始化音频管理器（但不请求焦点）
-          audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
 
         // 启动文件监听
         // startFileObserver()
@@ -584,13 +741,7 @@ class MusicService : Service() {
         // 设置MediaSession回调
         mediaSession.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
-                // 恢复窗口内忽略外部播放指令（耳机/蓝牙重连可能补发旧指令），
-                // 避免打断正在进行的恢复流程
-                if (isRestoringState) {
-                    Log.d(TAG, "MediaSession onPlay ignored during state restore")
-                    return
-                }
-                requestAudioFocusAndPlay()
+                play()
             }
 
             override fun onPause() {
@@ -598,19 +749,11 @@ class MusicService : Service() {
             }
 
             override fun onSkipToNext() {
-                if (isRestoringState) {
-                    Log.d(TAG, "MediaSession onSkipToNext ignored during state restore")
-                    return
-                }
-                requestAudioFocusAndPlayNext()
+                playNext()
             }
 
             override fun onSkipToPrevious() {
-                if (isRestoringState) {
-                    Log.d(TAG, "MediaSession onSkipToPrevious ignored during state restore")
-                    return
-                }
-                requestAudioFocusAndPlayPrevious()
+                playPrevious()
             }
 
             override fun onStop() {
@@ -618,11 +761,6 @@ class MusicService : Service() {
             }
 
             override fun onSeekTo(pos: Long) {
-                // 恢复窗口内播放器尚未准备好，seekTo 会与恢复流程的 seekTo 冲突
-                if (isRestoringState) {
-                    Log.d(TAG, "MediaSession onSeekTo ignored during state restore")
-                    return
-                }
                 // 处理通知栏进度条拖动事件
                 seekTo(pos.toInt())
                 updateMediaSessionPlaybackState()
@@ -649,10 +787,9 @@ class MusicService : Service() {
             this, notificationButtonReceiver, notificationFilter, ContextCompat.RECEIVER_EXPORTED
         )
 
-        // 注册音频设备监听接收器
+        // 注册音频设备监听接收器（耳机拔出由 ExoPlayer setHandleAudioBecomingNoisy 接管，
+        // 此处只保留蓝牙相关 action）
         val audioDeviceFilter = IntentFilter().apply {
-            // 有线耳机插拔
-            addAction(Intent.ACTION_HEADSET_PLUG)
             // 蓝牙设备连接状态变化
             addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
             // 蓝牙音频连接状态变化
@@ -690,12 +827,15 @@ class MusicService : Service() {
 
         // 修复：同步保存当前播放进度，防止 service 销毁重建后 loadPlaybackState
         // 读到旧进度导致"从头播放"或"进度往前跳"。
-        // 之前 savePlaybackState() 是异步的，紧接着 mediaPlayer.release() 会让协程
-        // 命中 isMediaPlayerReleased 守卫而跳过保存，DataStore 中 currentPosition
+        // 之前 savePlaybackState() 是异步的，紧接着 player.release() 会让协程
+        // 命中 isPlayerReleased 守卫而跳过保存，DataStore 中 currentPosition
         // 残留 playStateFuture 5 秒前的旧值，重建后 seekTo 到旧值。
         // 场景：切换主题 Activity recreate → MainActivity.onDestroy → MusicManager.unbind
         // → service 失去最后一个 binding → 系统销毁 service → 重建后 loadPlaybackState
         // 读取旧 currentPosition。
+        // ExoPlayer 强制主线程访问，onDestroy 在主线程，提前读取 player 值。
+        val savedPosition = if (!isPlayerReleased) player.currentPosition.toInt() else 0
+        val savedIsPlaying = if (!isPlayerReleased && player.isPlaying) 1 else 0
         runBlocking {
             try {
                 // 外部播放结束，校验当前歌曲是否属于保存的播放来源，不属于则重置为"全部歌曲"
@@ -703,48 +843,40 @@ class MusicService : Service() {
 
                 applicationDataStore.edit { preferences ->
                     val currentSong = _currentSong.value
-                    if (currentSong != null && !isMediaPlayerReleased) {
-                        try {
-                            if (!isTempPlayback) {
-                                // 正常歌曲：保存歌曲状态
-                                val position = mediaPlayer.currentPosition
-                                val isPlaying = if (mediaPlayer.isPlaying) 1 else 0
-                                preferences[DataStoreKeys.CURRENT_POSITION] = position
-                                preferences[DataStoreKeys.IS_PLAYING] = isPlaying
-                                preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
-                                preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
-                                preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
-                                preferences[DataStoreKeys.SONG_PATH] = currentSong.path
-                                Log.d(
-                                    TAG,
-                                    "onDestroy: saved currentPosition=$position, isPlaying=$isPlaying, songId=${currentSong.id}"
-                                )
-                            } else {
-                                // 临时歌曲：不覆盖上次保存的歌曲状态，仅标记不自动播放
-                                preferences[DataStoreKeys.IS_PLAYING] = 0
-                                Log.d(
-                                    TAG,
-                                    "onDestroy: temp song, preserve previous saved state, IS_PLAYING=0"
-                                )
-                            }
-                            preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
-                            preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
-                        } catch (e: IllegalStateException) {
-                            LogWriter.writeError(
+                    if (currentSong != null) {
+                        if (!isTempPlayback) {
+                            // 正常歌曲：保存歌曲状态
+                            preferences[DataStoreKeys.CURRENT_POSITION] = savedPosition
+                            preferences[DataStoreKeys.IS_PLAYING] = savedIsPlaying
+                            preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
+                            preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
+                            preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
+                            preferences[DataStoreKeys.SONG_PATH] = currentSong.path
+                            Log.d(
                                 TAG,
-                                "onDestroy: MediaPlayer state error",
-                                e
+                                "onDestroy: saved currentPosition=$savedPosition, isPlaying=$savedIsPlaying, songId=${currentSong.id}"
+                            )
+                        } else {
+                            // 临时歌曲：不覆盖上次保存的歌曲状态，仅标记不自动播放
+                            preferences[DataStoreKeys.IS_PLAYING] = 0
+                            Log.d(
+                                TAG,
+                                "onDestroy: temp song, preserve previous saved state, IS_PLAYING=0"
                             )
                         }
+                        preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
+                        preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
                     }
                 }
             } catch (e: Exception) {
                 LogWriter.writeError(TAG, "onDestroy: savePlaybackState failed", e)
             }
         }
-        // 标记MediaPlayer即将释放
-        isMediaPlayerReleased = true
-        mediaPlayer.release()
+        // 标记播放器即将释放
+        isPlayerReleased = true
+        stopPositionUpdates()
+        player.release()
+        TenBandEqualizerProcessor.instance = null
         mediaSession.release()
 
         // 停止文件监听
@@ -773,7 +905,7 @@ class MusicService : Service() {
         }
 
         val notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.createNotificationChannel(channel)
     }
 
@@ -782,30 +914,8 @@ class MusicService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
 
-        // 确保MediaPlayer已初始化
-        if (!::mediaPlayer.isInitialized) {
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA).build()
-                )
-                // 同 onCreate：错误未处理会被框架转成 onCompletion，误触发 playNext
-                setOnErrorListener { _, what, extra ->
-                    Log.e(
-                        TAG,
-                        "MediaPlayer onError: what=$what, extra=$extra, isRestoringState=$isRestoringState"
-                    )
-                    isRestoringState
-                }
-                setOnCompletionListener {
-                    playNext()
-                }
-            }
-        }
-
         when (action) {
             ACTION_PLAY -> {
-                val songId = intent.getLongExtra("songId", -1L)
                 val position = intent.getIntExtra("position", 0)
                 val songListData = intent.getStringArrayListExtra("songList")
 
@@ -830,7 +940,7 @@ class MusicService : Service() {
 
                 // 如果已经有当前歌曲且处于暂停状态，直接调用play()从暂停位置继续播放
                 // 只有在新传入songList时才调用playCurrentSong()重新播放
-                if (songListData != null && _currentSong.value != null && !isMediaPlayerPlaying()) {
+                if (songListData != null && _currentSong.value != null && !player.isPlaying) {
                     // 新传入的歌曲列表，重新播放
                     _isPlaying.value = true
                     playCurrentSong()
@@ -890,17 +1000,15 @@ class MusicService : Service() {
                     serviceCreate = false
                     // 播放未中断场景（主题/高亮色切换、夜间模式等导致 Activity recreate，
                     // Service 未死）：当前歌曲仍在播放器中且已准备时，完全跳过历史状态恢复。
-                    // 否则 reset+prepareAsync+seekTo 会产生可闻的停顿，并把播放位置 seek 回
+                    // 否则 setMediaItem+prepare+seekTo 会产生可闻的停顿，并把播放位置 seek 回
                     // 几秒前保存的旧进度（表现为返回主界面后进度回跳、衔接不自然）。
-                    val isPlaybackAlive = _currentSong.value != null && try {
-                        !isMediaPlayerReleased && mediaPlayer.duration > 0
-                    } catch (e: IllegalStateException) {
-                        false
-                    }
+                    // ExoPlayer 不抛 IllegalStateException，duration 在未准备时返回 C.TIME_UNSET。
+                    val isPlaybackAlive =
+                        _currentSong.value != null && player.playbackState != Player.STATE_IDLE
                     if (isPlaybackAlive) {
                         Log.d(
                             TAG,
-                            "onStartCommand: playback alive (songId=${_currentSong.value?.id}), skip loadPlaybackState on recreate"
+                            "onStartCommand: playback alive (songId=${_currentSong.value?.id}, state=${player.playbackState}), skip loadPlaybackState on recreate"
                         )
                         isPlaybackStateLoaded = true
                     } else {
@@ -949,11 +1057,14 @@ class MusicService : Service() {
         val file = java.io.File(song.path)
         if (!file.exists()) {
             LogWriter.writeError(TAG, "Song file not found: ${song.path}")
-            // 文件不存在，尝试播放下一首
-            if (!isSkippingFailedSong) {
-                isSkippingFailedSong = true
-                playNext()
-            }
+            android.widget.Toast.makeText(
+                this, "暂不支持播放该格式", android.widget.Toast.LENGTH_SHORT
+            ).show()
+            // 文件不存在，恢复为暂停状态，不自动跳下一首
+            _isPlaying.value = false
+            _isPlayableError.value = true
+            updateNotification()
+            updateMediaSessionPlaybackState()
             return
         }
 
@@ -961,45 +1072,31 @@ class MusicService : Service() {
         setCurrentSong(song)
         _isPlaying.value = true  // 确保立即更新状态
 
-        try {
-            // 本实例可能残留恢复流程的 OnPreparedListener（恢复被取消/失败时未消费），
-            // 部分 ROM 对同步 prepare() 也会回调 onPrepared，若不解绑会把恢复进度
-            // seek 到这首新歌上（表现为切歌后从旧进度开始播放）
-            mediaPlayer.setOnPreparedListener(null)
-            mediaPlayer.reset()
-            mediaPlayer.setDataSource(song.path)
-            mediaPlayer.prepare()
-            // 确保音频效果管理器已初始化（在 MediaPlayer 准备好之后）
-            initializeAudioEffects()
-            mediaPlayer.start()
-            // 播放后立即更新通知和状态
-            updateNotification(song)
-            updateMediaSessionPlaybackState()
-            // 重置跳过标志
-            isSkippingFailedSong = false
-            // 开始监听播放状态
-            startPlayStateObserver()
-        } catch (e: IOException) {
-            LogWriter.writeError(TAG, "Error playing song: ${e.message}", e)
-            e.printStackTrace()
-            // 播放失败时重置状态
-            _isPlaying.value = false
-            // 播放失败，尝试播放下一首
-            if (!isSkippingFailedSong) {
-                isSkippingFailedSong = true
-                playNext()
-            }
-        }
+        // 标记切歌过渡期开始：stop() 释放旧解码器可能异步抛出错误，
+        // 让 onPlayerError 中的 isProcessingSongEnd 抑制逻辑生效
+        isProcessingSongEnd = true
+
+        // ExoPlayer 切歌前强制清理：stop() 立即释放解码器资源，
+        // clearMediaItems() 清空媒体队列，彻底消除旧解码器的异步残留错误。
+        // 这比单纯的 setMediaItem 更可靠，避免切歌后旧歌曲的错误误伤新歌曲。
+        player.stop()
+        player.clearMediaItems()
+        player.setMediaItem(MediaItem.fromUri(song.path))
+        player.prepare()
+        // 确保音频效果管理器已初始化（在播放器准备好之后）
+        initializeAudioEffects()
+        player.play()
+        // 播放后立即更新通知和状态
+        updateNotification(song)
+        updateMediaSessionPlaybackState()
+        // 开始监听播放状态
+        startPlayStateObserver()
     }
 
     fun requestAudioFocusAndPlayCurrentSong() {
-        // 请求音频焦点
-        val result = requestAudioFocus()
-
-        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            // 获得音频焦点，播放当前歌曲
-            playCurrentSong()
-        }
+        // ExoPlayer 不接管音频焦点（handleAudioFocus=false），由系统按 STREAM_MUSIC 自动管理。
+        // 手动管理会导致 Activity 重建时重新请求焦点，产生可闻的音频停顿。
+        playCurrentSong()
     }
 
     /**
@@ -1019,7 +1116,7 @@ class MusicService : Service() {
      * 外部文件打开（文件管理器 ACTION_VIEW）时调用。
      * - isTemp=true：单曲队列，不入库，禁用 next/prev，不保存进度。
      * - isTemp=false：全库队列，定位到该歌曲，next/prev 正常，保存进度。
-     * 始终从头播放（playSongDirectly 走 reset+prepare+start，天然 position=0），
+     * 始终从头播放（playSongDirectly 走 setMediaItem+prepare+play，天然 position=0），
      * 即使当前正在播放同一首歌也会重播。
      */
     fun playExternalSong(song: Song, isTemp: Boolean) {
@@ -1058,6 +1155,7 @@ class MusicService : Service() {
             // isSettingExternalSong 提前 return 跳过，导致 Settings.isEqualizerEnabled 为默认 false，
             // initializeAudioEffects() 初始化后均衡器实际未启用。这里同步恢复保证播放前就位。
             restoreEqualizerSettings()
+            eqProcessor.setBandLevels(Settings.seekbarpos)
 
             if (isTemp) {
                 withContext(Dispatchers.Main) {
@@ -1162,18 +1260,6 @@ class MusicService : Service() {
         }
     }
 
-    private fun requestAudioFocus(): Int {
-        // 使用新的AudioFocusRequest API
-        if (!::audioFocusRequest.isInitialized) {
-            audioFocusRequest =
-                AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(
-                    AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA).build()
-                ).setOnAudioFocusChangeListener(audioFocusChangeListener).build()
-        }
-        return audioManager.requestAudioFocus(audioFocusRequest)
-    }
-
     fun play() {
         // 如果当前没有歌曲，尝试加载或播放当前歌曲
         if (_currentSong.value == null) {
@@ -1181,107 +1267,50 @@ class MusicService : Service() {
             return
         }
 
-        if (!isMediaPlayerPlaying()) {
-            try {
-                val currentPos = mediaPlayer.currentPosition
-                val duration = mediaPlayer.duration
+        Log.d(
+            TAG,
+            "play: state=${player.playbackState}, isPlaying=${player.isPlaying}, duration=${player.duration}"
+        )
 
-                if (duration in 1..currentPos) {
-                    // 播放完成（PlaybackCompleted 状态），seek 到开头重新播放
-                    mediaPlayer.seekTo(0)
-                } else if (currentPos == 0 && duration == 0) {
-                    // 未准备或已释放，重新准备
-                    _currentSong.value?.let { song ->
-                        try {
-                            mediaPlayer.reset()
-                            mediaPlayer.setDataSource(song.path)
-                            mediaPlayer.prepare()
-                        } catch (e: IOException) {
-                            LogWriter.writeError(
-                                TAG,
-                                "Error preparing media player: ${e.message}",
-                                e
-                            )
-                            e.printStackTrace()
-                            return
-                        }
-                    }
-                }
-                // 其他情况（暂停状态、Prepared 状态等）直接 start
-            } catch (e: IllegalStateException) {
-                LogWriter.writeError(TAG, "play: MediaPlayer state error", e)
-                // MediaPlayer 处于无效状态，尝试重新准备
+        // 用户主动播放，重置错误标志，确保新的播放尝试能正确处理错误
+        isProcessingSongEnd = false
+
+        // ExoPlayer 状态机干净：未准备/已结束/暂停三种情况分别处理，不抛 IllegalStateException
+        if (!player.isPlaying) {
+            // 播放完成（STATE_ENDED），seek 到开头重新播放
+            if (player.playbackState == Player.STATE_ENDED) {
+                player.seekTo(0)
+            } else if (player.playbackState == Player.STATE_IDLE || player.duration == 0L) {
+                // 未准备或媒体项为空，重新准备当前歌曲
                 _currentSong.value?.let { song ->
-                    try {
-                        mediaPlayer.reset()
-                        mediaPlayer.setDataSource(song.path)
-                        mediaPlayer.prepare()
-                    } catch (e: Exception) {
-                        LogWriter.writeError(
-                            TAG,
-                            "Error re-preparing media player: ${e.message}",
-                            e
-                        )
-                        return
-                    }
+                    player.setMediaItem(MediaItem.fromUri(song.path))
+                    player.prepare()
                 }
             }
+            // 其他情况（暂停状态 STATE_READY 但 isPlaying=false）直接 play
+            startPlayStateObserver()
         }
 
-        try {
-            // 确保音频效果管理器已初始化（在 MediaPlayer 准备好之后）
-            initializeAudioEffects()
-
-            mediaPlayer.start()
-            // 立即更新播放状态为true，确保通知栏能正确显示
-            _isPlaying.value = true
-            // 立即更新通知栏和MediaSession状态
-            updateNotification()
-            updateMediaSessionPlaybackState()
-        } catch (e: IllegalStateException) {
-            LogWriter.writeError(TAG, "play: MediaPlayer start failed, trying to re-prepare", e)
-            // start 失败，尝试重新准备并播放
-            _currentSong.value?.let { song ->
-                try {
-                    mediaPlayer.reset()
-                    mediaPlayer.setDataSource(song.path)
-                    mediaPlayer.prepare()
-                    mediaPlayer.start()
-                    _isPlaying.value = true
-                    updateNotification()
-                    updateMediaSessionPlaybackState()
-                } catch (e2: Exception) {
-                    LogWriter.writeError(
-                        TAG,
-                        "play: Failed to recover MediaPlayer: ${e2.message}",
-                        e2
-                    )
-                    _isPlaying.value = false
-                }
-            }
-        }
+        // 确保音频效果管理器已初始化（在播放器准备好之后）
+        initializeAudioEffects()
+        player.play()
+        // 立即更新播放状态为true，确保通知栏能正确显示
+        _isPlaying.value = true
+        // 立即更新通知栏和MediaSession状态
+        updateNotification()
+        updateMediaSessionPlaybackState()
     }
 
     fun requestAudioFocusAndPlay() {
-        // 请求音频焦点
-        val result = requestAudioFocus()
-
-        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            // 获得音频焦点，可以播放
-            play()
-        } else {
-            // 没有获得音频焦点，显示提示
-            // 注意：这里不能直接访问UI，需要通过LiveData或其他方式通知
-        }
+        // ExoPlayer 接管音频焦点（handleAudioFocus=true），直接播放
+        play()
     }
 
     fun pause() {
-        if (isMediaPlayerPlaying()) {
-            mediaPlayer.pause()
+        if (player.isPlaying) {
+            player.pause()
             // 立即更新播放状态为false，确保通知栏能正确显示
             _isPlaying.value = false
-            // 暂停时放弃音频焦点
-            // abandonAudioFocus()
             // 立即更新通知栏和MediaSession状态
             updateNotification()
             updateMediaSessionPlaybackState()
@@ -1299,12 +1328,8 @@ class MusicService : Service() {
      */
     fun removeCurrentSong() {
         // 停止播放
-        try {
-            if (isMediaPlayerPlaying()) {
-                mediaPlayer.pause()
-            }
-        } catch (_: IllegalStateException) {
-            // MediaPlayer 可能已释放或处于错误状态，忽略
+        if (player.isPlaying) {
+            player.pause()
         }
         _isPlaying.value = false
 
@@ -1335,15 +1360,9 @@ class MusicService : Service() {
      * 底部播放栏会因 currentSong 观察者收到 null 而自动清空。
      */
     fun clearSongListAndStop() {
-        // 停止播放
-        try {
-            if (isMediaPlayerPlaying()) {
-                mediaPlayer.stop()
-            }
-            mediaPlayer.reset()
-        } catch (_: IllegalStateException) {
-            // MediaPlayer 可能已释放或处于错误状态，忽略
-        }
+        // 停止播放并清空媒体项
+        player.stop()
+        player.clearMediaItems()
         _isPlaying.value = false
 
         // 清空内存中的歌曲列表
@@ -1394,10 +1413,10 @@ class MusicService : Service() {
                 0
             }
             // setSongList 内部使用 setValue，必须在主线程调用
-            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
                 setSongList(songs, currentIndex)
             } else {
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                Handler(Looper.getMainLooper()).post {
                     setSongList(songs, currentIndex)
                 }
             }
@@ -1434,6 +1453,10 @@ class MusicService : Service() {
             return
         }
         isNavigating = true
+        Log.d(
+            TAG,
+            "playNext: fromIndex=$currentIndex, mode=$playMode, tempPlayback=$isTempPlayback"
+        )
         try {
             // 临时播放态：用户主动点"下一首"（UI 按钮/通知/耳机）→ 回到上次保存的歌曲从头播放
             // 单曲队列下，不守卫会重播这首临时歌曲
@@ -1467,7 +1490,7 @@ class MusicService : Service() {
                 PlayMode.RANDOM -> {
                     // 随机播放：随机选择一首（尽量不选当前）
                     if (songList.size > 1) {
-                        val newIndex = (0 until songList.size).random()
+                        val newIndex = songList.indices.random()
                         currentIndex = if (newIndex == currentIndex && songList.size > 1) {
                             (currentIndex + 1) % songList.size
                         } else {
@@ -1523,7 +1546,7 @@ class MusicService : Service() {
                 // 随机播放模式：随机选择一首（尽量不选当前）
                 playMode == PlayMode.RANDOM -> {
                     if (songList.size > 1) {
-                        val newIndex = (0 until songList.size).random()
+                        val newIndex = songList.indices.random()
                         if (newIndex == currentIndex && songList.size > 1) {
                             (currentIndex + 1) % songList.size
                         } else {
@@ -1552,33 +1575,21 @@ class MusicService : Service() {
     }
 
     fun requestAudioFocusAndPlayNext() {
-        // 请求音频焦点
-        val result = requestAudioFocus()
-
-        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            // 获得音频焦点，播放下一首
-            playNext()
-            // 确保通知立即更新
-            updateNotification(_currentSong.value)
-            updateMediaSessionPlaybackState()
-        }
+        // ExoPlayer 接管音频焦点（handleAudioFocus=true），直接播放下一首
+        playNext()
+        updateNotification(_currentSong.value)
+        updateMediaSessionPlaybackState()
     }
 
     fun requestAudioFocusAndPlayPrevious() {
-        // 请求音频焦点
-        val result = requestAudioFocus()
-
-        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            // 获得音频焦点，播放上一首
-            playPrevious()
-            // 确保通知立即更新
-            updateNotification(_currentSong.value)
-            updateMediaSessionPlaybackState()
-        }
+        // ExoPlayer 接管音频焦点（handleAudioFocus=true），直接播放上一首
+        playPrevious()
+        updateNotification(_currentSong.value)
+        updateMediaSessionPlaybackState()
     }
 
     fun seekTo(position: Int) {
-        mediaPlayer.seekTo(position)
+        player.seekTo(position.toLong())
         _currentPosition.postValue(position)
     }
 
@@ -1588,12 +1599,12 @@ class MusicService : Service() {
 
     // 兼容不同API级别的getParcelableExtra（API 33+使用Class版本）
     @Suppress("DEPRECATION")
-    private fun <T : android.os.Parcelable> getParcelableExtraCompat(
+    private fun <T : Parcelable> getParcelableExtraCompat(
         intent: Intent,
         key: String,
         clazz: Class<T>
     ): T? {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableExtra(key, clazz)
         } else {
             intent.getParcelableExtra(key) as? T
@@ -1603,7 +1614,9 @@ class MusicService : Service() {
     // 检查当前是否通过A2DP蓝牙音频输出（替代废弃的isBluetoothA2dpOn）
     private fun isBluetoothA2dpConnected(): Boolean {
         return try {
-            val bluetoothAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            // getDefaultAdapter() 在 API 31 废弃，改用 BluetoothManager.adapter（API 23+ 可用）
+            val bluetoothAdapter =
+                (getSystemService(BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager)?.adapter
             if (bluetoothAdapter != null && bluetoothAdapter.isEnabled) {
                 val a2dpState = bluetoothAdapter.getProfileConnectionState(
                     android.bluetooth.BluetoothProfile.A2DP
@@ -1618,45 +1631,6 @@ class MusicService : Service() {
         } catch (e: Exception) {
             LogWriter.writeError(TAG, "Error checking A2DP connection state", e)
             false
-        }
-    }
-
-    // 安全地检查MediaPlayer是否在播放状态
-    private fun isMediaPlayerPlaying(): Boolean {
-        return try {
-            if (isMediaPlayerReleased) {
-                false
-            } else {
-                mediaPlayer.isPlaying
-            }
-        } catch (e: IllegalStateException) {
-            LogWriter.writeError(TAG, "isMediaPlayerPlaying: MediaPlayer state error", e)
-            false
-        }
-    }
-
-    // 音频焦点变化监听
-    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
-        when (focusChange) {
-            AudioManager.AUDIOFOCUS_GAIN -> {
-                // 获得音频焦点，可以继续播放
-                val wasPlayingBefore = _wasPlayingBeforeFocusLoss
-                if (wasPlayingBefore) {
-                    play()
-                }
-            }
-
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // 短暂失去音频焦点（如来电），需要暂停播放
-                _wasPlayingBeforeFocusLoss = isMediaPlayerPlaying()
-                pause()
-            }
-
-            AudioManager.AUDIOFOCUS_LOSS -> {
-                // 长时间失去音频焦点，需要暂停播放
-                _wasPlayingBeforeFocusLoss = isMediaPlayerPlaying()
-                pause()
-            }
         }
     }
 
@@ -1694,11 +1668,6 @@ class MusicService : Service() {
         if (_isPlaying.value == true) {
             pause()
         }
-    }
-
-    private fun abandonAudioFocus() {
-        // 放弃音频焦点
-        audioManager.abandonAudioFocusRequest(audioFocusRequest)
     }
 
     private fun startFileObserver() {
@@ -1775,18 +1744,11 @@ class MusicService : Service() {
         }
     }
 
-    fun getCurrentPosition(): Int = mediaPlayer.currentPosition
+    fun getCurrentPosition(): Int = player.currentPosition.toInt()
 
-    fun getDuration(): Int = mediaPlayer.duration
+    fun getDuration(): Int = player.duration.toInt()
 
-    fun getAudioSessionId(): Int {
-        return try {
-            mediaPlayer.audioSessionId
-        } catch (e: IllegalStateException) {
-            LogWriter.writeError(TAG, "getAudioSessionId: MediaPlayer state error", e)
-            0
-        }
-    }
+    fun getAudioSessionId(): Int = player.audioSessionId
 
     /**
      * 将 MusicService 当前播放进度同步到 DataStore
@@ -1795,36 +1757,22 @@ class MusicService : Service() {
     fun syncCurrentPositionToDataStore() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                if (isMediaPlayerReleased) {
-                    Log.d(TAG, "syncCurrentPositionToDataStore: skipped, mediaPlayer released")
-                    return@launch
-                }
-                // 注意：之前曾加过 isPlaybackStateLoaded 守卫，但该标志在 loadPlaybackState
-                // 的 prepare 前就已设置为 true，无法防止 prepare-seekTo 期间写入脏数据，
-                // 反而会阻止"清除数据后点击播放、划掉应用重新打开"场景下 songId/title 保存，
-                // 导致重新打开应用时底部播放条空白。已移除。
                 val currentSong = _currentSong.value ?: return@launch
+                // ExoPlayer 强制主线程访问，在进入 IO 协程前于主线程捕获 player 值
+                val (position, isPlaying) = withContext(Dispatchers.Main) {
+                    Pair(player.currentPosition.toInt(), if (player.isPlaying) 1 else 0)
+                }
                 applicationDataStore.edit { preferences ->
                     preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
                     preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
                     preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
                     preferences[DataStoreKeys.SONG_PATH] = currentSong.path
-                    try {
-                        val position = mediaPlayer.currentPosition
-                        val isPlaying = if (mediaPlayer.isPlaying) 1 else 0
-                        preferences[DataStoreKeys.CURRENT_POSITION] = position
-                        preferences[DataStoreKeys.IS_PLAYING] = isPlaying
-                        Log.d(
-                            TAG,
-                            "syncCurrentPositionToDataStore: songId=${currentSong.id}, position=$position, isPlaying=$isPlaying"
-                        )
-                    } catch (e: IllegalStateException) {
-                        LogWriter.writeError(
-                            TAG,
-                            "syncCurrentPositionToDataStore: MediaPlayer state error",
-                            e
-                        )
-                    }
+                    preferences[DataStoreKeys.CURRENT_POSITION] = position
+                    preferences[DataStoreKeys.IS_PLAYING] = isPlaying
+                    Log.d(
+                        TAG,
+                        "syncCurrentPositionToDataStore: songId=${currentSong.id}, position=$position, isPlaying=$isPlaying"
+                    )
                     preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
                     // 播放入口来源（f0 全部歌曲 / f1 歌手 / f2 专辑 / f3 歌单）
                     preferences[DataStoreKeys.PLAY_SOURCE_TAG] = playSourceTag
@@ -1836,58 +1784,23 @@ class MusicService : Service() {
     }
 
     private fun startPositionUpdates() {
-        Thread {
-            while (!isMediaPlayerReleased) {
-                try {
-                    if (mediaPlayer.isPlaying) {
-                        _currentPosition.postValue(mediaPlayer.currentPosition)
-                        // 更新MediaSession的播放状态，包含进度信息
-                        updateMediaSessionPlaybackState()
-                    }
-                    Thread.sleep(1000)
-                } catch (e: InterruptedException) {
-                    // 线程被中断，退出循环
-                    break
-                } catch (e: IllegalStateException) {
-                    // MediaPlayer处于Error或Idle状态（如夜间模式切换导致Activity重建时）
-                    // 停止循环，避免持续报错
-                    LogWriter.writeError(
-                        TAG,
-                        "startPositionUpdates: MediaPlayer state error, stopping",
-                        e
-                    )
-                    break
-                }
-            }
-        }.start()
+        mainHandler.post(positionUpdateRunnable)
+    }
+
+    private fun stopPositionUpdates() {
+        mainHandler.removeCallbacks(positionUpdateRunnable)
     }
 
     private fun updateMediaSessionPlaybackState() {
-        val playbackState = mediaPlayer.let { player ->
-            val state = try {
-                if (player.isPlaying) {
-                    android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
-                } else {
-                    android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
-                }
-            } catch (e: IllegalStateException) {
-                LogWriter.writeError(
-                    TAG,
-                    "updateMediaSessionPlaybackState: MediaPlayer state error",
-                    e
-                )
-                android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
-            }
-            val position = try {
-                player.currentPosition.toLong()
-            } catch (e: IllegalStateException) {
-                LogWriter.writeError(
-                    TAG,
-                    "updateMediaSessionPlaybackState: MediaPlayer currentPosition error",
-                    e
-                )
-                0L
-            }
+        // 用 playWhenReady 而非 isPlaying：isPlaying 在切歌/seek 过渡期间短暂为 false，
+        // 导致通知栏播放按钮闪烁。playWhenReady 表示用户播放意图，过渡期间保持稳定。
+        val state = if (player.playWhenReady) {
+            android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
+        } else {
+            android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED
+        }
+        val position = player.currentPosition
+        val playbackState =
             android.support.v4.media.session.PlaybackStateCompat.Builder()
                 .setState(state, position, 1.0f).setActions(
                     android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or
@@ -1896,7 +1809,6 @@ class MusicService : Service() {
                             android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
                             android.support.v4.media.session.PlaybackStateCompat.ACTION_SEEK_TO
                 ).build()
-        }
         mediaSession.setPlaybackState(playbackState)
 
         // 更新MediaSession的元数据，包含歌曲信息
@@ -1913,7 +1825,7 @@ class MusicService : Service() {
             android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM, currentSong.album
         ).putLong(
             android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DURATION,
-            mediaPlayer.duration.toLong()
+            player.duration
         ).build()
         mediaSession.setMetadata(metadata)
     }
@@ -1936,8 +1848,10 @@ class MusicService : Service() {
             this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 根据当前播放状态决定按钮图标和动作
-        val isPlaying = _isPlaying.value == true
+        // 根据当前播放状态决定按钮图标和动作。
+        // 用 playWhenReady 而非 _isPlaying：后者在切歌过渡期间被 onIsPlayingChanged(false) 污染，
+        // 导致通知栏按钮闪烁。playWhenReady 表示用户播放意图，过渡期间保持稳定。
+        val isPlaying = player.playWhenReady
         val playPauseAction = if (isPlaying) {
             NotificationCompat.Action(
                 R.drawable.ic_pause, "Pause", createActionPendingIntent(ACTION_PAUSE)
@@ -1995,7 +1909,23 @@ class MusicService : Service() {
     }
 
     @Volatile
-    private var isMediaPlayerReleased = false
+    private var isPlayerReleased = false
+
+    @Volatile
+    private var hasSuppressedError = false
+    private var errorRetryCount = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val positionUpdateRunnable = object : Runnable {
+        override fun run() {
+            if (!isPlayerReleased && player.isPlaying) {
+                _currentPosition.value = player.currentPosition.toInt()
+                updateMediaSessionPlaybackState()
+            }
+            if (!isPlayerReleased) {
+                mainHandler.postDelayed(this, 1000)
+            }
+        }
+    }
 
     fun savePlaybackState() {
         // 临时播放态不保存进度，保留 DataStore 中上次保存的歌曲状态
@@ -2008,10 +1938,14 @@ class MusicService : Service() {
             try {
                 // 注意：之前曾加过 isPlaybackStateLoaded 守卫，但该标志在 loadPlaybackState
                 // 的 prepare 前就已设置为 true，根本无法防止 prepare-seekTo 期间写入脏数据，
+                // ExoPlayer 强制主线程访问，在进入 edit 前于主线程捕获 player 值
+                val (position, isPlaying) = withContext(Dispatchers.Main) {
+                    Pair(player.currentPosition.toInt(), if (player.isPlaying) 1 else 0)
+                }
                 // 反而会阻止"清除数据后未播放就配置均衡器并划掉应用"的配置保存。已移除。
                 applicationDataStore.edit { preferences ->
-                    if (isMediaPlayerReleased) {
-                        Log.w(TAG, "savePlaybackState: MediaPlayer already released, skip")
+                    if (isPlayerReleased) {
+                        Log.w(TAG, "savePlaybackState: player already released, skip")
                         return@edit
                     }
                     val currentSong = _currentSong.value
@@ -2020,22 +1954,12 @@ class MusicService : Service() {
                         preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
                         preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
                         preferences[DataStoreKeys.SONG_PATH] = currentSong.path
-                        try {
-                            val position = mediaPlayer.currentPosition
-                            val isPlaying = if (mediaPlayer.isPlaying) 1 else 0
-                            preferences[DataStoreKeys.CURRENT_POSITION] = position
-                            preferences[DataStoreKeys.IS_PLAYING] = isPlaying
-                            Log.d(
-                                TAG,
-                                "savePlaybackState: songId=${currentSong.id}, position=$position, isPlaying=$isPlaying"
-                            )
-                        } catch (e: IllegalStateException) {
-                            LogWriter.writeError(
-                                TAG,
-                                "savePlaybackState: MediaPlayer state error",
-                                e
-                            )
-                        }
+                        preferences[DataStoreKeys.CURRENT_POSITION] = position
+                        preferences[DataStoreKeys.IS_PLAYING] = isPlaying
+                        Log.d(
+                            TAG,
+                            "savePlaybackState: songId=${currentSong.id}, position=$position, isPlaying=$isPlaying"
+                        )
                         // 保存播放模式
                         preferences[DataStoreKeys.PLAY_MODE] = playMode.ordinal
                         // 播放入口来源：外部播放期间暂不保存，等 Service 销毁时校验后再保存
@@ -2087,7 +2011,9 @@ class MusicService : Service() {
 
           fun tryInitialize() {
               try {
-                  val sessionId = mediaPlayer.audioSessionId
+                  // ExoPlayer 通过 getAudioSessionId() 暴露底层音频会话 ID，
+                  // prepare 后才返回有效值（之前为 C.AUDIO_SESSION_ID_UNSET = 0）。
+                  val sessionId = player.audioSessionId
                   if (sessionId != 0) {
                       AudioEffectManager.initialize(this, sessionId)
                       Log.d(TAG, "Audio effects initialized, session ID: $sessionId, enabled: ${Settings.isEqualizerEnabled}")
@@ -2136,6 +2062,7 @@ class MusicService : Service() {
                 // 但均衡器参数必须恢复，否则冷启动外部播放时 Settings.isEqualizerEnabled 为默认 false，
                 // initializeAudioEffects() 初始化后均衡器实际未启用。
                 restoreEqualizerSettings()
+                eqProcessor.setBandLevels(Settings.seekbarpos)
 
                 // 如果正在设置外部歌曲，跳过歌曲恢复，避免覆盖外部歌曲
                 if (isSettingExternalSong) {
@@ -2212,15 +2139,11 @@ class MusicService : Service() {
                         return@withContext
                     }
                     // 播放未中断场景（主题切换等导致 Activity recreate，Service 未死）：
-                    // 待恢复歌曲就是当前已准备的歌曲时，跳过重准备。否则 reset+prepare 会
+                    // 待恢复歌曲就是当前已准备的歌曲时，跳过重准备。否则 setMediaItem+prepare 会
                     // 打断正在进行的播放，且 restorePosition=false 跳过 seekTo 后会从头播放。
-                    // duration 在 Prepared/Started/Paused/PlaybackCompleted 状态返回有效值，
-                    // Idle/Error 状态抛 IllegalStateException，可据此判断播放器是否仍存活。
-                    val isSameSongAlive = try {
-                        _currentSong.value?.id == songId && mediaPlayer.duration > 0
-                    } catch (e: IllegalStateException) {
-                        false
-                    }
+                    // ExoPlayer 不抛 IllegalStateException，duration 未准备时返回 C.TIME_UNSET。
+                    val isSameSongAlive =
+                        _currentSong.value?.id == songId && player.duration > 0
                     if (isSameSongAlive) {
                         Log.d(
                             TAG,
@@ -2254,126 +2177,25 @@ class MusicService : Service() {
                     // 仅在真正加载了歌曲后才标记为已加载，避免无进度时跳过后续合法恢复
                     isPlaybackStateLoaded = true
 
-                    // 准备媒体播放器但不立即播放
-                    // 使用 prepareAsync + OnPreparedListener：同步 prepare() 后紧跟 seekTo 在
-                    // 部分 ROM（如 OPPO OplusNuPlayer）上会因内部竞态触发异步 -38 错误，且错误
-                    // 会被框架转成 onCompletion 误触发 playNext（自动播放下一首的根因）。
-                    // prepareAsync 让 seekTo 等后续操作在 prepared 事件回调中执行，状态迁移干净；
-                    // 恢复窗口持续到 songList 回填对齐（loadSongListFromDatabase 的 onSettled）。
-                    isRestoringState = true
-                    try {
-                        // 尝试reset，如果MediaPlayer处于Error状态会抛出IllegalStateException
-                        try {
-                            mediaPlayer.reset()
-                        } catch (e: IllegalStateException) {
-                            // MediaPlayer处于Error状态，需要重新创建实例
-                            // LogWriter.writeError(TAG, "MediaPlayer in error state, recreating", e)
-                            Log.e(TAG, "MediaPlayer in error state, recreating", e)
-                            mediaPlayer.release()
-                            mediaPlayer = MediaPlayer().apply {
-                                setAudioAttributes(
-                                    AudioAttributes.Builder()
-                                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                        .setUsage(AudioAttributes.USAGE_MEDIA).build()
-                                )
-                                // 同 onCreate：错误未处理会被框架转成 onCompletion，误触发 playNext
-                                setOnErrorListener { _, what, extra ->
-                                    Log.e(
-                                        TAG,
-                                        "MediaPlayer onError: what=$what, extra=$extra, isRestoringState=$isRestoringState"
-                                    )
-                                    isRestoringState
-                                }
-                                setOnCompletionListener {
-                                    playNext()
-                                }
-                            }
-                        }
-                        mediaPlayer.setDataSource(songPath)
-                        mediaPlayer.setOnPreparedListener { mp ->
-                            // 一次性消费：先解绑自身。部分 ROM 对同步 prepare() 也会回调
-                            // onPrepared，残留监听器会把恢复进度 seek 到之后播放的新歌上
-                            mp.setOnPreparedListener(null)
-                            try {
-                                // 根据 shouldRestorePosition 决定是否恢复到保存的进度
-                                // shouldRestorePosition=false 时（服务被系统重启且任务未被移除），不恢复到旧进度
-                                // 而是以 MusicService 当前进度为准，避免跳转到过时的位置
-                                // shouldRestorePosition=true 时（正常启动或任务被移除后重启），恢复到保存的进度
-                                if (shouldRestorePosition) {
-                                    Log.d(
-                                        TAG,
-                                        "loadPlaybackState: before seekTo, target=$currentPosition, duration=${mp.duration}, currentPosition=${mp.currentPosition}"
-                                    )
-                                    mp.seekTo(currentPosition)
-                                    Log.d(
-                                        TAG,
-                                        "loadPlaybackState: after seekTo, currentPosition=${mp.currentPosition}"
-                                    )
-                                } else {
-                                    Log.d(
-                                        TAG,
-                                        "loadPlaybackState: skip seekTo (shouldRestorePosition=false)"
-                                    )
-                                }
-
-                                // 不再自动恢复播放，只准备媒体播放器
-                                // 更新MediaSession状态（系统媒体控件需要）
-                                updateMediaSessionPlaybackState()
-                                // 立即同步 position 到 LiveData，让 PlayerFragment 的 seekBar 显示正确进度。
-                                // startPositionUpdates 线程仅在 isPlaying 时 post，恢复不自动播放时
-                                // LiveData 不更新，seekBar 会停在 0
-                                _currentPosition.postValue(mp.currentPosition)
-                                // 显示通知的条件：
-                                // 1. 用户没有从最近任务移除（isTaskRemoved=false）
-                                // 2. 或者用户已从最近任务移除但重新打开了应用（pendingNotificationToShow=true）
-                                if (!isTaskRemoved || pendingNotificationToShow) {
-                                    updateNotification(restoredSong)
-                                    pendingNotificationToShow = false
-                                }
-                                // 仅在「后台播放中 Activity 被系统回收后恢复」时自动恢复播放。
-                                // 判定条件：之前正在播放 && restoreFlag==RESTORE_CREATE（savedInstanceState != null）
-                                // 其他场景（最近任务划掉、杀进程重启、正常启动）都不自动播放。
-                                if (isPlaying == 1 && restoreFlag == MainActivity.RESTORE_CREATE) {
-                                    Log.d(
-                                        TAG,
-                                        "loadPlaybackState: auto-resume play, isPlaying=$isPlaying, restoreFlag=$restoreFlag, currentPosition=${mp.currentPosition}"
-                                    )
-                                    play()
-                                } else {
-                                    Log.d(
-                                        TAG,
-                                        "loadPlaybackState: no auto-play, isPlaying=$isPlaying, restoreFlag=$restoreFlag"
-                                    )
-                                }
-                            } catch (e: Exception) {
-                                LogWriter.writeError(
-                                    TAG,
-                                    "Error in onPrepared during restore: ${e.message}",
-                                    e
-                                )
-                            }
-                        }
-                        mediaPlayer.prepareAsync()
-                    } catch (e: IOException) {
-                        LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
-                        // 准备失败，恢复窗口提前结束（songList 回填仍在进行，无需重复置位）；
-                        // 同时解绑恢复监听器，防止后续 sync prepare 时被 ROM 触发误 seek
-                        isRestoringState = false
-                        mediaPlayer.setOnPreparedListener(null)
-                    } catch (e: IllegalStateException) {
-                        LogWriter.writeError(TAG, "Error preparing media player: ${e.message}", e)
-                        isRestoringState = false
-                        mediaPlayer.setOnPreparedListener(null)
-                    }
+                    // 准备播放器但不立即播放：setMediaItem + prepare，
+                    // 实际的 seek/通知/自动播放交给 Player.Listener.onPlaybackStateChanged(STATE_READY) 处理。
+                    // ExoPlayer 状态机干净，无 MediaPlayer 的 -38/-38 竞态和 OnPreparedListener 残留问题。
+                    isPendingRestore = true
+                    pendingRestorePosition = if (shouldRestorePosition) currentPosition else 0
+                    pendingAutoPlay = isPlaying == 1 && restoreFlag == MainActivity.RESTORE_CREATE
+                    pendingSuppressNotification = isTaskRemoved && !pendingNotificationToShow
+                    pendingRestoreSong = restoredSong
+                    Log.d(
+                        TAG,
+                        "loadPlaybackState: setMediaItem+prepare, targetPos=$pendingRestorePosition, autoPlay=$pendingAutoPlay, suppressNotification=$pendingSuppressNotification"
+                    )
+                    player.setMediaItem(MediaItem.fromUri(songPath))
+                    player.prepare()
 
                     // 加载歌曲列表到service，确保播放完成后能自动播放下一首
                     // 根据保存的来源标签（f0/f1/f2/f3）重建作用域内的歌曲列表
-                    // 回填对齐后（成功/跳过/异常均算）关闭恢复窗口
                     val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
-                    loadSongListFromDatabase(sourceType, sourceName, songId) {
-                        isRestoringState = false
-                        Log.d(TAG, "loadPlaybackState: restore window closed (songList settled)")
-                    }
+                    loadSongListFromDatabase(sourceType, sourceName, songId)
                 }
 
                 // shouldRestorePosition=false 时（服务被系统重启且任务未被移除），将当前进度同步到 DataStore
@@ -2391,7 +2213,7 @@ class MusicService : Service() {
     // 从 SharedPreferences 同步读取排序模式（与 MusicViewModel.restoreSortMode 同逻辑）
     private fun readSortModeFromPrefs(): SortMode {
         val ordinal = try {
-            getSharedPreferences("sort_mode_prefs", Context.MODE_PRIVATE)
+            getSharedPreferences("sort_mode_prefs", MODE_PRIVATE)
                 .getInt("sort_mode", 0)
         } catch (e: Exception) {
             0
@@ -2512,18 +2334,16 @@ class MusicService : Service() {
         // playStateFuture 每 5 秒触发的 savePlaybackState 用当前进度/IS_PLAYING=1
         // 覆盖 onTaskRemoved 保存的快照（导致重新打开应用时状态偏离 onTaskRemoved 时刻）
         stopPlayStateObserver()
-        // 修复：暂停 mediaPlayer，防止 onDestroy 真正执行前 onCompletionListener
+        // 修复：暂停播放器，防止 onDestroy 真正执行前 STATE_ENDED 回调
         // 触发 playNext -> playCurrentSong(B) -> savePlaybackState，导致 currentSong
         // 切换到下一首且覆盖 A 的状态
-        try {
-            if (isMediaPlayerPlaying()) {
-                mediaPlayer.pause()
-                _isPlaying.value = false
-                Log.d(TAG, "onTaskRemoved: paused mediaPlayer to prevent post-removal state drift")
-            }
-        } catch (e: IllegalStateException) {
-            LogWriter.writeError(TAG, "onTaskRemoved: pause failed", e)
+        if (player.isPlaying) {
+            player.pause()
+            _isPlaying.value = false
+            Log.d(TAG, "onTaskRemoved: paused player to prevent post-removal state drift")
         }
+        // ExoPlayer 强制主线程访问，onTaskRemoved 在主线程，提前读取 player 值
+        val taskRemovedPosition = player.currentPosition.toInt()
         // 同步保存播放状态和标志，防止异步保存未完成时服务被停止
         runBlocking {
             // 外部播放期间移除任务，校验当前歌曲是否属于保存的播放来源
@@ -2534,26 +2354,21 @@ class MusicService : Service() {
                 preferences[DataStoreKeys.TASK_REMOVED_FLAG] = 1
                 // 同步保存播放状态
                 val currentSong = _currentSong.value
-                if (currentSong != null && !isMediaPlayerReleased) {
+                if (currentSong != null) {
                     if (!isTempPlayback) {
                         // 正常歌曲：保存歌曲状态
                         preferences[DataStoreKeys.CURRENT_SONG_ID] = currentSong.id
                         preferences[DataStoreKeys.SONG_TITLE] = currentSong.title
                         preferences[DataStoreKeys.SONG_ARTIST] = currentSong.artist
                         preferences[DataStoreKeys.SONG_PATH] = currentSong.path
-                        try {
-                            val savedPosition = mediaPlayer.currentPosition
-                            // 修复：强制保存 IS_PLAYING=0，重新打开应用时不应自动播放
-                            // （用户主动从最近任务划掉应用，恢复时应为暂停状态）
-                            preferences[DataStoreKeys.CURRENT_POSITION] = savedPosition
-                            preferences[DataStoreKeys.IS_PLAYING] = 0
-                            Log.d(
-                                TAG,
-                                "onTaskRemoved: saved songId=${currentSong.id}, title=${currentSong.title}, position=$savedPosition, isPlaying=0"
-                            )
-                        } catch (e: IllegalStateException) {
-                            LogWriter.writeError(TAG, "onTaskRemoved: MediaPlayer state error", e)
-                        }
+                        // 修复：强制保存 IS_PLAYING=0，重新打开应用时不应自动播放
+                        // （用户主动从最近任务划掉应用，恢复时应为暂停状态）
+                        preferences[DataStoreKeys.CURRENT_POSITION] = taskRemovedPosition
+                        preferences[DataStoreKeys.IS_PLAYING] = 0
+                        Log.d(
+                            TAG,
+                            "onTaskRemoved: saved songId=${currentSong.id}, title=${currentSong.title}, position=$taskRemovedPosition, isPlaying=0"
+                        )
                     } else {
                         // 临时歌曲：不覆盖上次保存的歌曲状态，仅强制 IS_PLAYING=0
                         preferences[DataStoreKeys.IS_PLAYING] = 0
@@ -2589,5 +2404,4 @@ open class Event<out T>(private val content: T) {
         }
     }
 
-    fun peekContent(): T = content
 }

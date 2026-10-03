@@ -8,7 +8,7 @@ package com.unicorn.player.equalizer
  *
  * 字段说明：
  * - [version]：版本号，便于后续兼容
- * - [bandLevels]：5 个频段的电平值（millibels，范围约 -1500 ~ +1500），
+ * - [bandLevels]：10 个频段的电平值（millibels，范围约 -1500 ~ +1500），
  *                  对应 [com.bullhead.equalizer.Settings.seekbarpos]
  * - [bassStrength]：低音强度（0 ~ 1000），对应 [com.bullhead.equalizer.Settings.bassStrength]
  * - [reverbPreset]：虚拟音效预设（0 ~ 6，0=NONE, 1=SMALLROOM, 2=MEDIUMROOM,
@@ -22,6 +22,6 @@ data class EqualizerConfig(
     val reverbPreset: Int
 ) {
     companion object {
-        const val CURRENT_VERSION: Int = 1
+        const val CURRENT_VERSION: Int = 2
     }
 }

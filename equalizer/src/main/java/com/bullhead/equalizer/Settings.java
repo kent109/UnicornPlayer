@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 public class Settings {
     public static boolean isEqualizerEnabled = true;
     public static boolean isEqualizerReloaded = true;
-    public static int[] seekbarpos = new int[5];
+    public static int[] seekbarpos = new int[10];
     public static int presetPos;
     // 默认值必须为合法范围 [0, 6] 内的 PRESET_NONE(0)，
     // 否则在用户开 EQ 但未触摸虚拟旋钮时，-1 会被 savePlaybackState 持久化进 DataStore，
@@ -50,8 +50,14 @@ public class Settings {
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
             String saved = prefs.getString(KEY_CUSTOM_PRESET, null);
             if (saved != null) {
+                int[] loaded = Arrays.stream(saved.split(",")).mapToInt(Integer::parseInt).toArray();
+                // 丢弃旧 5 段配置，仅接受 10 段格式
+                if (loaded.length != 10) {
+                    Log.w(TAG, "Discarding old preset with " + loaded.length + " bands (expected 10)");
+                    return null;
+                }
                 Log.d(TAG, "Loaded custom preset: " + saved);
-                return Arrays.stream(saved.split(",")).mapToInt(Integer::parseInt).toArray();
+                return loaded;
             }
         } catch (Exception e) {
             Log.e(TAG, "Failed to load custom preset", e);

@@ -375,13 +375,19 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 }
                 return@launch
             }
-            if (config.bandLevels.size < 5) {
+            if (config.version < EqualizerConfig.CURRENT_VERSION) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@EqualizerActivity, "频段数据不完整", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@EqualizerActivity, "配置版本不兼容（需 v${EqualizerConfig.CURRENT_VERSION}）", Toast.LENGTH_SHORT).show()
                 }
                 return@launch
             }
-            val bandArr = IntArray(5) { i -> config.bandLevels[i] }
+            if (config.bandLevels.size != 10) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@EqualizerActivity, "频段数据不完整（需 10 段）", Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
+            val bandArr = IntArray(10) { i -> config.bandLevels[i] }
             val bass = config.bassStrength.toShort()
             val reverb = config.reverbPreset.toShort()
             withContext(Dispatchers.Main) {

@@ -160,6 +160,9 @@ dependencies {
     // DI
     implementation 'javax.inject:javax.inject:1'
 
+    // Media3 ExoPlayer（替换系统 MediaPlayer，提供 AudioProcessor 管道用于自研 EQ）
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+
     // EQ
     implementation project(':equalizer')
 

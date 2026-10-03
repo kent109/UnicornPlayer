@@ -248,6 +248,11 @@ class PlayerFragment : Fragment() {
         service.playModeLiveData.observe(viewLifecycleOwner) { mode ->
             updateLoopIcon(mode)
         }
+
+        // 观察播放错误状态，置灰/恢复进度条和时间显示
+        service.isPlayableError.observe(viewLifecycleOwner) { isError ->
+            updatePlayableErrorState(isError)
+        }
     }
 
     /**
@@ -385,7 +390,7 @@ class PlayerFragment : Fragment() {
 
         // 设置圆角背景与行为：完全展开、下滑直接消失
         val designBottomSheet =
-            bottomSheetDialog.findViewById<android.view.ViewGroup>(
+            bottomSheetDialog.findViewById<ViewGroup>(
                 com.google.android.material.R.id.design_bottom_sheet
             )
         designBottomSheet?.post {
@@ -591,11 +596,9 @@ class PlayerFragment : Fragment() {
     }
 
     private fun updatePlayPauseButton(isPlaying: Boolean) {
-        _binding?.let { binding ->
-            binding.playPauseButton.setImageResource(
-                if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
-            )
-        }
+        _binding?.playPauseButton?.setImageResource(
+            if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+        )
     }
 
     private fun updateSongInfo(song: Song?) {
@@ -680,6 +683,26 @@ class PlayerFragment : Fragment() {
     private fun isViewPagerVisible(): Boolean {
         val activity = activity as? PlayerActivity ?: return true
         return activity.isLrcFullscreen.not()
+    }
+
+    /**
+     * 播放错误时置灰进度条和时间显示，恢复正常时恢复
+     */
+    private fun updatePlayableErrorState(isError: Boolean) {
+        val disabledAlpha = 0.5f
+        _binding?.let { binding ->
+            if (isError) {
+                binding.seekBar.isEnabled = false
+                binding.seekBar.alpha = disabledAlpha
+                binding.currentTime.alpha = disabledAlpha
+                binding.totalTime.alpha = disabledAlpha
+            } else {
+                binding.seekBar.isEnabled = true
+                binding.seekBar.alpha = 1.0f
+                binding.currentTime.alpha = 1.0f
+                binding.totalTime.alpha = 1.0f
+            }
+        }
     }
 
     private fun formatTime(milliseconds: Int): String {

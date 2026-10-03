@@ -39,10 +39,11 @@ import com.db.chart.view.AxisController;
 import com.db.chart.view.ChartView;
 import com.db.chart.view.LineChartView;
 import com.example.equalizer.R;
+import com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBar;
+import com.h6ah4i.android.widget.verticalseekbar.VerticalSeekBarWrapper;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Objects;
 
 
@@ -53,6 +54,55 @@ public class EqualizerFragment extends Fragment {
 
     public static final String ARG_AUDIO_SESSIOIN_ID = "audio_session_id";
     private static final String TAG = "EqualizerFragment";
+
+    /**
+     * 10 段均衡器频段数量（固定，不再读系统 mEqualizer.getNumberOfBands()）。
+     */
+    private static final int NUM_BANDS = 10;
+
+    /**
+     * 频段电平下限（毫贝 mB，1 dB = 100 mB）。固定值，不再读 mEqualizer.getBandLevelRange()。
+     */
+    private static final int LOWER_BAND_LEVEL_MB = -1500;
+
+    /**
+     * 频段电平上限（毫贝 mB）。固定值。
+     */
+    private static final int UPPER_BAND_LEVEL_MB = 1500;
+
+    /**
+     * 频段标签（固定频点，对应 TenBandEqualizerProcessor.BAND_LABELS）。
+     * 与 app 模块保持一致；equalizer 模块不能反向依赖 app，所以在此硬编码。
+     */
+    private static final String[] BAND_LABELS = {
+            "31Hz", "62Hz", "125Hz", "250Hz", "500Hz",
+            "1kHz", "2kHz", "4kHz", "8kHz", "16kHz"
+    };
+
+    /**
+     * 内置 10 段预设（毫贝 mB），索引与 {@link #PRESET_NAMES} 对应。
+     * 第 0 项为"自定义"占位（不会被作为预设应用，仅用于 Spinner 显示）。
+     * 与 app 模块 TenBandEqualizerProcessor 文档约定的频点表保持一致。
+     */
+    private static final int[][] PRESET_LEVELS = {
+            {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},                               // 0: 自定义（占位）
+            {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},                               // 1: 正常
+            {-100, 200, 400, 500, 100, -100, -100, -100, 0, -100},       // 2: 流行
+            {500, 400, 200, -100, -200, 0, 200, 500, 600, 500},           // 3: 摇滚
+            {300, 200, 100, 200, -100, -100, 0, 100, 200, 300},          // 4: 爵士
+            {400, 300, 200, 0, -100, -100, 0, 200, 300, 400},            // 5: 古典
+            {600, 500, 200, 0, 0, -200, -200, 0, 100, 300},              // 6: 舞曲
+            {600, 500, 300, 0, -100, -200, 0, 300, 500, 500},            // 7: 重金属
+            {500, 400, 100, 200, -100, -100, 0, 100, 200, 300},          // 8: 嘻哈
+            {300, 300, 200, 0, -100, -100, 0, 200, 300, 300}             // 9: 民谣
+    };
+
+    /**
+     * 预设名称列表（Spinner 显示顺序，position 0 = 自定义）。
+     */
+    private static final String[] PRESET_NAMES = {
+            "自定义", "正常", "流行", "摇滚", "爵士", "古典", "舞曲", "重金属", "嘻哈", "民谣"
+    };
 
     static int themeColor = Color.parseColor("#B24242");
     public Equalizer mEqualizer;
@@ -68,7 +118,7 @@ public class EqualizerFragment extends Fragment {
     TextView fragTitle;
     LinearLayout mLinearLayout;
 
-    SeekBar[] seekBarFinal = new SeekBar[5];
+    SeekBar[] seekBarFinal = new SeekBar[NUM_BANDS];
 
     AnalogController bassController, reverbController;
 
@@ -174,9 +224,9 @@ public class EqualizerFragment extends Fragment {
                     Settings.seekbarpos = customPreset;
                 }
             }
-            for (short bandIdx = 0; bandIdx < mEqualizer.getNumberOfBands(); bandIdx++) {
-                mEqualizer.setBandLevel(bandIdx, (short) Settings.seekbarpos[bandIdx]);
-            }
+            // 频段电平交由自研 TenBandEqualizerProcessor 处理（通过桥接回调），
+            // 系统 mEqualizer 仅作为 audioSession 锚点存在，不再调用其频段 API。
+            TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
         }
     }
 
@@ -341,7 +391,7 @@ public class EqualizerFragment extends Fragment {
         equalizerHeading.setTextSize(20);
         equalizerHeading.setGravity(Gravity.CENTER_HORIZONTAL);
 
-        numberOfFrequencyBands = 5;
+        numberOfFrequencyBands = (short) NUM_BANDS;
 
         points = new float[numberOfFrequencyBands];
 
@@ -349,89 +399,103 @@ public class EqualizerFragment extends Fragment {
             return;
         }
 
-        final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
-        final short upperEqualizerBandLevel = mEqualizer.getBandLevelRange()[1];
+        // 频段电平上下限固定（不再读 mEqualizer.getBandLevelRange()），与自研
+        // TenBandEqualizerProcessor 的 -15 ~ +15 dB 范围对应。
+        final short lowerEqualizerBandLevel = (short) LOWER_BAND_LEVEL_MB;
+        final short upperEqualizerBandLevel = (short) UPPER_BAND_LEVEL_MB;
+
+        float density = getResources().getDisplayMetrics().density;
 
         for (short i = 0; i < numberOfFrequencyBands; i++) {
             final short equalizerBandIndex = i;
-            final TextView frequencyHeaderTextView = new TextView(getContext());
-            frequencyHeaderTextView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            frequencyHeaderTextView.setGravity(Gravity.CENTER_HORIZONTAL);
-            frequencyHeaderTextView.setTextColor(Color.parseColor("#FFFFFF"));
-            int freq = mEqualizer.getCenterFreq(equalizerBandIndex) / 1000;
-            String k = "";
-            if (freq >= 1000) {
-                freq /= 1000;
-                k = "k";
-            }
-            frequencyHeaderTextView.setText(freq + k + "Hz");
 
-            LinearLayout seekBarRowLayout = new LinearLayout(getContext());
-            seekBarRowLayout.setOrientation(LinearLayout.VERTICAL);
+            // 频率标签（固定，不再查系统 mEqualizer.getCenterFreq）
+            final String freqLabel = BAND_LABELS[equalizerBandIndex];
 
-            TextView lowerEqualizerBandLevelTextView = new TextView(getContext());
-            lowerEqualizerBandLevelTextView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            lowerEqualizerBandLevelTextView.setTextColor(Color.parseColor("#FFFFFF"));
-            lowerEqualizerBandLevelTextView.setText((lowerEqualizerBandLevel / 100) + "dB");
+            // === FrameLayout（weight=2）===
+            FrameLayout frameLayout = new FrameLayout(getContext());
+            LinearLayout.LayoutParams frameParams = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.MATCH_PARENT, 2f);
+            frameLayout.setLayoutParams(frameParams);
 
-            TextView upperEqualizerBandLevelTextView = new TextView(getContext());
-            lowerEqualizerBandLevelTextView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            upperEqualizerBandLevelTextView.setTextColor(Color.parseColor("#FFFFFF"));
-            upperEqualizerBandLevelTextView.setText((upperEqualizerBandLevel / 100) + "dB");
+            // === 内部 LinearLayout（vertical，marginTop=8dp）===
+            LinearLayout innerLayout = new LinearLayout(getContext());
+            innerLayout.setOrientation(LinearLayout.VERTICAL);
+            FrameLayout.LayoutParams innerParams = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            innerParams.topMargin = (int) (8 * density);
+            innerLayout.setLayoutParams(innerParams);
 
-            LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            layoutParams.weight = 1;
+            // === VerticalSeekBarWrapper（weight=8，clipChildren=false）===
+            VerticalSeekBarWrapper wrapper = new VerticalSeekBarWrapper(getContext());
+            LinearLayout.LayoutParams wrapperParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 8f);
+            wrapper.setLayoutParams(wrapperParams);
+            wrapper.setClipChildren(false);
 
-            SeekBar seekBar = new SeekBar(getContext());
+            // === VerticalSeekBar（marginTop=20dp，padding L10/T10/R4/B10，rotation=CW270）===
+            VerticalSeekBar seekBar = new VerticalSeekBar(getContext());
+            FrameLayout.LayoutParams seekParams = new FrameLayout.LayoutParams(
+                    0, 0);
+            seekParams.topMargin = (int) (20 * density);
+            seekBar.setLayoutParams(seekParams);
+            seekBar.setProgressDrawable(getResources().getDrawable(
+                    R.drawable.eq_seekbar, getContext().getTheme()));
+            seekBar.setThumb(getResources().getDrawable(
+                    R.drawable.custom_equalizer_thumb, getContext().getTheme()));
+            seekBar.setRotationAngle(VerticalSeekBar.ROTATION_ANGLE_CW_270);
+            int padLeft = (int) (10 * density);
+            int padTop = (int) (10 * density);
+            int padRight = (int) (4 * density);
+            int padBottom = (int) (10 * density);
+            seekBar.setPadding(padLeft, padTop, padRight, padBottom);
+            wrapper.addView(seekBar);
+            innerLayout.addView(wrapper);
+
+            // === 频率标签 TextView（weight=1，textSize=10sp）===
             TextView textView = new TextView(getContext());
+            LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+            textView.setLayoutParams(textParams);
+            textView.setTextSize(10f);
+            innerLayout.addView(textView);
+
+            frameLayout.addView(innerLayout);
+
+            // === 值显示 TextView（覆盖在顶部，gravity=center_horizontal|top，padding=4dp）===
             TextView valueTextView = new TextView(getContext());
-            switch (i) {
-                case 0:
-                    seekBar = view.findViewById(R.id.seekBar1);
-                    textView = view.findViewById(R.id.textView1);
-                    valueTextView = view.findViewById(R.id.textValue1);
-                    break;
-                case 1:
-                    seekBar = view.findViewById(R.id.seekBar2);
-                    textView = view.findViewById(R.id.textView2);
-                    valueTextView = view.findViewById(R.id.textValue2);
-                    break;
-                case 2:
-                    seekBar = view.findViewById(R.id.seekBar3);
-                    textView = view.findViewById(R.id.textView3);
-                    valueTextView = view.findViewById(R.id.textValue3);
-                    break;
-                case 3:
-                    seekBar = view.findViewById(R.id.seekBar4);
-                    textView = view.findViewById(R.id.textView4);
-                    valueTextView = view.findViewById(R.id.textValue4);
-                    break;
-                case 4:
-                    seekBar = view.findViewById(R.id.seekBar5);
-                    textView = view.findViewById(R.id.textView5);
-                    valueTextView = view.findViewById(R.id.textValue5);
-                    break;
-            }
-            seekBarFinal[i] = seekBar;
-//            seekBar.getProgressDrawable().setColorFilter(new PorterDuffColorFilter(Color.DKGRAY, PorterDuff.Mode.SRC_IN));
+            FrameLayout.LayoutParams valueParams = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            valueParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
+            valueTextView.setLayoutParams(valueParams);
+            valueTextView.setGravity(Gravity.CENTER);
+            int pad = (int) (4 * density);
+            valueTextView.setPadding(pad, pad, pad, pad);
+            valueTextView.setTextColor(getResources().getColor(R.color.text_color, getContext().getTheme()));
+            valueTextView.setTextSize(10f);
+            frameLayout.addView(valueTextView);
+
+            // === 应用样式与配置 ===
             seekBar.getThumb().setColorFilter(new PorterDuffColorFilter(themeColor, PorterDuff.Mode.SRC_IN));
             seekBar.setId(i);
-//            seekBar.setLayoutParams(layoutParams);
             seekBar.setMax(upperEqualizerBandLevel - lowerEqualizerBandLevel);
 
-            textView.setText(frequencyHeaderTextView.getText());
+            textView.setText(freqLabel);
             textView.setTextColor(getResources().getColor(R.color.text_color, getContext().getTheme()));
             textView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
 
+            seekBarFinal[i] = seekBar;
+
             if (Settings.isEqualizerReloaded) {
                 points[i] = Settings.seekbarpos[i] - lowerEqualizerBandLevel;
-                dataset.addPoint(frequencyHeaderTextView.getText().toString(), points[i]);
+                dataset.addPoint(freqLabel, points[i]);
                 seekBar.setProgress(Settings.seekbarpos[i] - lowerEqualizerBandLevel);
             } else {
-                points[i] = mEqualizer.getBandLevel(equalizerBandIndex) - lowerEqualizerBandLevel;
-                dataset.addPoint(frequencyHeaderTextView.getText().toString(), points[i]);
-                seekBar.setProgress(mEqualizer.getBandLevel(equalizerBandIndex) - lowerEqualizerBandLevel);
-                Settings.seekbarpos[i] = mEqualizer.getBandLevel(equalizerBandIndex);
+                // 未重载时使用 0 dB 作为默认值（与 TenBandEqualizerProcessor 默认一致）
+                points[i] = -lowerEqualizerBandLevel;
+                dataset.addPoint(freqLabel, points[i]);
+                seekBar.setProgress(-lowerEqualizerBandLevel);
+                Settings.seekbarpos[i] = 0;
                 Settings.isEqualizerReloaded = true;
             }
 
@@ -443,13 +507,26 @@ public class EqualizerFragment extends Fragment {
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    mEqualizer.setBandLevel(equalizerBandIndex, (short) (progress + lowerEqualizerBandLevel));
-                    points[seekBar.getId()] = mEqualizer.getBandLevel(equalizerBandIndex) - lowerEqualizerBandLevel;
-                    Settings.seekbarpos[seekBar.getId()] = (progress + lowerEqualizerBandLevel);
-                    Settings.equalizerModel.getSeekbarpos()[seekBar.getId()] = (progress + lowerEqualizerBandLevel);
+                    // 更新值显示
+                    int mb = progress + lowerEqualizerBandLevel;
+                    bandValueTextView.setText(formatBandLevelDb(mb));
+
+                    // 更新图表
+                    points[equalizerBandIndex] = progress;
                     dataset.updateValues(points);
                     chart.notifyDataUpdate();
-                    bandValueTextView.setText(formatBandLevelDb(progress + lowerEqualizerBandLevel));
+
+                    // 更新 Settings 与 EqualizerModel
+                    Settings.seekbarpos[equalizerBandIndex] = mb;
+                    if (Settings.equalizerModel != null
+                            && Settings.equalizerModel.getSeekbarpos() != null
+                            && equalizerBandIndex < Settings.equalizerModel.getSeekbarpos().length) {
+                        Settings.equalizerModel.getSeekbarpos()[equalizerBandIndex] = mb;
+                    }
+
+                    // 通知自研 AudioProcessor（替代 mEqualizer.setBandLevel）
+                    TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+
                     if (fromUser) {
                         customModifyFlag = true;
                     }
@@ -457,18 +534,22 @@ public class EqualizerFragment extends Fragment {
 
                 @Override
                 public void onStartTrackingTouch(SeekBar seekBar) {
-                    if (isAudioEffectsAvailable && presetSpinner != null) {
+                    // 切换到自定义预设的时机移到 onStopTrackingTouch，
+                    // 避免拖动开始就触发 spinner listener 重置所有频段 UI。
+                }
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                    // 拖动结束后切换到自定义预设
+                    if (presetSpinner != null) {
                         presetSpinner.setSelection(0);
                         Settings.presetPos = 0;
                         Settings.equalizerModel.setPresetPos(0);
                     }
                 }
-
-                @Override
-                public void onStopTrackingTouch(SeekBar seekBar) {
-
-                }
             });
+
+            mLinearLayout.addView(frameLayout);
         }
 
         equalizeSound();
@@ -561,19 +642,23 @@ public class EqualizerFragment extends Fragment {
             return;
         }
         // 还原音效，只考虑preset=0(!=0表示spinner切换已处理)
-        final short numberOfFreqBands = 5;
-        final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
+        final short lowerEqualizerBandLevel = (short) LOWER_BAND_LEVEL_MB;
         int[] tempSeekbarPos = Settings.loadCustomPreset(ctx);
         int[] seekbarPos = tempSeekbarPos != null ? tempSeekbarPos : Settings.seekbarpos;
-        for (short i = 0; i < numberOfFreqBands; i++) {
-            mEqualizer.setBandLevel(i, (short) seekbarPos[i]);
-            seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
-            Settings.seekbarpos[seekBarFinal[i].getId()] = seekbarPos[i];
-            Settings.equalizerModel.getSeekbarpos()[seekBarFinal[i].getId()] = seekbarPos[i];
-            points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
+        for (short i = 0; i < NUM_BANDS; i++) {
+            Settings.seekbarpos[i] = seekbarPos[i];
+            if (Settings.equalizerModel != null
+                    && Settings.equalizerModel.getSeekbarpos() != null
+                    && i < Settings.equalizerModel.getSeekbarpos().length) {
+                Settings.equalizerModel.getSeekbarpos()[i] = seekbarPos[i];
+            }
+            seekBarFinal[i].setProgress(seekbarPos[i] - lowerEqualizerBandLevel);
+            points[i] = seekbarPos[i] - lowerEqualizerBandLevel;
         }
         dataset.updateValues(points);
         chart.notifyDataUpdate();
+        // 自定义预设：从 Settings 同步到自研 AudioProcessor
+        TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
     }
 
     /**
@@ -584,24 +669,25 @@ public class EqualizerFragment extends Fragment {
      * 2) 同步 Settings 静态字段和 EqualizerModel；
      * 3) 若均衡器开关未打开或音效未就绪：仅写数据，不操作 UI（控件本就被遮罩）；
      *    返回 false；
-     * 4) 若均衡器开关已打开：刷新 mEqualizer / BassBoost / PresetReverb 的实际音效参数，
-     *    切到自定义预设（spinner position=0），并刷新 5 个频段 seekbar、低音/虚拟旋钮、频响曲线；
+     * 4) 若均衡器开关已打开：刷新自研 AudioProcessor 的实际音效参数，
+     *    切到自定义预设（spinner position=0），并刷新 10 个频段 seekbar、低音/虚拟旋钮、频响曲线；
      *    返回 true。
      *
-     * @param bandLevels   5 个频段的电平值（millibels，范围约 -1500 ~ +1500）
+     * @param bandLevels   10 个频段的电平值（millibels，范围约 -1500 ~ +1500）
      * @param bassStrength 低音强度（0 ~ 1000）
      * @param reverbPreset 虚拟音效预设（0 ~ 6）
      * @return true 表示已应用到运行时音效；false 表示仅写入了持久化数据
      */
     public boolean applyImportedConfig(int[] bandLevels, short bassStrength, short reverbPreset) {
-        if (bandLevels == null || bandLevels.length < 5) {
-            Log.e(TAG, "applyImportedConfig: invalid bandLevels");
+        if (bandLevels == null || bandLevels.length != NUM_BANDS) {
+            Log.e(TAG, "applyImportedConfig: invalid bandLevels (len="
+                    + (bandLevels == null ? "null" : bandLevels.length) + ")");
             return false;
         }
 
         // 1. 持久化写入
-        int[] toSave = new int[5];
-        System.arraycopy(bandLevels, 0, toSave, 0, 5);
+        int[] toSave = new int[NUM_BANDS];
+        System.arraycopy(bandLevels, 0, toSave, 0, NUM_BANDS);
         Settings.saveCustomPreset(ctx, toSave);
 
         // 反向换算 AnalogController 进度（0~19）用于持久化 + 可视化刷新
@@ -616,7 +702,7 @@ public class EqualizerFragment extends Fragment {
         Settings.saveReverbProgress(ctx, reverbProgress);
 
         // 2. 同步 Settings 静态字段
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < NUM_BANDS; i++) {
             Settings.seekbarpos[i] = toSave[i];
         }
         Settings.bassStrength = bassStrength;
@@ -627,8 +713,8 @@ public class EqualizerFragment extends Fragment {
         // 同步 EqualizerModel
         if (Settings.equalizerModel != null) {
             int[] modelSeek = Settings.equalizerModel.getSeekbarpos();
-            if (modelSeek != null && modelSeek.length >= 5) {
-                for (int i = 0; i < 5; i++) {
+            if (modelSeek != null && modelSeek.length == NUM_BANDS) {
+                for (int i = 0; i < NUM_BANDS; i++) {
                     modelSeek[i] = toSave[i];
                 }
             }
@@ -650,7 +736,7 @@ public class EqualizerFragment extends Fragment {
             // listener 会从 Settings.loadCustomPreset 加载最新持久化的值
             presetSpinner.setSelection(0);
         } else {
-            // 已是自定义或 spinner 未就绪，手动刷新 5 频段 seekbar + chart
+            // 已是自定义或 spinner 未就绪，手动刷新 10 频段 seekbar + chart
             refreshBandLevelsInternal(toSave);
         }
 
@@ -660,32 +746,29 @@ public class EqualizerFragment extends Fragment {
     }
 
     /**
-     * 内部：刷新 5 频段 seekbar + chart（不依赖 presetSpinner 的 listener）。
+     * 内部：刷新 10 频段 seekbar + chart（不依赖 presetSpinner 的 listener）。
      * 参考 {@link #discardEq(boolean)} 的实现。
      */
     private void refreshBandLevelsInternal(int[] bandLevels) {
-        final short numberOfFreqBands = 5;
-        final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
-        for (short i = 0; i < numberOfFreqBands; i++) {
-            mEqualizer.setBandLevel(i, (short) bandLevels[i]);
+        final short lowerEqualizerBandLevel = (short) LOWER_BAND_LEVEL_MB;
+        for (short i = 0; i < NUM_BANDS; i++) {
             if (seekBarFinal[i] != null) {
-                seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
-                int id = seekBarFinal[i].getId();
-                if (id >= 0 && id < 5) {
-                    Settings.seekbarpos[id] = bandLevels[i];
-                    if (Settings.equalizerModel != null &&
-                            Settings.equalizerModel.getSeekbarpos() != null &&
-                            id < Settings.equalizerModel.getSeekbarpos().length) {
-                        Settings.equalizerModel.getSeekbarpos()[id] = bandLevels[i];
-                    }
+                seekBarFinal[i].setProgress(bandLevels[i] - lowerEqualizerBandLevel);
+                Settings.seekbarpos[i] = bandLevels[i];
+                if (Settings.equalizerModel != null
+                        && Settings.equalizerModel.getSeekbarpos() != null
+                        && i < Settings.equalizerModel.getSeekbarpos().length) {
+                    Settings.equalizerModel.getSeekbarpos()[i] = bandLevels[i];
                 }
             }
-            points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
+            points[i] = bandLevels[i] - lowerEqualizerBandLevel;
         }
         if (dataset != null && chart != null) {
             dataset.updateValues(points);
             chart.notifyDataUpdate();
         }
+        // 同步到自研 AudioProcessor
+        TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
     }
 
     /**
@@ -847,39 +930,26 @@ public class EqualizerFragment extends Fragment {
         };
         equalizerPresetSpinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
 
-        equalizerPresetNames.add("自定义");
-        for (short i = 0; i < mEqualizer.getNumberOfPresets(); i++) {
-            String name = mEqualizer.getPresetName(i).toLowerCase(Locale.getDefault());
-            name = name.replace("normal", "正常");
-            name = name.replace("classical", "古典");
-            name = name.replace("dance", "舞曲");
-            name = name.replace("flat", "平直");
-            name = name.replace("folk", "民谣");
-            name = name.replace("heavy metal", "重金属");
-            name = name.replace("hip hop", "嘻哈");
-            name = name.replace("jazz", "爵士");
-            name = name.replace("pop", "流行");
-            name = name.replace("rock", "摇滚");
-            equalizerPresetNames.add(name);
-        }
+        // 使用内置 10 段预设名（不再读 mEqualizer.getNumberOfPresets / getPresetName）
+        equalizerPresetNames.addAll(Arrays.asList(PRESET_NAMES));
 
         presetSpinner.setAdapter(equalizerPresetSpinnerAdapter);
         //presetSpinner.setDropDownWidth((Settings.screen_width * 3) / 4);
         presetSpinner.setDropDownVerticalOffset(108);
         if (Settings.isEqualizerReloaded) {
             if (Settings.presetPos == 0) {
-                final short numberOfFreqBands = 5;
-                final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
-                for (short i = 0; i < numberOfFreqBands; i++) {
-                    mEqualizer.setBandLevel(i, (short) Settings.seekbarpos[i]);
-                    seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
-                    points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
+                final short lowerEqualizerBandLevel = (short) LOWER_BAND_LEVEL_MB;
+                for (short i = 0; i < NUM_BANDS; i++) {
+                    seekBarFinal[i].setProgress(Settings.seekbarpos[i] - lowerEqualizerBandLevel);
+                    points[i] = Settings.seekbarpos[i] - lowerEqualizerBandLevel;
                 }
                 dataset.updateValues(points);
                 chart.notifyDataUpdate();
-            } else {
+                // 自定义预设：从 Settings 同步到自研 AudioProcessor
+                TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+            } else if (Settings.presetPos > 0 && Settings.presetPos < PRESET_LEVELS.length) {
                 presetSpinner.setSelection(Settings.presetPos);
-                mEqualizer.usePreset((short) (Settings.presetPos - 1));
+                applyPresetLevels(Settings.presetPos);
             }
         }
 
@@ -891,52 +961,41 @@ public class EqualizerFragment extends Fragment {
                 Log.d(TAG, "onItemSelected: position=" + position);
                 Log.d(TAG, "Settings.seekbarpos BEFORE: " + Arrays.toString(Settings.seekbarpos));
                 try {
-                    Log.d(TAG, "onItemSelected: position=" + position);
                     if (position != 0) {
-                        short numberOfPresets = mEqualizer.getNumberOfPresets();
-                        short presetIndex = (short) (position - 1);
-                        if (presetIndex >= 0 && presetIndex < numberOfPresets && isAudioEffectsAvailable) {
-                            final short numberOfFreqBands = 5;
-                            final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
-
-                            // 切换前是自定义，保存
-                            if (Settings.presetPos == 0) {
-                                Log.d(TAG, "Saving current settings before preset");
-                                int[] existPos = Settings.loadCustomPreset(ctx);
-                                if (existPos == null) {
-                                    Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
-                                } else {
-                                    showSaveEqDialog(false, Settings.seekbarpos.clone());
-                                }
+                        // 切换前是自定义，保存
+                        if (Settings.presetPos == 0) {
+                            Log.d(TAG, "Saving current settings before preset");
+                            int[] existPos = Settings.loadCustomPreset(ctx);
+                            if (existPos == null) {
+                                Settings.saveCustomPreset(ctx, Settings.seekbarpos.clone());
+                            } else {
+                                showSaveEqDialog(false, Settings.seekbarpos.clone());
                             }
-
-                            Log.d(TAG, "Loading preset: " + presetIndex);
-                            mEqualizer.usePreset(presetIndex);
-
-                            Log.d(TAG, "Updating UI after preset");
-                            for (short i = 0; i < numberOfFreqBands; i++) {
-                                seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
-                                points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
-                                Settings.equalizerModel.getSeekbarpos()[i] = mEqualizer.getBandLevel(i);
-                            }
-                            dataset.updateValues(points);
-                            chart.notifyDataUpdate();
                         }
+
+                        // 应用内置预设到 seekbar + Settings + 自研 AudioProcessor
+                        applyPresetLevels(position);
                     } else {
+                        // 自定义：从持久化加载
                         Log.d(TAG, "Position is 0 (Custom), restoring from persistent storage");
-                        final short numberOfFreqBands = 5;
-                        final short lowerEqualizerBandLevel = mEqualizer.getBandLevelRange()[0];
+                        final short lowerEqualizerBandLevel = (short) LOWER_BAND_LEVEL_MB;
                         int[] tempSeekbarPos = Settings.loadCustomPreset(ctx);
                         int[] seekbarPos = tempSeekbarPos != null ? tempSeekbarPos : Settings.seekbarpos;
-                        for (short i = 0; i < numberOfFreqBands; i++) {
+                        for (short i = 0; i < NUM_BANDS; i++) {
                             Log.d(TAG, "  Band " + i + ": " + seekbarPos[i]);
-                            mEqualizer.setBandLevel(i, (short) seekbarPos[i]);
-                            Log.d(TAG, "  After setBandLevel Band " + i + ": " + mEqualizer.getBandLevel(i));
-                            seekBarFinal[i].setProgress(mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel);
-                            points[i] = mEqualizer.getBandLevel(i) - lowerEqualizerBandLevel;
+                            Settings.seekbarpos[i] = seekbarPos[i];
+                            if (Settings.equalizerModel != null
+                                    && Settings.equalizerModel.getSeekbarpos() != null
+                                    && i < Settings.equalizerModel.getSeekbarpos().length) {
+                                Settings.equalizerModel.getSeekbarpos()[i] = seekbarPos[i];
+                            }
+                            seekBarFinal[i].setProgress(seekbarPos[i] - lowerEqualizerBandLevel);
+                            points[i] = seekbarPos[i] - lowerEqualizerBandLevel;
                         }
                         dataset.updateValues(points);
                         chart.notifyDataUpdate();
+                        // 自定义预设：从 Settings 同步到自研 AudioProcessor
+                        TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
                     }
                     Settings.presetPos = position;
                     Settings.savePresetPos(ctx, position);
@@ -953,6 +1012,34 @@ public class EqualizerFragment extends Fragment {
 
             }
         });
+    }
+
+    /**
+     * 把内置预设（{@link #PRESET_LEVELS}[position]）应用到 seekbar / Settings / EqualizerModel / 自研 AudioProcessor。
+     * 调用方需保证 position 在 [1, PRESET_LEVELS.length-1] 范围内（0 是自定义，不走此方法）。
+     */
+    private void applyPresetLevels(int position) {
+        if (position <= 0 || position >= PRESET_LEVELS.length) {
+            Log.w(TAG, "applyPresetLevels: invalid position=" + position);
+            return;
+        }
+        final short lowerEqualizerBandLevel = (short) LOWER_BAND_LEVEL_MB;
+        int[] levels = PRESET_LEVELS[position];
+        for (short i = 0; i < NUM_BANDS; i++) {
+            int mb = levels[i];
+            Settings.seekbarpos[i] = mb;
+            if (Settings.equalizerModel != null
+                    && Settings.equalizerModel.getSeekbarpos() != null
+                    && i < Settings.equalizerModel.getSeekbarpos().length) {
+                Settings.equalizerModel.getSeekbarpos()[i] = mb;
+            }
+            seekBarFinal[i].setProgress(mb - lowerEqualizerBandLevel);
+            points[i] = mb - lowerEqualizerBandLevel;
+        }
+        dataset.updateValues(points);
+        chart.notifyDataUpdate();
+        // 通知自研 AudioProcessor
+        TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
     }
 
     @Override

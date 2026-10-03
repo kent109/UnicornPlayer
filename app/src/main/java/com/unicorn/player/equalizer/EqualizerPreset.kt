@@ -11,7 +11,7 @@ import kotlinx.serialization.Serializable
 data class EqualizerPreset(
     val name: String,
     val displayName: String,
-    val bandLevels: List<Int>, // 5 bands, values from -15 to +15
+    val bandLevels: List<Int>, // 10 bands, values in dB (-15 to +15)
     val isCustom: Boolean = false
 ) {
     companion object {
