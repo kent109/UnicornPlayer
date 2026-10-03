@@ -447,6 +447,8 @@ class MusicViewModel(
                     ScanFilterConfig(
                         skipShortAudio = prefs[ScanFilterActivity.SKIP_SHORT_AUDIO] ?: false,
                         skipSmallFiles = prefs[ScanFilterActivity.SKIP_SMALL_FILES] ?: false,
+                        skipUnsupportedFormats = prefs[ScanFilterActivity.SKIP_UNSUPPORTED_FORMATS]
+                            ?: false,
                         excludedDirs = prefs[ScanFilterActivity.EXCLUDED_DIRS] ?: emptySet(),
                         includedDirs = prefs[ScanFilterActivity.INCLUDED_DIRS] ?: emptySet()
                     )

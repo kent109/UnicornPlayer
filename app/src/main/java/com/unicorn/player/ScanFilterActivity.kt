@@ -19,9 +19,12 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.unicorn.player.databinding.ActivityScanFilterBinding
+import com.unicorn.player.playback.SongPlayableRegistry
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 // ---------------------------------------------------------------------------
 // 进程级单例 DataStore 委托
@@ -41,6 +44,7 @@ class ScanFilterActivity : BaseActivity() {
         // DataStore 键
         val SKIP_SHORT_AUDIO = booleanPreferencesKey("skip_short_audio")
         val SKIP_SMALL_FILES = booleanPreferencesKey("skip_small_files")
+        val SKIP_UNSUPPORTED_FORMATS = booleanPreferencesKey("skip_unsupported_formats")
         val EXCLUDED_DIRS = stringSetPreferencesKey("excluded_dirs")
         val INCLUDED_DIRS = stringSetPreferencesKey("included_dirs")
 
@@ -51,13 +55,15 @@ class ScanFilterActivity : BaseActivity() {
         // SWITCH 类型设置项的 key → DataStore 键 映射
         val switchKeyMap = mapOf(
             "skip_short_audio" to SKIP_SHORT_AUDIO,
-            "skip_small_files" to SKIP_SMALL_FILES
+            "skip_small_files" to SKIP_SMALL_FILES,
+            "skip_unsupported_formats" to SKIP_UNSUPPORTED_FORMATS
         )
 
         // SWITCH 类型设置项的 key → 默认值 映射
         val switchDefaultMap = mapOf(
             "skip_short_audio" to false,
-            "skip_small_files" to false
+            "skip_small_files" to false,
+            "skip_unsupported_formats" to false
         )
     }
 
@@ -93,6 +99,40 @@ class ScanFilterActivity : BaseActivity() {
         binding = ActivityScanFilterBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setupSettingsItems()
+
+        // "不扫描不支持的格式"副标题展示当前判定为不支持的扩展名，
+        // 黑名单变化（播放错误累积/预检）时刷新
+        updateUnsupportedFormatsSummary()
+        SongPlayableRegistry.blacklistVersion.observe(this) {
+            updateUnsupportedFormatsSummary()
+        }
+    }
+
+    /**
+     * 刷新"不扫描不支持的格式"副标题：设备无解码器的扩展名 ∪ 播放错误累积黑名单。
+     * 含 MediaCodecList 枚举，放 IO 线程计算后回主线程设置。
+     */
+    private fun updateUnsupportedFormatsSummary() {
+        val tv = binding.settingsContainer
+            .findViewWithTag<android.widget.TextView>("skip_unsupported_formats_summary") ?: return
+        // 扩展名列表可能较长，单行显示避免撑高设置项
+        tv.setSingleLine(true)
+        tv.ellipsize = android.text.TextUtils.TruncateAt.END
+        lifecycleScope.launch {
+            val exts = withContext(Dispatchers.IO) {
+                try {
+                    SongPlayableRegistry.getUnsupportedExtensions().sorted()
+                } catch (e: Exception) {
+                    Log.e(TAG, "读取不支持格式失败", e)
+                    emptyList()
+                }
+            }
+            tv.text = if (exts.isEmpty()) {
+                "当前设备没有不支持的已知格式"
+            } else {
+                exts.joinToString("|") { it.lowercase() }
+            }
+        }
     }
 
     /**
@@ -118,6 +158,15 @@ class ScanFilterActivity : BaseActivity() {
                 SettingItem(
                     key = "skip_small_files",
                     title = "不扫描小于100K",
+                    hasChevron = false,
+                    isFirst = false,
+                    isLast = false,
+                    type = SettingItemType.SWITCH
+                ),
+                SettingItem(
+                    key = "skip_unsupported_formats",
+                    title = "不扫描不支持的格式",
+                    summary = "过滤设备无法解码或播放失败的格式",
                     hasChevron = false,
                     isFirst = false,
                     isLast = false,
@@ -275,6 +324,7 @@ class ScanFilterActivity : BaseActivity() {
 
         // 设置摘要
         val tvSummary = view.findViewById<android.widget.TextView>(R.id.tvSummary)
+        tvSummary.tag = "${item.key}_summary"
         if (item.summary != null) {
             view.findViewById<LinearLayout>(R.id.summaryRow).visibility = View.VISIBLE
             tvSummary.text = item.summary

@@ -1,5 +1,6 @@
 package com.unicorn.player.model
 
+import com.unicorn.player.playback.SongPlayableRegistry
 import java.io.File
 
 /**
@@ -9,6 +10,7 @@ import java.io.File
 data class ScanFilterConfig(
     val skipShortAudio: Boolean = false,
     val skipSmallFiles: Boolean = false,
+    val skipUnsupportedFormats: Boolean = false,
     val excludedDirs: Set<String> = emptySet(),
     val includedDirs: Set<String> = emptySet()
 ) {
@@ -20,7 +22,8 @@ data class ScanFilterConfig(
      *
      * 规则：
      * 1. 时长/大小限制（开关打开时生效）优先判断
-     * 2. 目录规则：不扫描目录始终优先于指定扫描目录
+     * 2. 不支持格式（开关打开时生效）：按扩展名对照设备解码能力与播放错误黑名单
+     * 3. 目录规则：不扫描目录始终优先于指定扫描目录
      *    - 路径匹配不扫描目录 → 跳过
      *    - 指定扫描列表非空且路径不匹配任何指定目录 → 跳过
      *    - 其余情况 → 不跳过
@@ -29,9 +32,15 @@ data class ScanFilterConfig(
         // 规则 1：时长和大小限制
         if (skipShortAudio && duration < 30_000) return true
         if (skipSmallFiles && file.length() < 100 * 1024) return true
+
+        // 规则 2：不支持的格式
+        if (skipUnsupportedFormats &&
+            !SongPlayableRegistry.isExtensionSupported(file.extension.lowercase())
+        ) return true
+
         val absolutePath = file.absolutePath
 
-        // 规则 2：不扫描目录始终优先
+        // 规则 3：不扫描目录始终优先
         if (excludedDirs.any { absolutePath.startsWith(it) }) return true
 
         // 指定扫描列表非空时，仅扫描指定目录

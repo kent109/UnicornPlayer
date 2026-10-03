@@ -81,6 +81,21 @@ class PlaylistViewModel(
         }
         observeHiddenRegistry()
         observePlaySource()
+        observeSongTableChanges()
+    }
+
+    /**
+     * 观察曲库 songs 表变化：扫描删除歌曲（如打开"不扫描不支持的格式"后重扫，
+     * 级联删除 playlist_songs 关联）时，重新计算各歌单歌曲数量，
+     * 使歌单列表副标题即时刷新。Room Flow 仅在表变更时重新发射，无额外轮询开销；
+     * 首次发射即完成一次加载，与 [loadPlaylists] 的懒加载语义兼容。
+     */
+    private fun observeSongTableChanges() {
+        viewModelScope.launch {
+            repository.getAllSongs().collect {
+                refreshPlaylistsInternal()
+            }
+        }
     }
 
     /**

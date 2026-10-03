@@ -149,10 +149,7 @@ object SongPlayableRegistry {
                 .filter { it.isNotEmpty() }
                 .toSet()
 
-            val decoderMimes = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
-                .filter { !it.isEncoder }
-                .flatMap { it.supportedTypes.asSequence() }
-                .toSet()
+            val decoderMimes = deviceDecoderMimes()
 
             val detected = mutableSetOf<String>()
             for (ext in extsInLibrary) {
@@ -200,6 +197,49 @@ object SongPlayableRegistry {
         synchronized(unsupportedExtensions) {
             return ext !in unsupportedExtensions
         }
+    }
+
+    /** 设备解码器支持的 mime 集合缓存（首次访问时枚举，MediaCodecList 枚举有一次性开销） */
+    @Volatile
+    private var decoderMimesCache: Set<String>? = null
+
+    private fun deviceDecoderMimes(): Set<String> {
+        decoderMimesCache?.let { return it }
+        val mimes = MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos
+            .filter { !it.isEncoder }
+            .flatMap { it.supportedTypes.asSequence() }
+            .toSet()
+        decoderMimesCache = mimes
+        return mimes
+    }
+
+    /**
+     * 扫描期同步判定：扩展名是否被设备支持。
+     * 黑名单命中直接 false；否则对照设备解码器能力（结果缓存，可安全逐文件调用）。
+     * 未列入 [EXT_CODEC_MIMES] 的未知扩展名视为支持，交给播放错误兜底。
+     */
+    fun isExtensionSupported(ext: String): Boolean {
+        if (ext.isEmpty()) return true
+        synchronized(unsupportedExtensions) {
+            if (ext in unsupportedExtensions) return false
+        }
+        val candidates = EXT_CODEC_MIMES[ext] ?: return true
+        val decoders = deviceDecoderMimes()
+        return candidates.any { it in decoders }
+    }
+
+    /**
+     * 当前判定为不支持的扩展名全集：映射表中设备无解码器的扩展名 ∪ 播放错误累积的黑名单。
+     * 供设置页副标题展示；内含 MediaCodecList 枚举（结果缓存），建议在 IO 线程调用。
+     */
+    fun getUnsupportedExtensions(): Set<String> {
+        val decoders = deviceDecoderMimes()
+        val result = mutableSetOf<String>()
+        for ((ext, candidates) in EXT_CODEC_MIMES) {
+            if (candidates.none { it in decoders }) result.add(ext)
+        }
+        synchronized(unsupportedExtensions) { result.addAll(unsupportedExtensions) }
+        return result
     }
 
     private fun extensionOf(path: String): String {
