@@ -32,6 +32,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.SwitchCompat;
+import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 
 import com.db.chart.model.LineSet;
@@ -86,7 +87,7 @@ public class EqualizerFragment extends Fragment {
      */
     private static final int[][] PRESET_LEVELS = {
             {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},                               // 0: 自定义（占位）
-            {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},                               // 1: 正常
+            {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},                               // 1: 平直
             {-100, 200, 400, 500, 100, -100, -100, -100, 0, -100},       // 2: 流行
             {500, 400, 200, -100, -200, 0, 200, 500, 600, 500},           // 3: 摇滚
             {300, 200, 100, 200, -100, -100, 0, 100, 200, 300},          // 4: 爵士
@@ -94,14 +95,34 @@ public class EqualizerFragment extends Fragment {
             {600, 500, 200, 0, 0, -200, -200, 0, 100, 300},              // 6: 舞曲
             {600, 500, 300, 0, -100, -200, 0, 300, 500, 500},            // 7: 重金属
             {500, 400, 100, 200, -100, -100, 0, 100, 200, 300},          // 8: 嘻哈
-            {300, 300, 200, 0, -100, -100, 0, 200, 300, 300}             // 9: 民谣
+            {300, 300, 200, 0, -100, -100, 0, 200, 300, 300},            // 9: 民谣
+            {-300, -200, -100, 100, 300, 400, 400, 300, 100, 0},         // 10: 人声（衰减低频，提升 500Hz~4kHz 人声基频与齿音区）
+            {500, 500, 200, -200, -300, 0, 100, 300, 400, 400},          // 11: 电子（强化低频与高频，中部凹陷突出合成器层次）
+            {200, 200, 100, -100, -100, 0, 100, 200, 300, 300},          // 12: 蓝调（温和微笑曲线）
+            {300, 300, 100, 100, -100, -100, 0, 200, 300, 300},          // 13: 原声（提升低高频质感，中频略收）
+            {600, 500, 400, 200, 100, 0, 0, 0, 0, 0},                    // 14: 低音（仅增强低频）
+            {0, 0, 0, 0, 0, 100, 200, 400, 500, 600},                     // 15: 高音（仅增强高频）
+            {300, 200, 100, 0, -100, 0, 100, 200, 300, 300},              // 16: 乡村（温和微笑曲线，中频略收）
+            {300, 200, 0, -200, -100, 100, 200, 300, 200, 100},           // 17: 雷鬼（突出低音，压低 250~500Hz 浑浊区）
+            {300, 300, 100, 100, -100, -100, 0, 100, 200, 300},           // 18: R&B（柔和厚实，中频顺滑）
+            {400, 300, 100, -200, -100, 100, 300, 400, 300, 200},         // 19: 放克（低音有弹性，2kHz 起强调切分节奏）
+            {300, 200, 0, 100, -100, -100, 0, 200, 300, 300},             // 20: 拉丁（打击乐明亮，整体轻快）
+            {200, 100, -100, -100, 0, 0, 100, 200, 300, 400},             // 21: 新世纪（空灵飘逸，高频空气感）
+            {500, 400, 300, 100, 0, -100, 100, 300, 500, 500},            // 22: 朋克（比摇滚更猛的双端提升，中频微凹）
+            {400, 300, 0, 0, 100, 100, 0, 200, 300, 400},                 // 23: 派对（等响曲线，嘈杂环境下保持活力）
+            {-600, -400, -200, 0, 200, 400, 400, 300, 100, 0},            // 24: 播客（切除低频轰鸣，强化人声清晰度）
+            {300, 200, 100, 0, 0, 100, 100, 200, 300, 400}                // 25: 音乐厅（模拟现场空间感与泛音）
     };
 
     /**
      * 预设名称列表（Spinner 显示顺序，position 0 = 自定义）。
+     * 新增预设只能追加在末尾：Settings.presetPos 按索引持久化，
+     * 中间插入会导致老用户保存的预设错位。
      */
     private static final String[] PRESET_NAMES = {
-            "自定义", "正常", "流行", "摇滚", "爵士", "古典", "舞曲", "重金属", "嘻哈", "民谣"
+            "自定义", "平直", "流行", "摇滚", "爵士", "古典", "舞曲", "重金属", "嘻哈", "民谣",
+            "人声", "电子", "蓝调", "原声", "低音", "高音",
+            "乡村", "雷鬼", "R&B", "放克", "拉丁", "新世纪", "朋克", "派对", "播客", "音乐厅"
     };
 
     static int themeColor = Color.parseColor("#B24242");
@@ -419,17 +440,28 @@ public class EqualizerFragment extends Fragment {
             frameLayout.setLayoutParams(frameParams);
 
             // === 内部 LinearLayout（vertical，marginTop=8dp）===
+            // clipChildren=false：旋转 SeekBar 的 thumb 拖到两端时会溢出 wrapper 边界，
+            // 父容器必须放行绘制，否则 thumb 会被裁掉（表现为拖到底部时消失）
             LinearLayout innerLayout = new LinearLayout(getContext());
             innerLayout.setOrientation(LinearLayout.VERTICAL);
+            innerLayout.setClipChildren(false);
             FrameLayout.LayoutParams innerParams = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             innerParams.topMargin = (int) (8 * density);
             innerLayout.setLayoutParams(innerParams);
+            // 外层 FrameLayout / 横向容器同样放行，形成完整的不裁剪链路
+            frameLayout.setClipChildren(false);
+            if (mLinearLayout != null) {
+                mLinearLayout.setClipChildren(false);
+            }
 
             // === VerticalSeekBarWrapper（weight=8，clipChildren=false）===
+            // bottomMargin=10dp：为 thumb（16dp 圆，半径 8dp）在最低端预留绘制空间，
+            // 与下方频率标签之间形成间隙，避免 thumb 压住标签文字
             VerticalSeekBarWrapper wrapper = new VerticalSeekBarWrapper(getContext());
             LinearLayout.LayoutParams wrapperParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, 0, 8f);
+            wrapperParams.bottomMargin = (int) (10 * density);
             wrapper.setLayoutParams(wrapperParams);
             wrapper.setClipChildren(false);
 
@@ -439,9 +471,9 @@ public class EqualizerFragment extends Fragment {
                     0, 0);
             seekParams.topMargin = (int) (20 * density);
             seekBar.setLayoutParams(seekParams);
-            seekBar.setProgressDrawable(getResources().getDrawable(
+            seekBar.setProgressDrawable(ResourcesCompat.getDrawable(getResources(),
                     R.drawable.eq_seekbar, getContext().getTheme()));
-            seekBar.setThumb(getResources().getDrawable(
+            seekBar.setThumb(ResourcesCompat.getDrawable(getResources(),
                     R.drawable.custom_equalizer_thumb, getContext().getTheme()));
             seekBar.setRotationAngle(VerticalSeekBar.ROTATION_ANGLE_CW_270);
             int padLeft = (int) (10 * density);
@@ -457,6 +489,7 @@ public class EqualizerFragment extends Fragment {
             LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
             textView.setLayoutParams(textParams);
+            textView.setGravity(Gravity.CENTER_VERTICAL);
             textView.setTextSize(10f);
             innerLayout.addView(textView);
 
@@ -470,7 +503,7 @@ public class EqualizerFragment extends Fragment {
             valueTextView.setLayoutParams(valueParams);
             valueTextView.setGravity(Gravity.CENTER);
             int pad = (int) (4 * density);
-            valueTextView.setPadding(pad, pad, pad, pad);
+            valueTextView.setPadding(0, pad, 0, pad);
             valueTextView.setTextColor(getResources().getColor(R.color.text_color, getContext().getTheme()));
             valueTextView.setTextSize(10f);
             frameLayout.addView(valueTextView);
@@ -926,6 +959,22 @@ public class EqualizerFragment extends Fragment {
                     ((TextView) view).setTextColor(color);
                 }
                 return view;
+            }
+
+            @Override
+            public View getDropDownView(int position, @Nullable View convertView,
+                                        @NonNull ViewGroup parent) {
+                View dropdownView = super.getDropDownView(position, convertView, parent);
+                // 下拉弹窗不显示滚动条（ObservableSpinner.limitDropdownSize 已处理一次，
+                // 此处按 ListView 实例兜底，规避反射时机/厂商 ROM 差异）
+                if (parent instanceof android.widget.AbsListView) {
+                    android.widget.AbsListView listView =
+                            (android.widget.AbsListView) parent;
+                    listView.setVerticalScrollBarEnabled(false);
+                    listView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+                    listView.setVerticalFadingEdgeEnabled(false);
+                }
+                return dropdownView;
             }
         };
         equalizerPresetSpinnerAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);

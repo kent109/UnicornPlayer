@@ -1,10 +1,17 @@
 package com.bullhead.equalizer;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.util.AttributeSet;
+import android.util.Log;
+import android.view.View;
+import android.widget.ListPopupWindow;
+import android.widget.ListView;
 import android.widget.Spinner;
 
 import androidx.annotation.Nullable;
+
+import java.lang.reflect.Field;
 
 /**
  * 扩展 Spinner，暴露下拉打开/收起回调。
@@ -15,8 +22,19 @@ import androidx.annotation.Nullable;
  *
  * 注意：onWindowFocusChanged 也会因其他原因（如切换到其他 Activity、拉下通知栏）触发，
  * 但此时下拉也确实已被收起，所以回调语义仍然正确。
+ *
+ * 另外限制下拉弹窗最大高度（{@link #MAX_VISIBLE_ITEMS} 项）并隐藏滚动条，
+ * 避免预设数量增多后弹窗铺满屏幕。
  */
 public class ObservableSpinner extends Spinner {
+
+    private static final String TAG = "ObservableSpinner";
+
+    /** 下拉弹窗最多同时显示的条目数，超出部分仍可上下滑动选择 */
+    private static final int MAX_VISIBLE_ITEMS = 11;
+
+    /** 下拉条目高度（与 spinner_dropdown_item.xml 的 minHeight 保持一致） */
+    private static final int DROPDOWN_ITEM_HEIGHT_DP = 40;
 
     @Nullable
     private Runnable onDropdownOpenedListener;
@@ -27,18 +45,22 @@ public class ObservableSpinner extends Spinner {
 
     public ObservableSpinner(Context context) {
         super(context);
+        applyDropdownMaxHeight();
     }
 
     public ObservableSpinner(Context context, AttributeSet attrs) {
         super(context, attrs);
+        applyDropdownMaxHeight();
     }
 
     public ObservableSpinner(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        applyDropdownMaxHeight();
     }
 
     public ObservableSpinner(Context context, AttributeSet attrs, int defStyleAttr, int defStyleAttrRes) {
         super(context, attrs, defStyleAttr, defStyleAttrRes);
+        applyDropdownMaxHeight();
     }
 
     public void setOnDropdownOpenedListener(@Nullable Runnable listener) {
@@ -54,11 +76,63 @@ public class ObservableSpinner extends Spinner {
         boolean result = super.performClick();
         if (!dropdownOpen) {
             dropdownOpen = true;
+            hideDropdownScrollbars();
             if (onDropdownOpenedListener != null) {
                 onDropdownOpenedListener.run();
             }
         }
         return result;
+    }
+
+    /**
+     * 构造阶段提前设置下拉弹窗最大高度。
+     *
+     * 必须在首次 show() 之前调用：ListPopupWindow 的高度在 show 时参与
+     * DropDownListView 的 build/measure，show 之后再 setHeight 对首次弹出无效，
+     * 要到下次重建才生效（表现为第一次点开仍是全屏列表）。
+     * Spinner 构造函数返回后内部 mPopup（DropdownPopup，继承 ListPopupWindow）已存在。
+     */
+    @SuppressLint("PrivateApi")
+    private void applyDropdownMaxHeight() {
+        try {
+            Field popupField = Spinner.class.getDeclaredField("mPopup");
+            popupField.setAccessible(true);
+            Object popup = popupField.get(this);
+            if (popup instanceof ListPopupWindow) {
+                float density = getResources().getDisplayMetrics().density;
+                int maxHeight = (int) (MAX_VISIBLE_ITEMS * DROPDOWN_ITEM_HEIGHT_DP * density);
+                ((ListPopupWindow) popup).setHeight(maxHeight);
+            }
+        } catch (Throwable t) {
+            // 厂商 ROM 若改动内部字段，静默降级为系统默认弹窗，不影响功能
+            Log.w(TAG, "applyDropdownMaxHeight failed, fallback to default popup", t);
+        }
+    }
+
+    /**
+     * 下拉打开后隐藏滚动条。ListView 在 show() 内部才创建，
+     * 因此只能在 performClick（super 已完成 show）之后获取。
+     */
+    @SuppressLint("PrivateApi")
+    private void hideDropdownScrollbars() {
+        try {
+            Field popupField = Spinner.class.getDeclaredField("mPopup");
+            popupField.setAccessible(true);
+            Object popup = popupField.get(this);
+            if (!(popup instanceof ListPopupWindow)) {
+                return;
+            }
+            ListView listView = ((ListPopupWindow) popup).getListView();
+            if (listView != null) {
+                listView.setVerticalScrollBarEnabled(false);
+                listView.setScrollBarSize(0);
+                listView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+                listView.setVerticalFadingEdgeEnabled(false);
+                listView.setScrollingCacheEnabled(false);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "hideDropdownScrollbars failed", t);
+        }
     }
 
     @Override

@@ -1,5 +1,4 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_equalizer_rounded">
@@ -7,8 +6,7 @@
     <RelativeLayout
         android:id="@+id/equalizer_action_container"
         android:layout_width="match_parent"
-        android:layout_height="?android:attr/actionBarSize"
-        android:layout_marginTop="10dp"
+        android:layout_height="48dp"
         android:background="@android:color/transparent">
 
         <ImageView
@@ -30,7 +28,7 @@
             android:text="@string/eq"
             android:textAllCaps="true"
             android:textColor="@color/text_color"
-            android:textSize="25sp" />
+            android:textSize="23sp" />
 
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/equalizer_switch"
@@ -63,15 +61,15 @@
             android:layout_height="0dp"
             android:layout_weight="3"
             android:background="@drawable/graph_back_2"
-            android:paddingLeft="15dp"
-            android:paddingRight="15dp"
+            android:paddingStart="15dp"
+            android:paddingEnd="15dp"
             android:paddingBottom="5dp" />
 
         <RelativeLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginLeft="8dp"
-            android:layout_marginRight="8dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:background="#33000000"
             android:layoutDirection="ltr">
@@ -79,6 +77,7 @@
             <View
                 android:id="@+id/showcase_view_equalizer"
                 android:layout_width="50dp"
+                android:layout_centerVertical="true"
                 android:layout_height="match_parent"
                 android:layout_alignParentStart="true"
                 android:layout_marginStart="20dp" />
@@ -86,7 +85,8 @@
             <com.bullhead.equalizer.ObservableSpinner
                 android:id="@+id/equalizer_preset_spinner"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="42dp"
+                android:layout_centerVertical="true"
                 android:background="@drawable/bg_spinner_rounded" />
 
             <ImageView
