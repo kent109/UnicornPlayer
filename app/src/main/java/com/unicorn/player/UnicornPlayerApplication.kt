@@ -1,6 +1,7 @@
 package com.unicorn.player
 
 import android.app.Application
+import com.unicorn.player.playback.SongPlayableRegistry
 import com.unicorn.player.util.PinyinUtil
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -33,6 +34,9 @@ class UnicornPlayerApplication : Application() {
 
         // 后台预加载多音字配置（assets/pinyin/polyphonic.txt），避免首次排序时读文件
         PinyinUtil.preload()
+
+        // 加载不支持播放的扩展名黑名单并在后台做 MediaCodecList 预检
+        SongPlayableRegistry.init(this)
 
         // 初始化主题设置
         initTheme()

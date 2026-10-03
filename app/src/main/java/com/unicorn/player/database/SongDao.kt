@@ -13,6 +13,12 @@ interface SongDao {
     @Query("SELECT id FROM songs")
     fun getSongIdsSync(): List<Long>
 
+    /**
+     * 同步查询全部歌曲路径（用于冷启动时按扩展名预检设备解码能力）
+     */
+    @Query("SELECT path FROM songs")
+    fun getAllPathsSync(): List<String>
+
     @Query("SELECT * FROM songs WHERE id = :songId")
     fun getSongById(songId: Long): Flow<Song?>
 

@@ -52,6 +52,7 @@ import com.unicorn.player.ScanFilterActivity
 import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.equalizer.TenBandEqualizerProcessor
 import com.unicorn.player.model.Song
+import com.unicorn.player.playback.SongPlayableRegistry
 import com.unicorn.player.scanFiltersDataStore
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.PinyinUtil
@@ -108,6 +109,9 @@ object DataStoreKeys {
     val EQUALIZER_PRESET_POS = intPreferencesKey("equalizer_preset_pos")
     val BASS_STRENGTH = intPreferencesKey("bass_strength")
     val REVERB_PRESET = intPreferencesKey("reverb_preset")
+
+    // 设备不支持播放的音频扩展名黑名单（由 MediaCodecList 预检 + 真实播放错误累积）
+    val UNSUPPORTED_AUDIO_EXTENSIONS = stringSetPreferencesKey("unsupported_audio_extensions")
 }
 
 /**
@@ -564,6 +568,9 @@ class MusicService : Service() {
                                 ).show()
                                 _isPlaying.value = false
                                 _isPlayableError.value = true
+                                _currentSong.value?.path?.let {
+                                    SongPlayableRegistry.markUnsupported(this@MusicService, it)
+                                }
                                 player.pause()
                                 updateNotification()
                                 updateMediaSessionPlaybackState()
@@ -694,6 +701,9 @@ class MusicService : Service() {
                 ).show()
                 _isPlaying.value = false
                 _isPlayableError.value = true
+                _currentSong.value?.path?.let {
+                    SongPlayableRegistry.markUnsupported(this@MusicService, it)
+                }
                 player.pause()
                 updateNotification()
                 updateMediaSessionPlaybackState()

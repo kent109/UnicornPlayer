@@ -10,6 +10,7 @@
     app:cardElevation="2dp">
 
     <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/contentLayout"
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:background="@color/surface"
@@ -114,5 +115,15 @@
             tools:ignore="ContentDescription" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- 不支持格式角标：直接放在最外层 CardView 中，不受 contentLayout 的 padding 限制，
+         梯形两腰贴合 item 顶/右边缘；view 不可点击，触摸事件会穿透到下层 btnMore -->
+    <com.unicorn.player.widget.UnsupportedCornerLabel
+        android:id="@+id/unsupportedLabel"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
+        android:visibility="gone"
+        tools:visibility="visible" />
 
 </androidx.cardview.widget.CardView>

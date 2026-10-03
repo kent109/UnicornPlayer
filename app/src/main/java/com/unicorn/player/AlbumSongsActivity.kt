@@ -197,6 +197,7 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener,
 
     private fun setupRecyclerView() {
         songAdapter = SongAdapter(this, this)
+        songAdapter.observePlayableChanges(this)
         songAdapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(this) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(this@AlbumSongsActivity)

@@ -12,6 +12,7 @@ import com.unicorn.player.ScanFilterActivity
 import com.unicorn.player.model.Album
 import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
+import com.unicorn.player.playback.SongPlayableRegistry
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.scanFiltersDataStore
 import com.unicorn.player.service.DataStoreKeys
@@ -241,6 +242,11 @@ class MusicViewModel(
                     songsCollected = true
                     _hasLoaded.postValue(true)
                 }
+                // 首次拿到非空曲库时触发一次解码能力预检（首次安装时 Application
+                // 阶段曲库尚为空，扫描入库后 Flow 发射即在此补跑；内部有防抖）
+                if (songs.isNotEmpty()) {
+                    SongPlayableRegistry.precheckLibrary(context.applicationContext)
+                }
             }
         }
     }
@@ -445,7 +451,12 @@ class MusicViewModel(
                         includedDirs = prefs[ScanFilterActivity.INCLUDED_DIRS] ?: emptySet()
                     )
                 }
-                repository.scanMusicFiles(config).size
+                val count = repository.scanMusicFiles(config).size
+                // 手动扫描完成后强制重跑解码能力预检，覆盖新引入的文件格式
+                if (count > 0) {
+                    SongPlayableRegistry.precheckLibrary(context.applicationContext, force = true)
+                }
+                count
             } catch (e: Exception) {
                 e.printStackTrace()
                 -1

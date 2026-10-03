@@ -307,6 +307,8 @@ class PlayerFragment : Fragment() {
         adapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(requireContext()) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         adapter.currentPlayingSong = service.currentSong.value
         adapter.isPlaying = service.isPlaying.value == true
+        // 用弹窗自身作为 LifecycleOwner：弹窗销毁时观察自动移除，避免重复打开累积观察者
+        adapter.observePlayableChanges(bottomSheetDialog)
         adapter.submitList(songs)
         service.currentPosition.value?.let { position ->
             adapter.updateCassetteAnimationProgress(position.toLong())

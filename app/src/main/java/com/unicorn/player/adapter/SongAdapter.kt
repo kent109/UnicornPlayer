@@ -16,6 +16,7 @@ import com.unicorn.player.util.KyrieDrawable
 import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemSongBinding
 import com.unicorn.player.model.Song
+import com.unicorn.player.playback.SongPlayableRegistry
 
 class SongAdapter(
     private val listener: OnSongClickListener,
@@ -66,6 +67,16 @@ class SongAdapter(
 
     fun setRecyclerView(recyclerView: RecyclerView) {
         this.recyclerView = recyclerView
+    }
+
+    /**
+     * 注册不支持格式黑名单变化监听：黑名单更新（预检完成/播放错误累积）后重绑全部 item，
+     * 刷新置灰状态。宿主在创建 adapter 后调用一次即可。
+     */
+    fun observePlayableChanges(owner: androidx.lifecycle.LifecycleOwner) {
+        SongPlayableRegistry.blacklistVersion.observe(owner) {
+            notifyItemRangeChanged(0, itemCount)
+        }
     }
 
     fun getRecyclerView(): RecyclerView? = recyclerView
@@ -356,6 +367,13 @@ class SongAdapter(
 
                 val context = binding.root.context
                 val density = context.resources.displayMetrics.density
+
+                // 不支持播放的格式：右上角显示梯形"不支持"标签；正常歌曲隐藏（RecyclerView 复用必须显式复位）
+                unsupportedLabel.visibility = if (SongPlayableRegistry.isPlayable(song.path)) {
+                    View.GONE
+                } else {
+                    View.VISIBLE
+                }
 
                 updateAlbumArtLayout(density)
 

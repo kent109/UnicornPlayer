@@ -248,6 +248,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
 
     private fun setupRecyclerView() {
         songAdapter = SongAdapter(this, this)
+        songAdapter.observePlayableChanges(viewLifecycleOwner)
         songAdapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(requireContext()) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         recyclerView = binding.recyclerView
         binding.recyclerView.apply {

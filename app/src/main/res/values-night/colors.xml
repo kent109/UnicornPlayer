@@ -29,6 +29,11 @@
     <color name="surfaceVariant">#49454F</color>
     <color name="onSurfaceVariant">#CAC4D0</color>
 
+    <!-- 不支持播放格式的角标背景（夜间） -->
+    <color name="songUnsupportedBg">#2E2E2E</color>
+    <!-- 不支持播放格式的角标文字（夜间） -->
+    <color name="songUnsupportedLabelText">#EF5350</color>
+
     <color name="outline">#938F99</color>
     <color name="outlineVariant">#49454F</color>
 

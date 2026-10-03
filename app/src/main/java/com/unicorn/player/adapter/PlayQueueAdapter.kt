@@ -15,6 +15,7 @@ import com.unicorn.player.R
 import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemSongBinding
 import com.unicorn.player.model.Song
+import com.unicorn.player.playback.SongPlayableRegistry
 
 class PlayQueueAdapter(
     private val onSongClick: (Song, Int) -> Unit
@@ -67,6 +68,15 @@ class PlayQueueAdapter(
     override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
         super.onDetachedFromRecyclerView(recyclerView)
         this.recyclerView = null
+    }
+
+    /**
+     * 注册不支持格式黑名单变化监听：弹窗内列表重绑刷新置灰状态。
+     */
+    fun observePlayableChanges(owner: androidx.lifecycle.LifecycleOwner) {
+        SongPlayableRegistry.blacklistVersion.observe(owner) {
+            notifyItemRangeChanged(0, itemCount)
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): QueueViewHolder {
@@ -271,6 +281,13 @@ class PlayQueueAdapter(
 
                 val context = binding.root.context
                 val density = context.resources.displayMetrics.density
+
+                // 不支持播放的格式：右上角显示梯形"不支持"标签；正常歌曲隐藏（复用必须显式复位）
+                unsupportedLabel.visibility = if (SongPlayableRegistry.isPlayable(song.path)) {
+                    View.GONE
+                } else {
+                    View.VISIBLE
+                }
 
                 updateAlbumArtLayout(density)
 
