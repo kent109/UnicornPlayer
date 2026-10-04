@@ -400,7 +400,14 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         val position = allSongs.indexOfFirst { it.id == currentSong.id }
         if (position != -1) {
             binding.btnScrollToCurrent.visibility = View.GONE
-            binding.recyclerView.smoothScrollToPosition(position)
+            val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
+            if (layoutManager != null) {
+                val smoothScroller = object : androidx.recyclerview.widget.LinearSmoothScroller(requireContext()) {
+                    override fun getVerticalSnapPreference(): Int = SNAP_TO_START
+                }
+                smoothScroller.targetPosition = position + 1
+                layoutManager.startSmoothScroll(smoothScroller)
+            }
 
             hideHandler.postDelayed({
                 scrollToContentClick = false
