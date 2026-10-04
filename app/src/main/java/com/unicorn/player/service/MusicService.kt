@@ -812,7 +812,13 @@ class MusicService : Service() {
         // 设置MediaSession回调
         mediaSession.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
-                requestAudioFocusAndPlay()
+                // 当前歌曲格式不支持时处于错误暂停态，蓝牙耳机的单击会被系统路由到 onPlay()
+                // 而非 onSkipToNext()，此时自动跳下一首，避免卡在错误歌曲上
+                if (_isPlayableError.value == true) {
+                    requestAudioFocusAndPlayNext()
+                } else {
+                    requestAudioFocusAndPlay()
+                }
             }
 
             override fun onPause() {
@@ -1016,7 +1022,10 @@ class MusicService : Service() {
 
                 // 如果已经有当前歌曲且处于暂停状态，直接调用play()从暂停位置继续播放
                 // 只有在新传入songList时才调用playCurrentSong()重新播放
-                if (songListData != null && _currentSong.value != null && !player.isPlaying) {
+                // 格式不支持时处于错误暂停态，播放按钮应跳下一首而非尝试恢复
+                if (_isPlayableError.value == true) {
+                    requestAudioFocusAndPlayNext()
+                } else if (songListData != null && _currentSong.value != null && !player.isPlaying) {
                     // 新传入的歌曲列表，重新播放
                     requestAudioFocusAndPlayCurrentSong()
                 } else {
