@@ -1033,7 +1033,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             // 重新设置歌曲列表
             musicService?.setSongList(songs, currentIndex)
             // 播放下一首
-            musicService?.playNext()
+            musicService?.requestAudioFocusAndPlayNext()
         }
     }
 

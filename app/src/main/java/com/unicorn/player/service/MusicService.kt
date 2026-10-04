@@ -812,7 +812,7 @@ class MusicService : Service() {
         // 设置MediaSession回调
         mediaSession.setCallback(object : MediaSessionCompat.Callback() {
             override fun onPlay() {
-                play()
+                requestAudioFocusAndPlay()
             }
 
             override fun onPause() {
@@ -820,11 +820,11 @@ class MusicService : Service() {
             }
 
             override fun onSkipToNext() {
-                playNext()
+                requestAudioFocusAndPlayNext()
             }
 
             override fun onSkipToPrevious() {
-                playPrevious()
+                requestAudioFocusAndPlayPrevious()
             }
 
             override fun onStop() {
@@ -1018,13 +1018,11 @@ class MusicService : Service() {
                 // 只有在新传入songList时才调用playCurrentSong()重新播放
                 if (songListData != null && _currentSong.value != null && !player.isPlaying) {
                     // 新传入的歌曲列表，重新播放
-                    _isPlaying.value = true
-                    playCurrentSong()
+                    requestAudioFocusAndPlayCurrentSong()
                 } else {
                     // 没有新传入歌曲列表，或者当前没有歌曲，或者已经在播放
                     // 调用play()方法，它会智能处理暂停恢复或重新播放
-                    _isPlaying.value = true
-                    play()
+                    requestAudioFocusAndPlay()
                 }
                 updateNotification()
             }
@@ -1037,13 +1035,11 @@ class MusicService : Service() {
             }
 
             ACTION_NEXT -> {
-                playNext()
-                updateNotification()
+                requestAudioFocusAndPlayNext()
             }
 
             ACTION_PREVIOUS -> {
-                playPrevious()
-                updateNotification()
+                requestAudioFocusAndPlayPrevious()
             }
 
             ACTION_STOP -> {
