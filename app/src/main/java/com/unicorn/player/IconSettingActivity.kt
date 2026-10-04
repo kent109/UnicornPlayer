@@ -41,7 +41,7 @@ class IconSettingActivity : BaseActivity() {
             text = "歌曲图标"
             setTextColor(getColor(R.color.onSurfaceVariant))
             textSize = 14f
-            setPadding(dpToPx(8), dpToPx(0), 0, dpToPx(8))
+            setPadding(dpToPx(12), dpToPx(0), 0, dpToPx(8))
         }
         container.addView(headerView)
 

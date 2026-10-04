@@ -443,7 +443,7 @@ public class EqualizerFragment extends Fragment {
                     0, ViewGroup.LayoutParams.MATCH_PARENT, 2f);
             frameLayout.setLayoutParams(frameParams);
 
-            // === 内部 LinearLayout（vertical，marginTop=8dp）===
+            // === 内部 LinearLayout（vertical，marginTop=4dp）===
             // clipChildren=false：旋转 SeekBar 的 thumb 拖到两端时会溢出 wrapper 边界，
             // 父容器必须放行绘制，否则 thumb 会被裁掉（表现为拖到底部时消失）
             LinearLayout innerLayout = new LinearLayout(getContext());
@@ -451,7 +451,7 @@ public class EqualizerFragment extends Fragment {
             innerLayout.setClipChildren(false);
             FrameLayout.LayoutParams innerParams = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            innerParams.topMargin = (int) (8 * density);
+            innerParams.topMargin = (int) (4 * density);
             innerLayout.setLayoutParams(innerParams);
             // 外层 FrameLayout / 横向容器同样放行，形成完整的不裁剪链路
             frameLayout.setClipChildren(false);
@@ -460,12 +460,12 @@ public class EqualizerFragment extends Fragment {
             }
 
             // === VerticalSeekBarWrapper（weight=8，clipChildren=false）===
-            // bottomMargin=10dp：为 thumb（16dp 圆，半径 8dp）在最低端预留绘制空间，
+            // bottomMargin=8dp：为 thumb（16dp 圆，半径 8dp）在最低端预留绘制空间，
             // 与下方频率标签之间形成间隙，避免 thumb 压住标签文字
             VerticalSeekBarWrapper wrapper = new VerticalSeekBarWrapper(getContext());
             LinearLayout.LayoutParams wrapperParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, 0, 8f);
-            wrapperParams.bottomMargin = (int) (10 * density);
+            wrapperParams.bottomMargin = (int) (8 * density);
             wrapper.setLayoutParams(wrapperParams);
             wrapper.setClipChildren(false);
 

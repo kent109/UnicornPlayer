@@ -8,9 +8,11 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.R
 import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.adapter.HeaderSpacerAdapter
 import com.unicorn.player.adapter.SongAdapter
 import com.unicorn.player.databinding.FragmentSongsBinding
 import com.unicorn.player.model.Song
@@ -251,9 +253,11 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         songAdapter.observePlayableChanges(viewLifecycleOwner)
         songAdapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(requireContext()) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         recyclerView = binding.recyclerView
+        val headerAdapter = HeaderSpacerAdapter()
+        val concatAdapter = ConcatAdapter(headerAdapter, songAdapter)
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
-            adapter = songAdapter
+            adapter = concatAdapter
             songAdapter.setRecyclerView(this@apply)
         }
         // "立即扫描"按钮点击

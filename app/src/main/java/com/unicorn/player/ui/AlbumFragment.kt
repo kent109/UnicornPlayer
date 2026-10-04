@@ -15,10 +15,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.AlbumSongsActivity
 import com.unicorn.player.MainActivity
 import com.unicorn.player.adapter.AlbumAdapter
+import com.unicorn.player.adapter.HeaderSpacerAdapter
 import com.unicorn.player.databinding.FragmentAlbumBinding
 import com.unicorn.player.model.Album
 import com.unicorn.player.repository.MusicRepository
@@ -134,9 +136,11 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
 
     private fun setupRecyclerView() {
         albumAdapter = AlbumAdapter(this)
+        val headerAdapter = HeaderSpacerAdapter()
+        val concatAdapter = ConcatAdapter(headerAdapter, albumAdapter)
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
-            adapter = albumAdapter
+            adapter = concatAdapter
         }
         setupScrollListener()
         setupWaveSideBar()

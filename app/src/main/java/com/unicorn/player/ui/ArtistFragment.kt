@@ -13,9 +13,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.ArtistSongsActivity
 import com.unicorn.player.adapter.ArtistAdapter
+import com.unicorn.player.adapter.HeaderSpacerAdapter
 import com.unicorn.player.databinding.FragmentArtistBinding
 import com.unicorn.player.model.Artist
 import com.unicorn.player.model.Song
@@ -102,9 +104,11 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
 
     private fun setupRecyclerView() {
         artistAdapter = ArtistAdapter(this)
+        val headerAdapter = HeaderSpacerAdapter()
+        val concatAdapter = ConcatAdapter(headerAdapter, artistAdapter)
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
-            adapter = artistAdapter
+            adapter = concatAdapter
         }
         setupScrollListener()
     }

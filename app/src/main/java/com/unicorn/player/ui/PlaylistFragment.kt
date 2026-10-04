@@ -14,12 +14,14 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.MainActivity
 import com.unicorn.player.PlaylistSongsActivity
 import com.unicorn.player.R
+import com.unicorn.player.adapter.HeaderSpacerAdapter
 import com.unicorn.player.adapter.PlaylistAdapter
 import com.unicorn.player.adapter.SelectableImportPlaylistAdapter
 import com.unicorn.player.databinding.DialogPlaylistImportBinding
@@ -153,9 +155,11 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
 
     private fun setupRecyclerView() {
         adapter = PlaylistAdapter(this)
+        val headerAdapter = HeaderSpacerAdapter()
+        val concatAdapter = ConcatAdapter(headerAdapter, adapter)
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(requireContext())
-            adapter = this@PlaylistFragment.adapter
+            adapter = concatAdapter
             // 禁用 item 的 change 动画（notifyItemChanged 触发的交叉淡入淡出）；
             // 否则展开/关闭操作按钮时 item 会闪一下。保留 add/remove/move 动画。
             (itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
