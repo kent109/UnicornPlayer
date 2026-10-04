@@ -12,11 +12,11 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.unicorn.player.util.KyrieDrawable
 import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemSongBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.playback.SongPlayableRegistry
+import com.unicorn.player.util.KyrieDrawable
 
 class SongAdapter(
     private val listener: OnSongClickListener,
@@ -138,17 +138,27 @@ class SongAdapter(
     fun resumeCurrentSongAnimation() {
         if (!isPlaying || isPaused) return
         currentPlayingSong?.let { song ->
-            val currentPosition = currentList.indexOfFirst { it.id == song.id }
-            if (currentPosition != -1) {
-                val recyclerView = getRecyclerView() ?: return
-                val viewHolder = recyclerView.findViewHolderForAdapterPosition(currentPosition)
+            val recyclerView = getRecyclerView() ?: return
+            for (i in 0 until recyclerView.childCount) {
+                val child = recyclerView.getChildAt(i)
+                val viewHolder = recyclerView.getChildViewHolder(child)
                 if (viewHolder is SongViewHolder) {
-                    if (isCassetteMode) {
-                        viewHolder.resumeCassetteAnimation(currentPlaybackPositionMs, song.duration)
-                    } else {
-                        val savedAngle = rotationAngleMap[song.id] ?: 0f
-                        viewHolder.binding.albumArt.rotation = savedAngle
-                        viewHolder.startDiscAnimation()
+                    val position = viewHolder.bindingAdapterPosition
+                    if (position != RecyclerView.NO_POSITION) {
+                        val currentSong = getItem(position)
+                        if (currentSong.id == song.id) {
+                            if (isCassetteMode) {
+                                viewHolder.resumeCassetteAnimation(
+                                    currentPlaybackPositionMs,
+                                    song.duration
+                                )
+                            } else {
+                                val savedAngle = rotationAngleMap[song.id] ?: 0f
+                                viewHolder.binding.albumArt.rotation = savedAngle
+                                viewHolder.startDiscAnimation()
+                            }
+                            return
+                        }
                     }
                 }
             }
@@ -159,15 +169,22 @@ class SongAdapter(
         currentPlayingSong?.let { song ->
             rotationAngleMap.remove(song.id)
             cassettePauseTimeMap.remove(song.id)
-            val currentPosition = currentList.indexOfFirst { it.id == song.id }
-            if (currentPosition != -1) {
-                val recyclerView = getRecyclerView() ?: return
-                val viewHolder = recyclerView.findViewHolderForAdapterPosition(currentPosition)
+            val recyclerView = getRecyclerView() ?: return
+            for (i in 0 until recyclerView.childCount) {
+                val child = recyclerView.getChildAt(i)
+                val viewHolder = recyclerView.getChildViewHolder(child)
                 if (viewHolder is SongViewHolder) {
-                    if (isCassetteMode) {
-                        viewHolder.resetToStaticCassette()
-                    } else {
-                        viewHolder.stopDiscAnimation()
+                    val position = viewHolder.bindingAdapterPosition
+                    if (position != RecyclerView.NO_POSITION) {
+                        val currentSong = getItem(position)
+                        if (currentSong.id == song.id) {
+                            if (isCassetteMode) {
+                                viewHolder.resetToStaticCassette()
+                            } else {
+                                viewHolder.stopDiscAnimation()
+                            }
+                            return
+                        }
                     }
                 }
             }
@@ -177,19 +194,27 @@ class SongAdapter(
     fun updateCassetteAnimationProgress(currentPositionMs: Long) {
         if (!isCassetteMode) return
         val song = currentPlayingSong ?: return
-        val position = currentList.indexOfFirst { it.id == song.id }
-        if (position == -1) return
         val animationTime = if (song.duration > 0) {
             (currentPositionMs.toFloat() / song.duration * song.duration).toLong()
         } else {
             0L
         }
         val recyclerView = getRecyclerView() ?: return
-        val viewHolder = recyclerView.findViewHolderForAdapterPosition(position)
-        if (viewHolder is SongViewHolder) {
-            val drawable = viewHolder.binding.albumArt.drawable as? KyrieDrawable
-            if (drawable != null) {
-                drawable.currentPlayTime = animationTime
+        for (i in 0 until recyclerView.childCount) {
+            val child = recyclerView.getChildAt(i)
+            val viewHolder = recyclerView.getChildViewHolder(child)
+            if (viewHolder is SongViewHolder) {
+                val position = viewHolder.bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    val currentSong = getItem(position)
+                    if (currentSong.id == song.id) {
+                        val drawable = viewHolder.binding.albumArt.drawable as? KyrieDrawable
+                        if (drawable != null) {
+                            drawable.currentPlayTime = animationTime
+                        }
+                        return
+                    }
+                }
             }
         }
     }
