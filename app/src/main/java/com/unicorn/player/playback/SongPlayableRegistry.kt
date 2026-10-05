@@ -7,10 +7,12 @@ import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.unicorn.player.database.MusicDatabase
+import com.unicorn.player.playback.SongPlayableRegistry.EXT_CODEC_MIMES
 import com.unicorn.player.playback.SongPlayableRegistry.blacklistVersion
 import com.unicorn.player.playback.SongPlayableRegistry.isPlayable
 import com.unicorn.player.playback.SongPlayableRegistry.markUnsupported
 import com.unicorn.player.playback.SongPlayableRegistry.precheck
+import com.unicorn.player.playback.SongPlayableRegistry.precheckLibrary
 import com.unicorn.player.service.DataStoreKeys
 import com.unicorn.player.service.applicationDataStore
 import kotlinx.coroutines.CoroutineScope
@@ -57,7 +59,6 @@ object SongPlayableRegistry {
         "mid" to listOf("audio/midi"),
         "midi" to listOf("audio/midi"),
         "wma" to listOf("audio/x-ms-wma", "audio/x-wma"),
-        "ape" to listOf("audio/x-ape", "audio/ape"),
         "wv" to listOf("audio/x-wavpack", "audio/wavpack"),
         "tta" to listOf("audio/x-tta", "audio/tta"),
         "ac3" to listOf("audio/ac3", "audio/eac3"),
@@ -66,6 +67,17 @@ object SongPlayableRegistry {
         "aiff" to listOf("audio/aiff", "audio/x-aiff"),
         "aif" to listOf("audio/aiff", "audio/x-aiff")
     )
+
+    /**
+     * 由应用内置软件解码器在 extractor 内解码为裸 PCM 的扩展名。
+     * 这类格式不经过系统 MediaCodec（MediaCodecList 查不到对应 mime），
+     * 解码能力由打包进 APK 的本地库保证，因此：
+     * 1. 不能参与 [precheck] 的 MediaCodecList 对照，否则会被误加入黑名单；
+     * 2. 单文件损坏时播放失败属于文件自身问题，不代表该扩展名不可播，
+     *    因此 [markUnsupported] 也不拉黑这类扩展名。
+     * ape：media3-decoder-ape，MACLib 解码。
+     */
+    private val SOFTWARE_DECODED_EXTENSIONS = setOf("ape")
 
     private val unsupportedExtensions = mutableSetOf<String>()
 
@@ -101,6 +113,13 @@ object SongPlayableRegistry {
                 val saved = prefs[DataStoreKeys.UNSUPPORTED_AUDIO_EXTENSIONS].orEmpty()
                 synchronized(unsupportedExtensions) {
                     unsupportedExtensions.addAll(saved)
+                    // 迁移：内置软件解码格式（如 ape）旧版本可能被 MediaCodecList 预检
+                    // 或播放失败逻辑误加入黑名单，加载时一次性剔除。
+                    val purged = unsupportedExtensions.removeAll(SOFTWARE_DECODED_EXTENSIONS)
+                    if (purged) {
+                        scope.launch { persist(appContext) }
+                        _blacklistVersion.postValue(_blacklistVersion.value!! + 1)
+                    }
                 }
                 Log.d(TAG, "Loaded ${saved.size} unsupported extensions: $saved")
             } catch (e: Exception) {
@@ -180,6 +199,12 @@ object SongPlayableRegistry {
     fun markUnsupported(context: Context, path: String): Boolean {
         val ext = extensionOf(path)
         if (ext.isEmpty()) return false
+        // 内置软件解码格式（如 ape）的播放失败只可能是该文件自身损坏，
+        // 与设备能力无关，不能按扩展名拉黑，否则会误伤同格式的正常文件。
+        if (ext in SOFTWARE_DECODED_EXTENSIONS) {
+            Log.d(TAG, "Skip blacklisting software-decoded extension: $ext")
+            return false
+        }
         val changed = synchronized(unsupportedExtensions) { unsupportedExtensions.add(ext) }
         if (changed) {
             Log.d(TAG, "Marked unsupported extension from playback error: $ext")
@@ -220,6 +245,8 @@ object SongPlayableRegistry {
      */
     fun isExtensionSupported(ext: String): Boolean {
         if (ext.isEmpty()) return true
+        // 内置软件解码格式（extractor 内解码为 PCM）始终可播放
+        if (ext in SOFTWARE_DECODED_EXTENSIONS) return true
         synchronized(unsupportedExtensions) {
             if (ext in unsupportedExtensions) return false
         }

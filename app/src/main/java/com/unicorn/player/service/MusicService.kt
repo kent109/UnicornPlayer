@@ -43,8 +43,10 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.bullhead.equalizer.AudioEffectManager
 import com.bullhead.equalizer.EqualizerModel
 import com.bullhead.equalizer.Settings
@@ -58,6 +60,7 @@ import com.unicorn.player.playback.SongPlayableRegistry
 import com.unicorn.player.scanFiltersDataStore
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.PinyinUtil
+import io.github.eugenedibtsev.media3.ape.ApeSupport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -591,16 +594,44 @@ class MusicService : Service() {
             ): AudioSink {
                 return DefaultAudioSink.Builder(context)
                     .setAudioProcessors(arrayOf<AudioProcessor>(eqProcessor))
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
                     .build()
             }
         }
+        // APE（Monkey's Audio）在 extractor 内解码为裸 PCM，由标准音频渲染器播放。
+        // ApeSupport.extractorsFactory() 返回"先嗅探 APE、其余行为同 DefaultExtractorsFactory"的工厂，
+        // 不影响 mp3/flac/ogg 等其他格式。
+        val mediaSourceFactory = DefaultMediaSourceFactory(
+            this,
+            ApeSupport.extractorsFactory()
+        )
         player = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(
                 Media3AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                     .setUsage(C.USAGE_MEDIA).build(), /* handleAudioFocus= */ false
             ).setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
+
+        // media3 1.6.0+ 起初始 audioSessionId 不再在 player 创建后立即可得，
+        // 必须通过 AnalyticsListener.onAudioSessionIdChanged 监听初始分配与后续变更（如设备切换/格式变化），
+        // 才能把系统音效（Equalizer/BassBoost/PresetReverb）正确绑定到真实 session id 上。
+        player.addAnalyticsListener(object : AnalyticsListener {
+            override fun onAudioSessionIdChanged(
+                eventTime: AnalyticsListener.EventTime,
+                audioSessionId: Int
+            ) {
+                if (audioSessionId == 0) return
+                // 已绑定的 session id 发生变化时，先释放旧 session 上的音效对象，
+                // 否则 initialize() 会因 sIsInitialized 直接 return，新 session 上没有任何音效生效。
+                if (AudioEffectManager.areEffectsEnabled() &&
+                    AudioEffectManager.getAudioSessionId() != audioSessionId
+                ) {
+                    AudioEffectManager.destroy()
+                }
+                initializeAudioEffects()
+            }
+        })
 
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -756,16 +787,51 @@ class MusicService : Service() {
                     return
                 }
 
-                // 非过渡期的播放错误（格式不支持等），提示并恢复为暂停状态
-                android.widget.Toast.makeText(
-                    this@MusicService, "暂不支持播放该格式", android.widget.Toast.LENGTH_SHORT
-                ).show()
-                _isPlaying.value = false
-                _isPlayableError.value = true
-                _currentSong.value?.path?.let {
-                    SongPlayableRegistry.markUnsupported(this@MusicService, it)
+                // 仅"真正不支持"的格式/解码错误才提示"暂不支持播放该格式"并永久拉黑。
+                // media3 1.9.0 默认开启 StuckPlayer 检测，触发后会以 ERROR_CODE_TIMEOUT(1003)
+                // 上报到 onPlayerError；这类超时/IO/写入失败等运行时错误不应被当作格式不支持。
+                val unsupportedFormatErrorCodes = setOf(
+                    PlaybackException.ERROR_CODE_NOT_SUPPORTED,
+                    PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+                    PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+                    PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+                    PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+                    PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+                    PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+                    PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+                    PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED
+                )
+
+                if (error.errorCode in unsupportedFormatErrorCodes) {
+                    android.widget.Toast.makeText(
+                        this@MusicService, "暂不支持播放该格式", android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    _isPlaying.value = false
+                    _isPlayableError.value = true
+                    _currentSong.value?.path?.let {
+                        SongPlayableRegistry.markUnsupported(this@MusicService, it)
+                    }
+                    player.pause()
+                } else {
+                    // 运行时错误（含 media3 1.9.0 StuckPlayerException 上报的 TIMEOUT）：
+                    // 不拉黑歌曲，提示后尝试重新 prepare 自愈。
+                    android.widget.Toast.makeText(
+                        this@MusicService, "播放失败，正在重试", android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    _isPlaying.value = false
+                    _isPlayableError.value = true
+                    try {
+                        val position = player.currentPosition
+                        player.prepare()
+                        if (position > 0) {
+                            player.seekTo(position)
+                        }
+                        player.play()
+                    } catch (e: Exception) {
+                        LogWriter.writeError(TAG, "Self-heal prepare failed", e)
+                        player.pause()
+                    }
                 }
-                player.pause()
                 updateNotification()
                 updateMediaSessionPlaybackState()
                 savePlaybackState()

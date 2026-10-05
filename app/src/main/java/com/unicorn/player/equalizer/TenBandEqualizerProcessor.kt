@@ -204,6 +204,9 @@ class TenBandEqualizerProcessor : AudioProcessor {
         return output
     }
 
+    // media3 1.9.0 将无参 flush() 标为 deprecated（新增 flush(StreamMetadata) 重载，
+    // 其默认实现会委托调用本方法）。保留此实现是 reset() 与历史调用链路所必需的。
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun flush() {
         for (channel in states.indices) {
             for (band in states[channel].indices) {

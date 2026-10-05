@@ -139,3 +139,34 @@
 # Kotlinx Serialization
 # ============================================================
 -dontwarn kotlinx.serialization.**
+
+# ============================================================
+# media3-decoder-ape（本地 AAR：files() 不携带 consumer 规则）
+# native 层通过 FindClass + RegisterNatives 严格按名绑定，
+# read(ByteBuffer) 回调由 native GetMethodID 按名查找
+# ============================================================
+-keep class io.github.eugenedibtsev.media3.ape.ApeDecoderJni {
+    native <methods>;
+    int read(java.nio.ByteBuffer);
+}
+-keep class io.github.eugenedibtsev.media3.ape.ApeLibrary {
+    native <methods>;
+}
+-keep class io.github.eugenedibtsev.media3.ape.ApeSupport {
+    public <methods>;
+}
+-keep class io.github.eugenedibtsev.media3.ape.ApeExtractorsFactory {
+    public <methods>;
+}
+-keep class io.github.eugenedibtsev.media3.ape.ApeExtractor {
+    public <fields>;
+    public <methods>;
+}
+-keep class io.github.eugenedibtsev.media3.ape.ApeStreamMetadata {
+    public <fields>;
+    public <methods>;
+}
+-keep class io.github.eugenedibtsev.media3.ape.ApeDecoderException {
+    public <fields>;
+    public <methods>;
+}
