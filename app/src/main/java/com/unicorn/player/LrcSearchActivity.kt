@@ -50,7 +50,7 @@ class LrcSearchActivity : BaseActivity(),
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
             if (treeUri != null) {
                 LyricsSaveManager.saveTreeUri(this, treeUri)
-                // 授权完成，先确认 Documents/Unicorn/Lyrics 目录存在（不存在则创建）
+                // 授权完成，先确认 Download/Unicorn/Lyrics 目录存在（不存在则创建）
                 lifecycleScope.launch(Dispatchers.IO) {
                     val dirReady = LyricsSaveManager.ensureSaveDirExists(this@LrcSearchActivity)
                     withContext(Dispatchers.Main) {
@@ -224,7 +224,7 @@ class LrcSearchActivity : BaseActivity(),
     }
 
     /**
-     * 保存选中的歌词到 Documents/Unicorn/Lyrics/（SAF）
+     * 保存选中的歌词到 Download/Unicorn/Lyrics/（SAF）
      * 无 SAF 权限时引导用户授权，授权完成后自动继续保存
      */
     private fun saveSelectedLyrics(result: LrcSearchResult) {
@@ -255,13 +255,13 @@ class LrcSearchActivity : BaseActivity(),
         } else {
             pendingSaveContent = simplifiedContent
             pendingSaveFileName = lrcFileName
-            Toast.makeText(this, "请选择 Documents 目录以授权保存", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "请选择 Download 目录以授权保存", Toast.LENGTH_LONG).show()
             openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
         }
     }
 
     /**
-     * 执行实际的保存写入操作（SAF Documents/Unicorn/Lyrics/）
+     * 执行实际的保存写入操作（SAF Download/Unicorn/Lyrics/）
      */
     private fun performSave(fileName: String, content: String) {
         lifecycleScope.launch(Dispatchers.IO) {

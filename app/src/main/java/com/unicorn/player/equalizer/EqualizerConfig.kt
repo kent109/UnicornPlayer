@@ -4,7 +4,7 @@ package com.unicorn.player.equalizer
  * 均衡器自定义配置的 JSON 数据模型（Gson 序列化）。
  *
  * 用于导入/导出用户自定义的均衡器配置，存储于
- * Documents/Unicorn/Equalizer/ 目录下的 .json 文件。
+ * Download/Unicorn/Equalizer/ 目录下的 .json 文件。
  *
  * 字段说明：
  * - [version]：版本号，便于后续兼容

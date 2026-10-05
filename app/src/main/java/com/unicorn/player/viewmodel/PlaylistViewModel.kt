@@ -376,7 +376,7 @@ class PlaylistViewModel(
     }
 
     /**
-     * 导出歌单到 Documents/Unicorn/Playlist/&lt;playlistId&gt;.json
+     * 导出歌单到 Download/Unicorn/Playlist/&lt;playlistId&gt;.json
      *
      * - 以 repository 实时数据为准（含被隐藏歌曲），不依赖界面缓存的 songList
      * - 同一 playlistId 的旧文件直接覆盖

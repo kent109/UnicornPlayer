@@ -198,7 +198,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
             if (treeUri != null) {
                 LyricsSaveManager.saveTreeUri(this, treeUri)
-                // 授权完成，先确认 Documents/Unicorn/Lyrics 目录存在（不存在则创建）
+                // 授权完成，先确认 Download/Unicorn/Lyrics 目录存在（不存在则创建）
                 lifecycleScope.launch(Dispatchers.IO) {
                     val dirReady = LyricsSaveManager.ensureSaveDirExists(this@PlayerActivity)
                     withContext(Dispatchers.Main) {
@@ -482,7 +482,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         // 应用字号设置（从 DataStore 读取字体大小偏好）
         applyFontSize()
 
-        // "新建歌词"按钮：弹出歌词编辑对话框（空白编辑模式），保存后通过 SAF 写入 Documents/Unicorn/Lyrics
+        // "新建歌词"按钮：弹出歌词编辑对话框（空白编辑模式），保存后通过 SAF 写入 Download/Unicorn/Lyrics
         binding.btnCreateLyrics.setOnClickListener {
             val song = musicService?.currentSong?.value
             if (song == null) {
@@ -543,7 +543,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     private var lrcPreviewDialog: LrcPreviewDialog? = null
 
     /**
-     * 全屏模式下长按 LrcView 时：从 Documents/Unicorn/Lyrics 读取 .lrc 文件内容，弹出编辑预览对话框
+     * 全屏模式下长按 LrcView 时：从 Download/Unicorn/Lyrics 读取 .lrc 文件内容，弹出编辑预览对话框
      */
     private fun showLrcPreviewForLocalFile(audioPath: String) {
         val lrcFileName = File(audioPath).nameWithoutExtension.toSimpleCustom() + ".lrc"
@@ -572,9 +572,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     /**
      * 歌词保存入口（SAF 实现）：
-     * 1. 检查是否拥有 Documents 目录的 SAF 树 URI 权限——有则直接写入
-     *    Documents/Unicorn/Lyrics/ 目录（自动创建子目录）
-     * 2. 无权限则缓存待保存数据，启动 SAF 选择器定位到 Documents 目录引导用户授权
+     * 1. 检查是否拥有 Download 目录的 SAF 树 URI 权限——有则直接写入
+     *    Download/Unicorn/Lyrics/ 目录（自动创建子目录）
+     * 2. 无权限则缓存待保存数据，启动 SAF 选择器定位到 Download 目录引导用户授权
      *
      * 使用 SAF 树 URI + DocumentFile API 在授权目录内逐级操作。
      * 树 URI 授予的读写权限覆盖整个子树，无需系统级权限。
@@ -592,7 +592,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             // 1. 先检查是否有保存的 tree URI（没有则无法创建目录，直接授权）
             if (!LyricsSaveManager.hasSavedTreeUri(this)) {
                 Log.d(TAG, "saveLyrics: 无保存的 tree URI，启动目录选择器")
-                Toast.makeText(this, "请选择 Documents 目录以授权保存", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "请选择 Download 目录以授权保存", Toast.LENGTH_LONG).show()
                 pendingSaveContent = content
                 pendingSaveFileName = fileName
                 pendingSaveAudioPath = audioPath
@@ -673,7 +673,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     }
 
     /**
-     * 重新加载 LrcView 数据（从 Documents/Unicorn/Lyrics 解析 .lrc 文件并刷新视图）
+     * 重新加载 LrcView 数据（从 Download/Unicorn/Lyrics 解析 .lrc 文件并刷新视图）
      */
     private fun reloadLrcView(audioPath: String) {
         lifecycleScope.launch {
@@ -1099,7 +1099,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     }
 
     /**
-     * 从 Documents/Unicorn/Lyrics 加载歌词
+     * 从 Download/Unicorn/Lyrics 加载歌词
      */
     private suspend fun loadLrcFromDocuments(audioPath: String): List<LrcRow>? {
         return withContext(Dispatchers.IO) {
@@ -1127,7 +1127,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     }
 
     /**
-     * 加载并显示歌词，优先级：Documents/Unicorn/Lyrics > 网络下载。
+     * 加载并显示歌词，优先级：Download/Unicorn/Lyrics > 网络下载。
      * 无 SAF 权限时不显示歌词、不下载，并关闭歌词开关。
      *
      * @param syncPosition 非 null 时（如 onResume 灭屏亮屏恢复），数据应用后立即
@@ -1162,7 +1162,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     disableLyrics()
                     return@launch
                 }
-                // 2. Documents 优先
+                // 2. Download 优先
                 val docsRows = loadLrcFromDocuments(audioPath)
                 Log.d(TAG, "loadLrcFromDocuments 返回: ${docsRows?.size ?: "null"} 行")
                 // 检查代数：若加载期间有新的 loadAndShowLrc 调用，丢弃本次结果
@@ -1181,13 +1181,13 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                         binding.lrcView.setLrcData(displayRows)
                     }
                     binding.lrcView.visibility = View.VISIBLE
-                    Log.d(TAG, "Documents 歌词加载成功: ${docsRows.size} 行")
+                    Log.d(TAG, "Download 歌词加载成功: ${docsRows.size} 行")
                     return@launch
                 }
                 // 3. 网络兜底
                 binding.lrcView.setLrcData(emptyList())
                 binding.lrcView.visibility = View.GONE
-                Log.d(TAG, "Documents 无歌词，尝试网络下载")
+                Log.d(TAG, "Download 无歌词，尝试网络下载")
                 fetchLrcFromNetwork(audioPath, myGeneration, syncPosition)
             } catch (e: Exception) {
                 binding.lrcView.visibility = View.GONE

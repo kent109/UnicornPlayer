@@ -13,9 +13,11 @@ import java.nio.charset.Charset
 /**
  * 歌词保存工具类（SAF 实现）
  *
- * 保存目录：Documents/Unicorn/Lyrics/
- * 使用 SAF 树 URI 授权。用户通过系统文件选择器授权 Documents 目录后，
- * 通过 DocumentFile API 在树内逐级创建子目录和文件。
+ * 保存目录：Download/Unicorn/Lyrics/
+ * 使用 SAF 树 URI 授权。用户通过系统文件选择器授权 Download/Unicorn 目录后，
+ * 通过 DocumentFile API 在树内创建 Lyrics 子目录和文件。
+ *
+ * 注意：树 URI 直接指向 Unicorn 目录（用户需在 Download 下创建 Unicorn 并选择它）。
  *
  * 关键约束：
  * - 必须通过 DocumentFile 在树内操作，不能直接拼接文档 URI，
@@ -23,18 +25,18 @@ import java.nio.charset.Charset
  */
 object LyricsSaveManager {
 
-    private const val UNICORN_DIR = "Unicorn"
     private const val LYRICS_DIR = "Lyrics"
     private const val PREFS_NAME = "lyrics_save_prefs"
     private const val KEY_TREE_URI = "tree_uri"
 
     /**
-     * 构建 SAF 选择器的初始 URI，定位到 Documents 目录。
+     * 构建 SAF 选择器的初始 URI，定位到 Download/Unicorn 目录。
+     * 该目录在迁移流程中已通过 MediaStore API 预创建。
      */
     fun getInitialUri(): Uri {
         return DocumentsContract.buildDocumentUri(
             "com.android.externalstorage.documents",
-            "primary:Documents"
+            "primary:Download/Unicorn"
         )
     }
 
@@ -70,6 +72,14 @@ object LyricsSaveManager {
     }
 
     /**
+     * 清除已保存的树 URI（迁移完成后调用）。
+     */
+    fun clearSavedTreeUri(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            ?.edit { remove(KEY_TREE_URI) }
+    }
+
+    /**
      * 检查是否已保存树 URI（不检查权限）。
      */
     fun hasSavedTreeUri(context: Context): Boolean {
@@ -92,7 +102,8 @@ object LyricsSaveManager {
     }
 
     /**
-     * 确认 Documents/Unicorn/Lyrics 目录存在，不存在则创建。
+     * 确认 Lyrics 目录存在，不存在则创建。
+     * 树 URI 指向 Unicorn 目录，直接在其下创建 Lyrics。
      *
      * @return 目录存在且可用返回 true，创建失败返回 false
      */
@@ -100,12 +111,9 @@ object LyricsSaveManager {
         return try {
             val treeUri = getSavedTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
-            // 在树内逐级查找/创建 Unicorn 子目录
-            val unicorn = root.findFile(UNICORN_DIR)
-                ?: root.createDirectory(UNICORN_DIR) ?: return false
-            // 在 Unicorn 内查找/创建 Lyrics 子目录
-            val lyrics = unicorn.findFile(LYRICS_DIR)
-                ?: unicorn.createDirectory(LYRICS_DIR) ?: return false
+            // 树根就是 Unicorn 目录，直接在其下查找/创建 Lyrics
+            val lyrics = root.findFile(LYRICS_DIR)
+                ?: root.createDirectory(LYRICS_DIR) ?: return false
             Log.d("LyricsSave", "lyrics.isDirectory=${lyrics.isDirectory}")
             lyrics.isDirectory
         } catch (e: Throwable) {
@@ -116,7 +124,7 @@ object LyricsSaveManager {
     }
 
     /**
-     * 从 Documents/Unicorn/Lyrics/ 读取歌词内容。
+     * 从 Lyrics 目录读取歌词内容。
      *
      * @param fileName 文件名，如 "Artist - Title.lrc"
      * @return 文件内容；不存在或读取失败返回 null
@@ -125,8 +133,7 @@ object LyricsSaveManager {
         return try {
             val treeUri = getSavedTreeUri(context) ?: return null
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return null
-            val unicorn = root.findFile(UNICORN_DIR) ?: return null
-            val dir = unicorn.findFile(LYRICS_DIR) ?: return null
+            val dir = root.findFile(LYRICS_DIR) ?: return null
             val file = dir.findFile(fileName) ?: return null
             context.contentResolver.openInputStream(file.uri)?.use { input ->
                 input.readBytes().toString(Charset.forName("UTF-8"))
@@ -138,14 +145,13 @@ object LyricsSaveManager {
     }
 
     /**
-     * 检查 Documents/Unicorn/Lyrics/ 中是否存在指定歌词文件。
+     * 检查 Lyrics 目录中是否存在指定歌词文件。
      */
     fun lrcFileExists(context: Context, fileName: String): Boolean {
         return try {
             val treeUri = getSavedTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
-            val unicorn = root.findFile(UNICORN_DIR) ?: return false
-            val dir = unicorn.findFile(LYRICS_DIR) ?: return false
+            val dir = root.findFile(LYRICS_DIR) ?: return false
             dir.findFile(fileName) != null
         } catch (e: Throwable) {
             e.printStackTrace()
@@ -154,7 +160,7 @@ object LyricsSaveManager {
     }
 
     /**
-     * 将歌词内容写入 Documents/Unicorn/Lyrics/ 目录。
+     * 将歌词内容写入 Lyrics 目录。
      *
      * @param context Android 上下文
      *
@@ -167,8 +173,7 @@ object LyricsSaveManager {
         return try {
             val treeUri = getSavedTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
-            val unicorn = root.findFile(UNICORN_DIR) ?: return false
-            val dir = unicorn.findFile(LYRICS_DIR) ?: return false
+            val dir = root.findFile(LYRICS_DIR) ?: return false
             // 删除同名旧文件（覆盖写入）
             dir.findFile(fileName)?.delete()
             // 在树内创建文件（使用 application/octet-stream 避免 ExternalStorageProvider 为 text/plain 追加 .txt 后缀）

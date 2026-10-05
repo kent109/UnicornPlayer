@@ -37,6 +37,8 @@ import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongsFragment
 import com.unicorn.player.util.AudioTagEditor
+import com.unicorn.player.util.DirectoryMigrationManager
+import com.unicorn.player.util.LyricsSaveManager
 import com.unicorn.player.util.PlaylistFileManager
 import com.unicorn.player.util.UpdateHelper
 import com.unicorn.player.util.ViewUtil
@@ -102,6 +104,13 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
                 // 用户取消授权：停留多选页，恢复导出按钮
                 finishPlaylistExportState()
             }
+        }
+
+    // 目录迁移相关（Documents -> Download）
+    /** SAF 目录选择器：迁移时授权 Download/Unicorn 目录 */
+    private val migrationTreeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+            DirectoryMigrationManager.performMigrationWithLoading(this, treeUri, lifecycleScope)
         }
 
     // 自动检查更新的延迟任务（用于在 onDestroy 时取消，避免内存泄漏）
@@ -199,6 +208,9 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
 
         // 自动检查更新（若用户启用）
         checkUpdateOnStartup()
+
+        // 检查是否需要从 Documents 迁移到 Download
+        checkDirectoryMigration()
     }
 
     /**
@@ -226,6 +238,18 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         autoUpdatePendingRunnable = runnable
 
         handler.postDelayed(runnable, AUTO_UPDATE_CHECK_DELAY_MS)
+    }
+
+    /**
+     * 检查是否需要从 Documents 目录迁移到 Download 目录
+     * 旧版本用户使用 Documents/Unicorn 保存歌词、均衡器配置、歌单导出文件，
+     * 新版本统一迁移到 Download/Unicorn。
+     */
+    private fun checkDirectoryMigration() {
+        DirectoryMigrationManager.showMigrationDialog(this) {
+            // 用户点击"开始迁移"，启动 SAF 选择器
+            migrationTreeLauncher.launch(LyricsSaveManager.getInitialUri())
+        }
     }
 
     /**

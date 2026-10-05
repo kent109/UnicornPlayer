@@ -14,10 +14,10 @@ import java.nio.charset.Charset
 /**
  * 均衡器自定义配置的 SAF 管理器（参考 [LyricsSaveManager] 实现）。
  *
- * 保存目录：Documents/Unicorn/Equalizer/
+ * 保存目录：Download/Unicorn/Equalizer/（树 URI 直接指向 Unicorn 目录）
  *
  * 权限策略：
- * - 优先复用 [LyricsSaveManager] 已授权的 Documents 树 URI（同属 Unicorn 父目录），
+ * - 优先复用 [LyricsSaveManager] 已授权的 Unicorn 树 URI，
  *   避免用户为均衡器功能重复授权；
  * - 若歌词树 URI 不可用，则使用本管理器自管的 SharedPreferences 中的树 URI；
  * - 若均不可用，调用方需通过 SAF 选择器引导用户授权。
@@ -28,7 +28,6 @@ import java.nio.charset.Charset
  */
 object EqualizerConfigManager {
 
-    private const val UNICORN_DIR = "Unicorn"
     private const val EQUALIZER_DIR = "Equalizer"
     private const val PREFS_NAME = "equalizer_config_prefs"
     private const val KEY_TREE_URI = "tree_uri"
@@ -36,12 +35,13 @@ object EqualizerConfigManager {
     private const val TAG = "EqConfigManager"
 
     /**
-     * 构建 SAF 选择器的初始 URI，定位到 Documents 目录。
+     * 构建 SAF 选择器的初始 URI，定位到 Download/Unicorn 目录。
+     * 该目录在迁移流程中已通过 MediaStore API 预创建。
      */
     fun getInitialUri(): Uri {
         return DocumentsContract.buildDocumentUri(
             "com.android.externalstorage.documents",
-            "primary:Documents"
+            "primary:Download/Unicorn"
         )
     }
 
@@ -79,7 +79,7 @@ object EqualizerConfigManager {
      * 获取可用的树 URI：优先歌词模块已授权的树 URI，其次本管理器自管的树 URI。
      */
     fun getAvailableTreeUri(context: Context): Uri? {
-        // 优先复用歌词模块已授权的树 URI（同指向 Documents）
+        // 优先复用歌词模块已授权的树 URI（同指向 Unicorn 目录）
         if (LyricsSaveManager.hasSavedTreeUri(context) &&
             LyricsSaveManager.isTreePermissionValid(context)
         ) {
@@ -106,7 +106,8 @@ object EqualizerConfigManager {
     }
 
     /**
-     * 确认 Documents/Unicorn/Equalizer 目录存在，不存在则创建。
+     * 确认 Download/Unicorn/Equalizer 目录存在，不存在则创建。
+     * 树 URI 直接指向 Unicorn 目录，在其下创建 Equalizer 子目录。
      *
      * @return 目录存在且可用返回 true，创建失败返回 false
      */
@@ -114,10 +115,8 @@ object EqualizerConfigManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
-            val unicorn = root.findFile(UNICORN_DIR)
-                ?: root.createDirectory(UNICORN_DIR) ?: return false
-            val eq = unicorn.findFile(EQUALIZER_DIR)
-                ?: unicorn.createDirectory(EQUALIZER_DIR) ?: return false
+            val eq = root.findFile(EQUALIZER_DIR)
+                ?: root.createDirectory(EQUALIZER_DIR) ?: return false
             eq.isDirectory
         } catch (e: Throwable) {
             Log.e(TAG, "创建保存目录失败: ${e.message}")
@@ -127,7 +126,7 @@ object EqualizerConfigManager {
     }
 
     /**
-     * 列出 Documents/Unicorn/Equalizer/ 下所有 .json 配置文件名。
+     * 列出 Download/Unicorn/Equalizer/ 下所有 .json 配置文件名。
      *
      * @return 文件名列表（包含 .json 后缀），按名称升序；目录不可用时返回空列表
      */
@@ -135,8 +134,7 @@ object EqualizerConfigManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return emptyList()
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
-            val unicorn = root.findFile(UNICORN_DIR) ?: return emptyList()
-            val dir = unicorn.findFile(EQUALIZER_DIR) ?: return emptyList()
+            val dir = root.findFile(EQUALIZER_DIR) ?: return emptyList()
             dir.listFiles()
                 .filter { it.isFile && it.name?.endsWith(FILE_EXT, ignoreCase = true) == true }
                 .mapNotNull { it.name }
@@ -157,8 +155,7 @@ object EqualizerConfigManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
-            val unicorn = root.findFile(UNICORN_DIR) ?: return false
-            val dir = unicorn.findFile(EQUALIZER_DIR) ?: return false
+            val dir = root.findFile(EQUALIZER_DIR) ?: return false
             val file = dir.findFile(fileName) ?: return true
             file.delete()
         } catch (e: Throwable) {
@@ -177,8 +174,7 @@ object EqualizerConfigManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return null
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return null
-            val unicorn = root.findFile(UNICORN_DIR) ?: return null
-            val dir = unicorn.findFile(EQUALIZER_DIR) ?: return null
+            val dir = root.findFile(EQUALIZER_DIR) ?: return null
             val file = dir.findFile(fileName) ?: return null
             context.contentResolver.openInputStream(file.uri)?.use { input ->
                 input.readBytes().toString(Charset.forName("UTF-8"))
@@ -190,7 +186,7 @@ object EqualizerConfigManager {
     }
 
     /**
-     * 将配置内容写入 Documents/Unicorn/Equalizer/ 目录。
+     * 将配置内容写入 Download/Unicorn/Equalizer/ 目录。
      * 同名文件会被覆盖。
      *
      * @param fileName 文件名（应包含 .json 后缀）
@@ -201,8 +197,7 @@ object EqualizerConfigManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
-            val unicorn = root.findFile(UNICORN_DIR) ?: return false
-            val dir = unicorn.findFile(EQUALIZER_DIR) ?: return false
+            val dir = root.findFile(EQUALIZER_DIR) ?: return false
             // 删除同名旧文件（覆盖写入）
             dir.findFile(fileName)?.delete()
             // 使用 application/octet-stream 避免 ExternalStorageProvider 为 text/plain 追加 .txt 后缀

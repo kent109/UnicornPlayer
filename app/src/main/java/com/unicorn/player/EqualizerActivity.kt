@@ -336,7 +336,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             withContext(Dispatchers.Main) {
                 Toast.makeText(
                     this@EqualizerActivity,
-                    if (ok) "已导出到 Documents/Unicorn/Equalizer/$fileName" else "写入失败",
+                    if (ok) "已导出到 Download/Unicorn/Equalizer/$fileName" else "写入失败",
                     Toast.LENGTH_SHORT
                 ).show()
             }

@@ -59,7 +59,7 @@ object LrcHelper {
      * @param fileName 显示名，如 "Artist - Title.lrc"
      * @param lrcContent 歌词文本内容
      *
-     * @deprecated 请使用 {@link LyricsSaveManager#writeLrcFile} 写入 Documents/Unicorn/Lyrics/（SAF）。
+     * @deprecated 请使用 {@link LyricsSaveManager#writeLrcFile} 写入 Download/Unicorn/Lyrics/（SAF）。
      *             应用私有外部目录存储已废弃，仅作为向后兼容保留。
      */
     @Deprecated("Use LyricsSaveManager.writeLrcFile instead")
@@ -80,7 +80,7 @@ object LrcHelper {
      * @param fileName 显示名，如 "Artist - Title.lrc"
      * @return 文件内容；未找到或读取失败返回 null
      *
-     * @deprecated 请使用 {@link LyricsSaveManager#readLrcFile} 从 Documents/Unicorn/Lyrics/（SAF）读取。
+     * @deprecated 请使用 {@link LyricsSaveManager#readLrcFile} 从 Download/Unicorn/Lyrics/（SAF）读取。
      *             应用私有外部目录存储已废弃，仅作为向后兼容保留。
      */
     @Deprecated("Use LyricsSaveManager.readLrcFile instead")
@@ -100,7 +100,7 @@ object LrcHelper {
      *
      * @return 是否成功删除到至少一个文件
      *
-     * @deprecated 请使用 {@link LyricsSaveManager} 的 Documents/Unicorn/Lyrics/（SAF）操作替代。
+     * @deprecated 请使用 {@link LyricsSaveManager} 的 Download/Unicorn/Lyrics/（SAF）操作替代。
      *             应用私有外部目录存储已废弃，仅作为向后兼容保留。
      */
     @Deprecated("Use LyricsSaveManager instead")

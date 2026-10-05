@@ -144,7 +144,7 @@ class LyricsOptionsActivity : BaseActivity() {
                 SettingItem(
                     key = "search_lyrics",
                     title = "歌词目录",
-                    summary = "/storage/emulated/0/Documents/Unicorn/Lyrics",
+                    summary = "/storage/emulated/0/Download/Unicorn/Lyrics",
                     hasChevron = false,
                     isFirst = false,
                     isLast = true,

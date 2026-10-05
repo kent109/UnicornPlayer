@@ -13,17 +13,16 @@ import java.nio.charset.Charset
 /**
  * 歌单导出文件的 SAF 管理器（参考 [EqualizerConfigManager] 实现）。
  *
- * 保存目录：Documents/Unicorn/Playlist/
+ * 保存目录：Download/Unicorn/Playlist/（树 URI 直接指向 Unicorn 目录）
  * 文件名："<playlistId>.json"，与歌单名解耦，重命名歌单不影响；重复导出直接覆盖。
  *
  * 权限策略与均衡器一致：
- * - 优先复用歌词模块已授权的 Documents 树 URI（同属 Unicorn 父目录）；
+ * - 优先复用歌词模块已授权的 Unicorn 树 URI；
  * - 其次使用本管理器自管的 SharedPreferences 中的树 URI；
  * - 均不可用时由调用方通过 SAF 选择器引导用户授权。
  */
 object PlaylistFileManager {
 
-    private const val UNICORN_DIR = "Unicorn"
     private const val PLAYLIST_DIR = "Playlist"
     private const val PREFS_NAME = "playlist_file_prefs"
     private const val KEY_TREE_URI = "tree_uri"
@@ -34,12 +33,13 @@ object PlaylistFileManager {
     const val MAX_EXPORT_COUNT = 10
 
     /**
-     * 构建 SAF 选择器的初始 URI，定位到 Documents 目录。
+     * 构建 SAF 选择器的初始 URI，定位到 Download/Unicorn 目录。
+     * 该目录在迁移流程中已通过 MediaStore API 预创建。
      */
     fun getInitialUri(): Uri {
         return DocumentsContract.buildDocumentUri(
             "com.android.externalstorage.documents",
-            "primary:Documents"
+            "primary:Download/Unicorn"
         )
     }
 
@@ -77,7 +77,7 @@ object PlaylistFileManager {
      * 获取可用的树 URI：优先歌词模块已授权的树 URI，其次本管理器自管的树 URI。
      */
     fun getAvailableTreeUri(context: Context): Uri? {
-        // 优先复用歌词模块已授权的树 URI（同指向 Documents）
+        // 优先复用歌词模块已授权的树 URI（同指向 Unicorn 目录）
         if (LyricsSaveManager.hasSavedTreeUri(context) &&
             LyricsSaveManager.isTreePermissionValid(context)
         ) {
@@ -104,7 +104,8 @@ object PlaylistFileManager {
     }
 
     /**
-     * 确认 Documents/Unicorn/Playlist 目录存在，不存在则创建。
+     * 确认 Download/Unicorn/Playlist 目录存在，不存在则创建。
+     * 树 URI 直接指向 Unicorn 目录，在其下创建 Playlist 子目录。
      *
      * @return 目录存在且可用返回 true，创建失败返回 false
      */
@@ -112,10 +113,8 @@ object PlaylistFileManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
-            val unicorn = root.findFile(UNICORN_DIR)
-                ?: root.createDirectory(UNICORN_DIR) ?: return false
-            val dir = unicorn.findFile(PLAYLIST_DIR)
-                ?: unicorn.createDirectory(PLAYLIST_DIR) ?: return false
+            val dir = root.findFile(PLAYLIST_DIR)
+                ?: root.createDirectory(PLAYLIST_DIR) ?: return false
             dir.isDirectory
         } catch (e: Throwable) {
             Log.e(TAG, "创建保存目录失败: ${e.message}")
@@ -124,7 +123,7 @@ object PlaylistFileManager {
     }
 
     /**
-     * 列出 Documents/Unicorn/Playlist/ 下所有 .json 导出文件名。
+     * 列出 Download/Unicorn/Playlist/ 下所有 .json 导出文件名。
      *
      * @return 文件名列表（包含 .json 后缀），按名称升序；目录不可用时返回空列表
      */
@@ -132,8 +131,7 @@ object PlaylistFileManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return emptyList()
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
-            val unicorn = root.findFile(UNICORN_DIR) ?: return emptyList()
-            val dir = unicorn.findFile(PLAYLIST_DIR) ?: return emptyList()
+            val dir = root.findFile(PLAYLIST_DIR) ?: return emptyList()
             dir.listFiles()
                 .filter { it.isFile && it.name?.endsWith(FILE_EXT, ignoreCase = true) == true }
                 .mapNotNull { it.name }
@@ -154,8 +152,7 @@ object PlaylistFileManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return null
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return null
-            val unicorn = root.findFile(UNICORN_DIR) ?: return null
-            val dir = unicorn.findFile(PLAYLIST_DIR) ?: return null
+            val dir = root.findFile(PLAYLIST_DIR) ?: return null
             val file = dir.findFile(fileName) ?: return null
             context.contentResolver.openInputStream(file.uri)?.use { input ->
                 input.readBytes().toString(Charset.forName("UTF-8"))
@@ -167,7 +164,7 @@ object PlaylistFileManager {
     }
 
     /**
-     * 将导出内容写入 Documents/Unicorn/Playlist/ 目录。同名文件会被覆盖。
+     * 将导出内容写入 Download/Unicorn/Playlist/ 目录。同名文件会被覆盖。
      *
      * @param fileName 文件名（应包含 .json 后缀）
      * @param content JSON 文本
@@ -177,8 +174,7 @@ object PlaylistFileManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
-            val unicorn = root.findFile(UNICORN_DIR) ?: return false
-            val dir = unicorn.findFile(PLAYLIST_DIR) ?: return false
+            val dir = root.findFile(PLAYLIST_DIR) ?: return false
             // 删除同名旧文件（覆盖写入）
             dir.findFile(fileName)?.delete()
             // 使用 application/octet-stream 避免 ExternalStorageProvider 为 text/plain 追加 .txt 后缀
@@ -203,8 +199,7 @@ object PlaylistFileManager {
         return try {
             val treeUri = getAvailableTreeUri(context) ?: return false
             val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
-            val unicorn = root.findFile(UNICORN_DIR) ?: return false
-            val dir = unicorn.findFile(PLAYLIST_DIR) ?: return false
+            val dir = root.findFile(PLAYLIST_DIR) ?: return false
             val file = dir.findFile(fileName) ?: return true
             file.delete()
         } catch (e: Throwable) {

@@ -15,15 +15,15 @@ import java.util.Collections
 
 /**
  * 歌词网络获取工具类
- * 从 lrclib.net 搜索并下载同步歌词（LRC），保存到 Documents/Unicorn/Lyrics/（SAF）
+ * 从 lrclib.net 搜索并下载同步歌词（LRC），保存到 Download/Unicorn/Lyrics/（SAF）
  *
  * 入参为音频文件路径（如 "/music/Artist - Title.flac"）：
- *  1. 检查 Documents/Unicorn/Lyrics/ 下是否存在同名 .lrc 文件，存在则跳过
+ *  1. 检查 Download/Unicorn/Lyrics/ 下是否存在同名 .lrc 文件，存在则跳过
  *  2. 调用 https://lrclib.net/api/search?q= 搜索
  *  3. 取第一条结果的 syncedLyrics，首行插入 [00:00.00]Artist - Title
- *  4. 保存为 Documents/Unicorn/Lyrics/ 下的 "Artist - Title.lrc"
+ *  4. 保存为 Download/Unicorn/Lyrics/ 下的 "Artist - Title.lrc"
  *
- * 注意：调用前需确保已获得 Documents 目录的 SAF 树 URI 权限，否则会 onFailure。
+ * 注意：调用前需确保已获得 Download 目录的 SAF 树 URI 权限，否则会 onFailure。
  */
 object LrcFetcher {
 
@@ -206,11 +206,11 @@ object LrcFetcher {
             java.io.File(audioPath).nameWithoutExtension.toSimpleCustom() // "Artist - Title"（简体）
         val lrcFileName = "$baseName.lrc"
 
-        // 1. 检查 Documents/Unicorn/Lyrics/ 下歌词文件是否已存在
+        // 1. 检查 Download/Unicorn/Lyrics/ 下歌词文件是否已存在
         if (!LyricsSaveManager.hasSavedTreeUri(context)) {
             // 无 SAF 权限时无法检查/保存，直接跳过（PlayerActivity 会在调用前检查权限）
             inFlightRequests.remove(audioPath)
-            wrappedCallback.onFailure("未授予 Documents 目录权限")
+            wrappedCallback.onFailure("未授予 Download 目录权限")
             return
         }
         if (LyricsSaveManager.lrcFileExists(context, lrcFileName)) {
@@ -356,7 +356,7 @@ object LrcFetcher {
         val header = "[00:00.00]$artist - $title"
         val lrcContent = header + "\r\n" + cleanedLyrics
 
-        // 转为简体中文后写入 Documents/Unicorn/Lyrics/（CRLF 换行）
+        // 转为简体中文后写入 Download/Unicorn/Lyrics/（CRLF 换行）
         val simplifiedContent = lrcContent.toSimpleCustom()
         // 确保保存目录存在
         if (!LyricsSaveManager.ensureSaveDirExists(context)) {
