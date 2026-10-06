@@ -90,6 +90,7 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
             // 空列表时显示空数据提示
             if (songs.isNullOrEmpty()) {
                 binding.emptyView.visibility = View.VISIBLE
+                binding.tvArtistCount.visibility = View.GONE
             } else {
                 binding.emptyView.visibility = View.GONE
             }
@@ -146,7 +147,9 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
                     false
                 }
 
-                binding.tvArtistCount.visibility = if (isAtBottom) View.VISIBLE else View.GONE
+                // 乐库为空（仅剩头部占位 item）时不显示数量信息
+                binding.tvArtistCount.visibility =
+                    if (isAtBottom && totalItemCount > 1) View.VISIBLE else View.GONE
             }
         })
     }

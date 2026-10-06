@@ -120,6 +120,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
             // 空列表时显示空数据提示，隐藏侧边栏；有数据时恢复侧边栏
             if (albums.isNullOrEmpty()) {
                 binding.emptyView.visibility = View.VISIBLE
+                binding.tvAlbumCount.visibility = View.GONE
                 setWaveSideBarVisible(false)
             } else {
                 binding.emptyView.visibility = View.GONE
@@ -209,7 +210,9 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
                     false
                 }
 
-                binding.tvAlbumCount.visibility = if (isAtBottom) View.VISIBLE else View.GONE
+                // 乐库为空（仅剩头部占位 item）时不显示数量信息
+                binding.tvAlbumCount.visibility =
+                    if (isAtBottom && totalItemCount > 1) View.VISIBLE else View.GONE
             }
         })
     }

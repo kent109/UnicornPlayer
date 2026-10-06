@@ -214,6 +214,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
                 binding.recyclerView.visibility = View.GONE
                 binding.smartRefreshLayout.setEnableRefresh(false)
                 binding.btnScrollToCurrent.visibility = View.GONE
+                binding.tvSongCount.visibility = View.GONE
             }
         }
 
@@ -227,6 +228,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
                 binding.recyclerView.visibility = View.GONE
                 binding.smartRefreshLayout.setEnableRefresh(false)
                 binding.btnScrollToCurrent.visibility = View.GONE
+                binding.tvSongCount.visibility = View.GONE
             } else {
                 binding.emptyView.visibility = View.GONE
                 binding.recyclerView.visibility = View.VISIBLE
@@ -380,8 +382,9 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
                         false
                     }
 
+                    // 乐库为空（仅剩头部占位 item）时不显示数量信息
                     binding.tvSongCount.visibility =
-                        if (isAtBottom) View.VISIBLE else View.GONE
+                        if (isAtBottom && totalItemCount > 1) View.VISIBLE else View.GONE
                 }
             }
         })

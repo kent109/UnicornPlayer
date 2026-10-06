@@ -151,6 +151,24 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         // 获取 MusicViewModel 用于排序歌单歌曲
         musicViewModel =
             ViewModelProvider(requireActivity())[com.unicorn.player.viewmodel.MusicViewModel::class.java]
+
+        // 乐库为空时隐藏新建/导入按钮，有数据后恢复
+        musicViewModel.hasLoaded.observe(viewLifecycleOwner) { loaded ->
+            if (loaded) {
+                updateFabVisibility(musicViewModel.allSongs.value.isNullOrEmpty())
+            }
+        }
+        musicViewModel.allSongs.observe(viewLifecycleOwner) { songs ->
+            // 首次加载完成前不处理，避免启动时闪现
+            if (musicViewModel.hasLoaded.value != true) return@observe
+            updateFabVisibility(songs.isNullOrEmpty())
+        }
+    }
+
+    private fun updateFabVisibility(libraryEmpty: Boolean) {
+        val visibility = if (libraryEmpty) View.GONE else View.VISIBLE
+        binding.fabAddPlaylist.visibility = visibility
+        binding.fabImportPlaylist.visibility = visibility
     }
 
     private fun setupRecyclerView() {

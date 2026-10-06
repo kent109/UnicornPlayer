@@ -83,6 +83,9 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     // 底部播放栏控制器，封装底部播放栏的按钮事件、观察者与 UI 更新
     private lateinit var bottomPlayerController: BottomPlayerController
 
+    // 乐库为空且未播放过歌曲时隐藏底部播放条
+    private var playerHiddenByEmptyLibrary = false
+
     // 多选相关
     private var multiChoiceFragment: MultiChoiceFragment? = null
     private var currentMultiChoiceType: Int = 0
@@ -464,9 +467,18 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             }
         }
 
+        viewModel.hasLoaded.observe(this) { loaded ->
+            if (loaded) {
+                applyEmptyLibraryPlayerBarVisibility(viewModel.allSongs.value.isNullOrEmpty())
+            }
+        }
+
         viewModel.allSongs.observe(this) { songs ->
             if (currentMultiChoiceType != 3) {
                 updateMultiChoiceVisibility(songs.isNotEmpty())
+            }
+            if (viewModel.hasLoaded.value == true) {
+                applyEmptyLibraryPlayerBarVisibility(songs.isEmpty())
             }
         }
 
@@ -474,6 +486,29 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             if (currentMultiChoiceType == 3) {
                 updateMultiChoiceVisibility(playlists.isNotEmpty())
             }
+        }
+    }
+
+    /**
+     * 根据乐库空/非空切换底部播放条显示：
+     * - 乐库为空且 MusicService 未播放过歌曲（无当前歌曲）时隐藏播放条；
+     * - 正在播放或暂停（存在当前歌曲）时保留显示；
+     * - 重新监听到乐库有数据后恢复显示。
+     */
+    private fun applyEmptyLibraryPlayerBarVisibility(libraryEmpty: Boolean) {
+        if (!libraryEmpty) {
+            if (playerHiddenByEmptyLibrary) {
+                playerHiddenByEmptyLibrary = false
+                if (multiChoiceFragment == null) {
+                    bottomPlayerController.show()
+                }
+            }
+            return
+        }
+        val hasPlayedSong = musicService?.currentSong?.value != null
+        if (!hasPlayedSong && !playerHiddenByEmptyLibrary) {
+            playerHiddenByEmptyLibrary = true
+            bottomPlayerController.hide()
         }
     }
 
