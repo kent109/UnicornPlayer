@@ -51,6 +51,25 @@ class TenBandEqualizerProcessor : AudioProcessor {
         // Shelf Q 值：Butterworth（最大平坦响应）
         private const val SHELF_Q = 0.70710677f
 
+        /**
+         * 增益变更时的系数渐变帧数（44.1kHz 下约 46ms）。
+         * 人耳对 <20ms 的突变感知为"咔哒"爆音，40~50ms 的线性渐变可完全消除 zipper noise，
+         * 同时短到不会让人察觉音色在"拖动"。
+         */
+        private const val COEFF_RAMP_FRAMES = 2048
+
+        /** 诊断统计日志间隔（帧，约 2s） */
+        private const val STATS_LOG_INTERVAL_FRAMES = 96000
+
+        /**
+         * 冷启动淡入帧数（44.1kHz 下约 23ms）。
+         * 全新 AudioTrack start 瞬间，输入从数字静音跳到 seek 点的任意大振幅样本：
+         * 零状态 biquad 链会对该阶跃产生振铃，挂在同一 session 的系统 Equalizer/BassBoost
+         * 也会放大它——表现为冷启动起播的一声爆音。前 23ms 线性淡入把阶跃抹成斜坡，
+         * 人耳不可察，且只在全新 configure（冷启动/真正换格式）时触发，切歌 seek 不受影响。
+         */
+        private const val FADE_IN_FRAMES = 1024
+
         private val EMPTY_BUFFER =
             ByteBuffer.allocateDirect(0).order(ByteOrder.nativeOrder())
 
@@ -90,6 +109,14 @@ class TenBandEqualizerProcessor : AudioProcessor {
 
     // ===== 采样率缓存 =====
     private var sampleRate = 0
+
+    // ===== 诊断统计（仅用于定位爆音来源，约 2s 一条日志） =====
+    private var framesSinceStats = 0L
+    private var clippedSamples = 0L
+    private var peakMagnitude = 0f
+
+    // ===== 冷启动淡入剩余帧数（0 = 无淡入） =====
+    private var fadeInRemaining = 0
 
     // ===== 公共 API =====
 
@@ -131,13 +158,24 @@ class TenBandEqualizerProcessor : AudioProcessor {
             Log.w(TAG, "Unsupported encoding: $encoding")
             throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
         }
+        val channelCount = inputAudioFormat.channelCount
+        val newSampleRate = inputAudioFormat.sampleRate
+        // 格式完全相同的重复 configure（同一 AudioTrack 的管线重配）必须保留滤波器状态：
+        // 此时信号仍在流动，把 z1/z2 清零会让下一帧输出瞬间跳变，表现为"啪"的爆音。
+        // 只有格式真正变化（采样率/声道数不同）才需要全新的滤波器组。
+        val sameFormat = active &&
+            inputFormat.sampleRate == newSampleRate &&
+            inputFormat.channelCount == channelCount &&
+            inputFormat.encoding == encoding &&
+            states.isNotEmpty()
         inputFormat = inputAudioFormat
         outputFormat = inputAudioFormat
         active = true
 
-        val channelCount = inputAudioFormat.channelCount
-        sampleRate = inputAudioFormat.sampleRate
-        states = Array(channelCount) { Array(NUM_BANDS) { BiquadState() } }
+        sampleRate = newSampleRate
+        if (!sameFormat) {
+            states = Array(channelCount) { Array(NUM_BANDS) { BiquadState() } }
+        }
 
         // 同步 pending → active 并计算初始系数
         synchronized(lock) {
@@ -146,10 +184,18 @@ class TenBandEqualizerProcessor : AudioProcessor {
             }
             bandLevelsChanged = false
         }
-        recalculateCoefficients()
+        // 全新格式：信号尚未开始，系数直接落定；同格式重配：保留现有系数与状态，不重算
+        if (!sameFormat) {
+            recalculateCoefficients(initial = true)
+            // 全新管线：给前 FADE_IN_FRAMES 帧淡入，消除 AudioTrack start 时
+            // 数字静音→大振幅阶跃经零状态滤波器和系统效果链产生的冷启动爆音
+            fadeInRemaining = FADE_IN_FRAMES
+            Log.i(TAG, "Fresh pipeline armed: ${FADE_IN_FRAMES}-frame fade-in")
+        }
         Log.d(
             TAG,
-            "Configured: sampleRate=$sampleRate, channels=$channelCount, encoding=$encoding"
+            "Configured: sampleRate=$sampleRate, channels=$channelCount, encoding=$encoding" +
+                (if (sameFormat) " (same format, filter states preserved)" else " (new format, fresh states)")
         )
         return outputFormat
     }
@@ -159,7 +205,7 @@ class TenBandEqualizerProcessor : AudioProcessor {
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (!active || inputFormat == EMPTY_FORMAT) return
 
-        // 检查增益是否变化，重新计算系数
+        // 检查增益是否变化，重新计算系数（信号可能已在流动，必须走渐变而非直接换系数）
         if (bandLevelsChanged) {
             synchronized(lock) {
                 for (i in 0 until NUM_BANDS) {
@@ -167,7 +213,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
                 }
                 bandLevelsChanged = false
             }
-            recalculateCoefficients()
+            Log.i(TAG, "Band levels changed mid-stream, ramping coefficients")
+            recalculateCoefficients(initial = false)
         }
 
         val remaining = inputBuffer.remaining()
@@ -208,6 +255,20 @@ class TenBandEqualizerProcessor : AudioProcessor {
     // 其默认实现会委托调用本方法）。保留此实现是 reset() 与历史调用链路所必需的。
     @Suppress("OVERRIDE_DEPRECATION")
     override fun flush() {
+        // 故意不清零滤波器状态：flush 发生在 seek、切歌等信号不连续点，此时下游紧接着
+        // 仍要播放新位置的大振幅样本，若把 z1/z2 清零，下一帧滤波器输出会瞬间跳变，
+        // 产生"啪"的爆音（切歌衔接处最明显）。保留状态后旧能量自然衰减（约数十 ms），
+        // 行为与模拟均衡器一致，听感平滑。真正的管线销毁走 reset()，那里会重建状态。
+        ended = false
+        buffer = EMPTY_BUFFER
+        // 重新挂 23ms 淡入：seek/切歌点同样是"旧内容→新内容"的不连续点，淡入可统一消除
+        // 起头阶跃（听感上 23ms 不可察）；同时保证冷启动若存在"预缓冲被 flush 丢弃"，
+        // 最终 start 时淡入仍然在册
+        fadeInRemaining = FADE_IN_FRAMES
+        Log.i(TAG, "flush() called, filter states preserved, fade-in rearmed")
+    }
+
+    override fun reset() {
         for (channel in states.indices) {
             for (band in states[channel].indices) {
                 states[channel][band].reset()
@@ -215,15 +276,16 @@ class TenBandEqualizerProcessor : AudioProcessor {
         }
         ended = false
         buffer = EMPTY_BUFFER
-    }
-
-    override fun reset() {
-        flush()
         inputFormat = EMPTY_FORMAT
         outputFormat = EMPTY_FORMAT
         active = false
         sampleRate = 0
         states = emptyArray()
+        framesSinceStats = 0L
+        clippedSamples = 0L
+        peakMagnitude = 0f
+        fadeInRemaining = 0
+        Log.i(TAG, "reset() called, filter states cleared")
     }
 
     // ===== PCM 处理 =====
@@ -234,23 +296,39 @@ class TenBandEqualizerProcessor : AudioProcessor {
         numFrames: Int,
         channelCount: Int
     ) {
-        (0 until numFrames)
-            .forEach { _ ->
-                for (ch in 0 until channelCount) {
-                    val sample = input.getShort().toInt()
-                    // 16-bit signed → float [-1, 1)
-                    var f = sample / 32768f
-                    // 级联 10 个 biquad
-                    for (band in 0 until NUM_BANDS) {
-                        f = processBiquad(f, states[ch][band], coeffs[band])
-                    }
-                    // float → 16-bit signed
-                    var out = (f * 32767f).toInt()
-                    if (out > 32767) out = 32767
-                    if (out < -32768) out = -32768
-                    output.putShort(out.toShort())
+        repeat(numFrames) {
+            // 每帧推进一次系数渐变（所有通道共享同一组系数）
+            advanceAllRamps()
+            // 冷启动/seek 淡入增益（无淡入时恒为 1，分支可预测，开销可忽略）
+            val frameGain = nextFadeInGain()
+            for (ch in 0 until channelCount) {
+                val sample = input.getShort().toInt()
+                // 16-bit signed → float [-1, 1)
+                var f = sample / 32768f
+                // 级联 10 个 biquad
+                for (band in 0 until NUM_BANDS) {
+                    f = processBiquad(f, states[ch][band], coeffs[band])
                 }
+                f *= frameGain
+                if (f < 0f) {
+                    if (f < -1f) {
+                        clippedSamples++
+                        f = -1f
+                    }
+                } else if (f > 1f) {
+                    clippedSamples++
+                    f = 1f
+                }
+                val mag = if (f < 0f) -f else f
+                if (mag > peakMagnitude) peakMagnitude = mag
+                // float → 16-bit signed
+                var out = (f * 32767f).toInt()
+                if (out > 32767) out = 32767
+                if (out < -32768) out = -32768
+                output.putShort(out.toShort())
             }
+        }
+        logStatsIfDue(numFrames)
     }
 
     private fun processFloat(
@@ -259,14 +337,62 @@ class TenBandEqualizerProcessor : AudioProcessor {
         numFrames: Int,
         channelCount: Int
     ) {
-        (0 until numFrames).forEach { _ ->
+        repeat(numFrames) {
+            advanceAllRamps()
+            val frameGain = nextFadeInGain()
             for (ch in 0 until channelCount) {
                 var f = input.getFloat()
                 for (band in 0 until NUM_BANDS) {
                     f = processBiquad(f, states[ch][band], coeffs[band])
                 }
+                f *= frameGain
+                // 下游 AudioTrack 转定点时会硬削波，这里统计越界样本（诊断削波爆音用）
+                if (f < 0f) {
+                    if (f < -1f) {
+                        clippedSamples++
+                        if (f > -peakMagnitude) peakMagnitude = -f
+                    } else if (-f > peakMagnitude) {
+                        peakMagnitude = -f
+                    }
+                } else {
+                    if (f > 1f) {
+                        clippedSamples++
+                        if (f > peakMagnitude) peakMagnitude = f
+                    } else if (f > peakMagnitude) {
+                        peakMagnitude = f
+                    }
+                }
                 output.putFloat(f)
             }
+        }
+        logStatsIfDue(numFrames)
+    }
+
+    /** 每帧推进所有频段的系数渐变；无渐变时开销极小（10 次布尔判断）。 */
+    private fun advanceAllRamps() {
+        for (band in 0 until NUM_BANDS) {
+            coeffs[band].advanceRamp()
+        }
+    }
+
+    /** 每帧返回淡入增益：0 → 1 线性，淡入结束后恒为 1。 */
+    private fun nextFadeInGain(): Float {
+        if (fadeInRemaining <= 0) return 1f
+        val g = (FADE_IN_FRAMES - fadeInRemaining).toFloat() / FADE_IN_FRAMES
+        fadeInRemaining--
+        return g
+    }
+
+    private fun logStatsIfDue(framesProcessed: Int) {
+        framesSinceStats += framesProcessed
+        if (framesSinceStats >= STATS_LOG_INTERVAL_FRAMES) {
+            Log.i(
+                TAG,
+                "stats: frames=$framesSinceStats, clippedSamples=$clippedSamples, peak=$peakMagnitude"
+            )
+            framesSinceStats = 0L
+            clippedSamples = 0L
+            peakMagnitude = 0f
         }
     }
 
@@ -284,7 +410,7 @@ class TenBandEqualizerProcessor : AudioProcessor {
 
     // ===== 系数计算（RBJ Audio EQ Cookbook） =====
 
-    private fun recalculateCoefficients() {
+    private fun recalculateCoefficients(initial: Boolean) {
         if (sampleRate <= 0) return
         val fs = sampleRate.toFloat()
 
@@ -302,7 +428,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
                     val alpha = sinw0 / (2f * SHELF_Q)
                     val sqrtA = sqrt(a)
                     val a0 = (a + 1f) + (a - 1f) * cosw0 + 2f * sqrtA * alpha
-                    coeffs[i].set(
+                    applyToBand(
+                        i, initial,
                         b0 = (a * ((a + 1f) - (a - 1f) * cosw0 + 2f * sqrtA * alpha)) / a0,
                         b1 = (2f * a * ((a - 1f) - (a + 1f) * cosw0)) / a0,
                         b2 = (a * ((a + 1f) - (a - 1f) * cosw0 - 2f * sqrtA * alpha)) / a0,
@@ -315,7 +442,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
                     val alpha = sinw0 / (2f * SHELF_Q)
                     val sqrtA = sqrt(a)
                     val a0 = (a + 1f) - (a - 1f) * cosw0 + 2f * sqrtA * alpha
-                    coeffs[i].set(
+                    applyToBand(
+                        i, initial,
                         b0 = (a * ((a + 1f) + (a - 1f) * cosw0 + 2f * sqrtA * alpha)) / a0,
                         b1 = (-2f * a * ((a - 1f) + (a + 1f) * cosw0)) / a0,
                         b2 = (a * ((a + 1f) + (a - 1f) * cosw0 - 2f * sqrtA * alpha)) / a0,
@@ -327,7 +455,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
                     // Peaking EQ（峰化均衡）
                     val alpha = sinw0 / (2f * PEAKING_Q)
                     val a0 = 1f + alpha / a
-                    coeffs[i].set(
+                    applyToBand(
+                        i, initial,
                         b0 = (1f + alpha * a) / a0,
                         b1 = (-2f * cosw0) / a0,
                         b2 = (1f - alpha * a) / a0,
@@ -339,21 +468,90 @@ class TenBandEqualizerProcessor : AudioProcessor {
         }
     }
 
+    /**
+     * 将新系数应用到指定频段：
+     * - 首次 configure（信号未开始）：直接落定，无渐变；
+     * - 播放中途（用户调节/预设切换/延迟恢复）：从当前系数线性渐变 [COEFF_RAMP_FRAMES] 帧，
+     *   避免旧滤波器状态搭配突变系数产生的 zipper 爆音。
+     */
+    private fun applyToBand(
+        band: Int,
+        initial: Boolean,
+        b0: Float,
+        b1: Float,
+        b2: Float,
+        a1: Float,
+        a2: Float
+    ) {
+        if (initial) {
+            coeffs[band].snapTo(b0, b1, b2, a1, a2)
+        } else {
+            coeffs[band].rampTo(b0, b1, b2, a1, a2, COEFF_RAMP_FRAMES)
+        }
+    }
+
     // ===== 内部数据类 =====
 
     private class BiquadCoeffs {
+        // 当前实际生效的系数（每帧由 from→to 渐变更新；无渐变时恒等于 to）
         var b0 = 1f
         var b1 = 0f
         var b2 = 0f
         var a1 = 0f
         var a2 = 0f
 
-        fun set(b0: Float, b1: Float, b2: Float, a1: Float, a2: Float) {
-            this.b0 = b0
-            this.b1 = b1
-            this.b2 = b2
-            this.a1 = a1
-            this.a2 = a2
+        // 渐变起点（系数重算瞬间的当前值）
+        private var fromB0 = 1f
+        private var fromB1 = 0f
+        private var fromB2 = 0f
+        private var fromA1 = 0f
+        private var fromA2 = 0f
+
+        // 渐变目标（最新增益对应的系数）
+        private var toB0 = 1f
+        private var toB1 = 0f
+        private var toB2 = 0f
+        private var toA1 = 0f
+        private var toA2 = 0f
+
+        // 剩余/总渐变帧数（0 表示当前系数已是目标值）
+        private var rampRemaining = 0
+        private var rampTotal = 1
+
+        /** 直接落定为目标系数（首次 configure / 信号尚未开始时使用，不需要渐变）。 */
+        fun snapTo(nb0: Float, nb1: Float, nb2: Float, na1: Float, na2: Float) {
+            b0 = nb0; b1 = nb1; b2 = nb2; a1 = na1; a2 = na2
+            fromB0 = nb0; fromB1 = nb1; fromB2 = nb2; fromA1 = na1; fromA2 = na2
+            toB0 = nb0; toB1 = nb1; toB2 = nb2; toA1 = na1; toA2 = na2
+            rampRemaining = 0
+            rampTotal = 1
+        }
+
+        /**
+         * 从当前生效系数渐变到新系数（播放中途改变增益时调用，避免旧状态配新系数的瞬时跳变）。
+         * @param rampFrames 渐变时长（音频帧数）
+         */
+        fun rampTo(nb0: Float, nb1: Float, nb2: Float, na1: Float, na2: Float, rampFrames: Int) {
+            fromB0 = b0; fromB1 = b1; fromB2 = b2; fromA1 = a1; fromA2 = a2
+            toB0 = nb0; toB1 = nb1; toB2 = nb2; toA1 = na1; toA2 = na2
+            rampTotal = rampFrames.coerceAtLeast(1)
+            rampRemaining = rampTotal
+        }
+
+        /** 每帧推进一次系数插值；返回 false 表示渐变已结束。 */
+        fun advanceRamp(): Boolean {
+            if (rampRemaining <= 0) return false
+            val t = 1f - rampRemaining.toFloat() / rampTotal
+            b0 = fromB0 + (toB0 - fromB0) * t
+            b1 = fromB1 + (toB1 - fromB1) * t
+            b2 = fromB2 + (toB2 - fromB2) * t
+            a1 = fromA1 + (toA1 - fromA1) * t
+            a2 = fromA2 + (toA2 - fromA2) * t
+            rampRemaining--
+            if (rampRemaining == 0) {
+                b0 = toB0; b1 = toB1; b2 = toB2; a1 = toA1; a2 = toA2
+            }
+            return true
         }
     }
 

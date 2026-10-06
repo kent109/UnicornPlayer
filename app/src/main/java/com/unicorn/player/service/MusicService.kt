@@ -150,6 +150,16 @@ class MusicService : Service() {
     private lateinit var eqProcessor: TenBandEqualizerProcessor
     private lateinit var mediaSession: MediaSessionCompat
 
+    /**
+     * 服务生命周期内固定的 audioSessionId（onCreate 时预生成并 setAudioSessionId 到播放器）。
+     * 让系统音效（Equalizer/BassBoost/PresetReverb）能在音频流启动前就挂到该 session 上：
+     * AudioFlinger 在 AudioTrack 创建时即建立效果链，而非播放中途向运行中的流插入效果对象
+     * （中途插入是冷启动开均衡器时爆音的直接来源）；同时路由切换不再更换 session，
+     * 避免效果对象销毁重建带来的二次爆音。0 表示预生成失败，回退为播放器动态分配。
+     */
+    @Volatile
+    private var presetAudioSessionId = 0
+
     // 恢复流程标志：loadPlaybackState 调用 player.prepare() 后置 true，
     // 在 Player.Listener.onPlaybackStateChanged(STATE_READY) 中消费，执行 seek + 可选自动播放。
     // ExoPlayer 状态机干净，无需旧的 isRestoringState 守卫，但需要在该回调中拿到 STATE_READY
@@ -158,6 +168,14 @@ class MusicService : Service() {
     private var isPendingRestore = false
     private var pendingRestorePosition = 0
     private var pendingAutoPlay = false
+
+    /**
+     * 恢复进度是否已通过 setMediaItem(item, startPositionMs) 内嵌给播放器。
+     * true 时 STATE_READY 不再补一次 seekTo——冷启动实测"prepare@0 → READY 后 seek"会让
+     * media3 建第一个 AudioTrack 后立刻 flush/销毁再建第二个（渲染器 enable→flush 空转），
+     * 已 enable 的均衡/低音效果链在第二个音轨 start 瞬间处理从零到大振幅的阶跃，产生爆音。
+     */
+    private var restorePositionEmbedded = false
 
     // 恢复流程中是否抑制通知（task removed 且用户未重新打开应用时不显示通知）
     private var pendingSuppressNotification = false
@@ -605,6 +623,17 @@ class MusicService : Service() {
             this,
             ApeSupport.extractorsFactory()
         )
+        // 预生成固定 audioSessionId 并在 build 后立刻绑定到播放器：
+        // 系统音效可在播放开始前挂到该 session（效果链随 AudioTrack 创建即建立，消除冷启动爆音）
+        try {
+            val audioManagerForSession = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val generated = audioManagerForSession.generateAudioSessionId()
+            if (generated > 0) {
+                presetAudioSessionId = generated
+            }
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "generateAudioSessionId failed", e)
+        }
         player = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -612,6 +641,16 @@ class MusicService : Service() {
                 Media3AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                     .setUsage(C.USAGE_MEDIA).build(), /* handleAudioFocus= */ false
             ).setHandleAudioBecomingNoisy(true).setWakeMode(C.WAKE_MODE_LOCAL).build()
+        // setAudioSessionId 必须在首次播放前调用（此时尚未 prepare，安全）；
+        // 调用后 player.audioSessionId 立即为该固定值，播放前即可初始化系统音效
+        if (presetAudioSessionId != 0) {
+            try {
+                player.setAudioSessionId(presetAudioSessionId)
+            } catch (e: Exception) {
+                LogWriter.writeError(TAG, "setAudioSessionId($presetAudioSessionId) failed", e)
+                presetAudioSessionId = 0
+            }
+        }
 
         // media3 1.6.0+ 起初始 audioSessionId 不再在 player 创建后立即可得，
         // 必须通过 AnalyticsListener.onAudioSessionIdChanged 监听初始分配与后续变更（如设备切换/格式变化），
@@ -685,9 +724,12 @@ class MusicService : Service() {
                         // 恢复流程：prepare 完成后执行 seek + 可选自动播放 + 通知
                         if (isPendingRestore) {
                             isPendingRestore = false
-                            if (pendingRestorePosition > 0) {
+                            // 进度已内嵌进 setMediaItem(item, startPositionMs) 时不再 seek：
+                            // READY 后补 seek 会触发渲染器/AudioTrack 的 flush 重建空转（冷启动爆音源）
+                            if (pendingRestorePosition > 0 && !restorePositionEmbedded) {
                                 player.seekTo(pendingRestorePosition.toLong())
                             }
+                            restorePositionEmbedded = false
                             // 恢复 seek 后立即更新通知栏进度
                             updateMediaSessionPlaybackState()
                             // 立即同步 position 到 LiveData，让 seekBar 显示正确进度。
@@ -705,6 +747,8 @@ class MusicService : Service() {
                             updateMediaSessionPlaybackState()
                             if (pendingAutoPlay) {
                                 player.play()
+                                // 服务重启自动播放：同样在音轨 start 后软渐变系统效果
+                                AudioEffectManager.softApplyPendingSettings()
                             }
                         }
                     }
@@ -1320,6 +1364,9 @@ class MusicService : Service() {
             // initializeAudioEffects() 初始化后均衡器实际未启用。这里同步恢复保证播放前就位。
             restoreEqualizerSettings()
             applyEqProcessorLevels()
+            // 播放开始前初始化系统音效并收敛开关状态（同 loadPlaybackState，消除中途插效果链的爆音）
+            initializeAudioEffects()
+            syncSystemEffectsEnableState()
 
             if (isTemp) {
                 withContext(Dispatchers.Main) {
@@ -1458,6 +1505,9 @@ class MusicService : Service() {
         // 确保音频效果管理器已初始化（在播放器准备好之后）
         initializeAudioEffects()
         player.play()
+        // AudioTrack 已 start：系统 EQ/低音效果以中性参数起链，此处启动 ~350ms 软渐变到目标值，
+        // 消除冷启动首帧满增益切入的爆音（无待渐变时是空操作）
+        AudioEffectManager.softApplyPendingSettings()
         // 立即更新播放状态为true，确保通知栏能正确显示
         _isPlaying.value = true
         // 立即更新通知栏和MediaSession状态
@@ -2181,9 +2231,13 @@ class MusicService : Service() {
 
           fun tryInitialize() {
               try {
-                  // ExoPlayer 通过 getAudioSessionId() 暴露底层音频会话 ID，
-                  // prepare 后才返回有效值（之前为 C.AUDIO_SESSION_ID_UNSET = 0）。
-                  val sessionId = player.audioSessionId
+                  // 固定 session id 优先（onCreate 预生成，build 后即有效，无需等 prepare）；
+                  // 预生成失败时回退为播放器动态分配的 id（prepare 后才非零）
+                  val sessionId = if (presetAudioSessionId != 0) {
+                      presetAudioSessionId
+                  } else {
+                      player.audioSessionId
+                  }
                   if (sessionId != 0) {
                       AudioEffectManager.initialize(this, sessionId)
                       Log.d(TAG, "Audio effects initialized, session ID: $sessionId, enabled: ${Settings.isEqualizerEnabled}")
@@ -2196,6 +2250,20 @@ class MusicService : Service() {
 
           tryInitialize()
       }
+
+    /**
+     * 将已创建的系统音效（Equalizer/BassBoost/PresetReverb）enable 状态与开关对齐（幂等）。
+     * 音效可能在 Settings 从 DataStore 恢复完成前被均衡器页面提前创建（当时开关状态未知），
+     * 恢复完成后调用本方法收敛；正常路径下与 initializeAudioEffects 的启用参数一致，无副作用。
+     */
+    private fun syncSystemEffectsEnableState() {
+        if (!AudioEffectManager.areEffectsEnabled()) return
+        if (Settings.isEqualizerEnabled) {
+            AudioEffectManager.enableEffects(this)
+        } else {
+            AudioEffectManager.disableEffects()
+        }
+    }
 
     fun loadPlaybackState(
         isServiceCreate: Boolean, restorePosition: Boolean = true,
@@ -2233,6 +2301,11 @@ class MusicService : Service() {
                 // initializeAudioEffects() 初始化后均衡器实际未启用。
                 restoreEqualizerSettings()
                 applyEqProcessorLevels()
+                // 播放开始前初始化系统音效（session id 已固定，无需等 prepare）：
+                // 效果链随 AudioTrack 创建即建立，避免播放中途插入 Equalizer/BassBoost/Reverb
+                // 产生的爆音；若音效已被均衡器页面在恢复前提前创建，此处按恢复后的开关状态收敛 enable
+                initializeAudioEffects()
+                syncSystemEffectsEnableState()
 
                 // 如果正在设置外部歌曲，跳过歌曲恢复，避免覆盖外部歌曲
                 if (isSettingExternalSong) {
@@ -2352,14 +2425,24 @@ class MusicService : Service() {
                     // ExoPlayer 状态机干净，无 MediaPlayer 的 -38/-38 竞态和 OnPreparedListener 残留问题。
                     isPendingRestore = true
                     pendingRestorePosition = if (shouldRestorePosition) currentPosition else 0
+                    // 进度直接内嵌进媒体项：渲染器只 enable 一次、只建一个 AudioTrack，
+                    // 避免"prepare@0 → READY 后 seek"造成的音轨 flush/重建空转（冷启动爆音源）
+                    restorePositionEmbedded = pendingRestorePosition > 0
                     pendingAutoPlay = isPlaying == 1 && restoreFlag == MainActivity.RESTORE_CREATE
                     pendingSuppressNotification = isTaskRemoved && !pendingNotificationToShow
                     pendingRestoreSong = restoredSong
                     Log.d(
                         TAG,
-                        "loadPlaybackState: setMediaItem+prepare, targetPos=$pendingRestorePosition, autoPlay=$pendingAutoPlay, suppressNotification=$pendingSuppressNotification"
+                        "loadPlaybackState: setMediaItem+prepare, targetPos=$pendingRestorePosition, embedded=$restorePositionEmbedded, autoPlay=$pendingAutoPlay, suppressNotification=$pendingSuppressNotification"
                     )
-                    player.setMediaItem(MediaItem.fromUri(songPath))
+                    if (restorePositionEmbedded) {
+                        player.setMediaItem(
+                            MediaItem.fromUri(songPath),
+                            pendingRestorePosition.toLong()
+                        )
+                    } else {
+                        player.setMediaItem(MediaItem.fromUri(songPath))
+                    }
                     player.prepare()
 
                     // 加载歌曲列表到service，确保播放完成后能自动播放下一首

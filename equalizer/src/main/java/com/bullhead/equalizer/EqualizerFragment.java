@@ -196,30 +196,34 @@ public class EqualizerFragment extends Fragment {
             bassBoost.setEnabled(true);
             presetReverb.setEnabled(true);
             mEqualizer.setEnabled(true);
-            BassBoost.Settings bassBoostSetting;
-            try {
-                BassBoost.Settings bassBoostSettingTemp = bassBoost.getProperties();
-                bassBoostSetting = new BassBoost.Settings(bassBoostSettingTemp.toString());
-            } catch (Exception e) {
-                // 上报日志
-                Log.e(TAG, "bassBoost.getProperties error:" + e.getMessage());
-                bassBoostSetting = new BassBoost.Settings();
-            }
-            bassBoostSetting.strength = clampBassStrength(Settings.equalizerModel.getBassStrength());
-            // 同步回 EqualizerModel，确保后续读取也是合法值（修复 bassStrength=-1 导致的 crash）
-            Settings.equalizerModel.setBassStrength(bassBoostSetting.strength);
-            try {
-                bassBoost.setProperties(bassBoostSetting);
-            } catch (RuntimeException e) {
-                // setProperties 可能因底层 AudioEffect 状态异常而抛 RuntimeException
-                Log.e(TAG, "bassBoost.setProperties failed, strength=" + bassBoostSetting.strength, e);
-            }
+            // 冷启动软渐变进行中：系统参数由渐变逐步下发，此处直写会造成音色断层。
+            // 仅 enable（无跳变），UI 仍按 Settings 目标值展示。
+            if (!AudioEffectManager.isRampActive()) {
+                BassBoost.Settings bassBoostSetting;
+                try {
+                    BassBoost.Settings bassBoostSettingTemp = bassBoost.getProperties();
+                    bassBoostSetting = new BassBoost.Settings(bassBoostSettingTemp.toString());
+                } catch (Exception e) {
+                    // 上报日志
+                    Log.e(TAG, "bassBoost.getProperties error:" + e.getMessage());
+                    bassBoostSetting = new BassBoost.Settings();
+                }
+                bassBoostSetting.strength = clampBassStrength(Settings.equalizerModel.getBassStrength());
+                // 同步回 EqualizerModel，确保后续读取也是合法值（修复 bassStrength=-1 导致的 crash）
+                Settings.equalizerModel.setBassStrength(bassBoostSetting.strength);
+                try {
+                    bassBoost.setProperties(bassBoostSetting);
+                } catch (RuntimeException e) {
+                    // setProperties 可能因底层 AudioEffect 状态异常而抛 RuntimeException
+                    Log.e(TAG, "bassBoost.setProperties failed, strength=" + bassBoostSetting.strength, e);
+                }
 
-            try {
-                presetReverb.setPreset(clampReverbPreset(Settings.equalizerModel.getReverbPreset()));
-            } catch (IllegalArgumentException e) {
-                Log.e(TAG, "Invalid reverb preset value: " + Settings.equalizerModel.getReverbPreset());
-                presetReverb.setPreset(PresetReverb.PRESET_NONE);
+                try {
+                    presetReverb.setPreset(clampReverbPreset(Settings.equalizerModel.getReverbPreset()));
+                } catch (IllegalArgumentException e) {
+                    Log.e(TAG, "Invalid reverb preset value: " + Settings.equalizerModel.getReverbPreset());
+                    presetReverb.setPreset(PresetReverb.PRESET_NONE);
+                }
             }
         } else if (isAudioEffectsAvailable) { // 已调了全局初始化，但是开关没有打开
             bassBoost.setEnabled(false);
@@ -291,16 +295,6 @@ public class EqualizerFragment extends Fragment {
         // 由 equalizerBlocker 统一遮罩）。开关反映持久化的真实状态。
         equalizerSwitch.setChecked(Settings.isEqualizerEnabled);
         equalizerSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            // 系统音效对象可能尚未创建（未播放），仅在存在时操作
-            if (mEqualizer != null) {
-                mEqualizer.setEnabled(isChecked);
-            }
-            if (bassBoost != null) {
-                bassBoost.setEnabled(isChecked);
-            }
-            if (presetReverb != null) {
-                presetReverb.setEnabled(isChecked);
-            }
             Settings.isEqualizerEnabled = isChecked;
             Settings.equalizerModel.setEqualizerEnabled(isChecked);
             // 遮罩显示中（音效未就绪）时不改变控件可用性，只持久化开关意图
@@ -308,14 +302,29 @@ public class EqualizerFragment extends Fragment {
                 setControlsEnabled(isChecked);
             }
             if (isChecked) {
+                // 系统音效对象可能尚未创建（未播放），仅在存在时 enable
+                if (mEqualizer != null) {
+                    mEqualizer.setEnabled(true);
+                }
+                if (bassBoost != null) {
+                    bassBoost.setEnabled(true);
+                }
+                if (presetReverb != null) {
+                    presetReverb.setEnabled(true);
+                }
                 // 打开瞬间从 Settings 重新应用全部值：覆盖"开关未开时导入、之后打开开关"的场景，
-                // 否则音效参数和 seekbar/旋钮都停留在 onCreate/onViewCreated 时的旧值
+                // 否则音效参数和 seekbar/旋钮都停留在 onCreate/onViewCreated 时的旧值。
+                // 系统参数的写入由 rampToSettings 平滑渐变完成（refreshFromSettingsOnEnable
+                // 检测到渐变活动时不会直写系统对象），避免打开瞬间音色断层
                 refreshFromSettingsOnEnable();
+                AudioEffectManager.rampToSettings();
             } else {
-                // 关闭开关：系统 EQ/低音/混响已在上面 disable，自研 10 段 AudioProcessor
-                // 不受系统 enable 控制，必须显式下发全零电平停止染色（Settings 中的预设值保留，
-                // 下次打开开关由 refreshFromSettingsOnEnable 恢复）
+                // 关闭开关：自研 10 段 AudioProcessor 显式下发全零电平（内部有系数渐变，
+                // 平滑退出染色；Settings 中的预设值保留，下次打开开关由
+                // refreshFromSettingsOnEnable 恢复）。系统效果走 500ms 渐出回中性后 disable，
+                // 直接 setEnabled(false) 会让增益瞬间消失产生断层
                 TenBandEqBridge.applyBandLevels(new int[NUM_BANDS]);
+                AudioEffectManager.softDisable();
             }
         });
 
@@ -393,6 +402,8 @@ public class EqualizerFragment extends Fragment {
         }
 
         bassController.setOnProgressChangedListener(progress -> {
+            // 用户调节低音旋钮：终止进行中的渐变，以当前手势值为准
+            AudioEffectManager.cancelRamp();
             // progress 可能为负（-2 = 指针垂直向下，效果关闭），换算前归一化为 0，
             // 避免负 strength 传入 BassBoost.setStrength 抛 RuntimeException
             int p = Math.max(progress, 0);
@@ -410,6 +421,8 @@ public class EqualizerFragment extends Fragment {
         });
 
         reverbController.setOnProgressChangedListener(progress -> {
+            // 用户调节混响旋钮：终止进行中的渐变
+            AudioEffectManager.cancelRamp();
             // 同上：负 progress（垂直向下）归一化为 0 = PRESET_NONE，
             // 持久化保存 0，恢复路径（onViewCreated/refreshFromSettingsOnEnable）会把 0 显示为垂直向下
             int p = Math.max(progress, 0);
@@ -602,10 +615,17 @@ public class EqualizerFragment extends Fragment {
                         Settings.equalizerModel.getSeekbarpos()[equalizerBandIndex] = mb;
                     }
 
-                    // 通知自研 AudioProcessor（替代 mEqualizer.setBandLevel）
-                    TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+                    // 通知自研 AudioProcessor（替代 mEqualizer.setBandLevel）。
+                    // 仅在总开关打开时下发：程序化 setProgress（进入页面重建 UI、预设切换）也会
+                    // 触发本回调，若不拦住，开关关闭状态下进入页面会把持久化预设电平泄漏给
+                    // 自研处理器，表现为"未打开开关但音色被某种预设染色"。
+                    if (Settings.isEqualizerEnabled) {
+                        TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+                    }
 
                     if (changedByUser) {
+                        // 用户手动拖频段：终止进行中的渐变，防止旧目标覆盖用户值
+                        AudioEffectManager.cancelRamp();
                         customModifyFlag = true;
                     }
                 }
@@ -731,8 +751,10 @@ public class EqualizerFragment extends Fragment {
         }
         dataset.updateValues(points);
         chart.notifyDataUpdate();
-        // 自定义预设：从 Settings 同步到自研 AudioProcessor
-        TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+        // 自定义预设：从 Settings 同步到自研 AudioProcessor（开关关闭时不下发，仅还原 UI）
+        if (Settings.isEqualizerEnabled) {
+            TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+        }
     }
 
     /**
@@ -852,9 +874,12 @@ public class EqualizerFragment extends Fragment {
      */
     private void applyBassAndReverbInternal(short bassStrength, int bassProgress,
                                            short reverbPreset, int reverbProgress) {
+        // 冷启动/手动开关软渐变进行中：系统 BassBoost/PresetReverb 参数由渐变逐步下发，
+        // 此处直写会造成一次性跳变（断层），故跳过系统写入，仅更新 UI 指针。
+        boolean rampActive = AudioEffectManager.isRampActive();
         // 直接应用到 BassBoost（强度限制在 [0, 1000]）
         short safeBassStrength = clampBassStrength(bassStrength);
-        if (bassBoost != null) {
+        if (bassBoost != null && !rampActive) {
             try {
                 BassBoost.Settings bassSetting = bassBoost.getProperties();
                 bassSetting.strength = safeBassStrength;
@@ -865,7 +890,7 @@ public class EqualizerFragment extends Fragment {
         }
         // 直接应用到 PresetReverb（预设限制在 [0, 6]）
         short safeReverbPreset = clampReverbPreset(reverbPreset);
-        if (presetReverb != null) {
+        if (presetReverb != null && !rampActive) {
             try {
                 presetReverb.setPreset(safeReverbPreset);
             } catch (IllegalArgumentException e) {
@@ -1048,8 +1073,11 @@ public class EqualizerFragment extends Fragment {
                 }
                 dataset.updateValues(points);
                 chart.notifyDataUpdate();
-                // 自定义预设：从 Settings 同步到自研 AudioProcessor
-                TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+                // 自定义预设：从 Settings 同步到自研 AudioProcessor（开关关闭时不下发，
+                // 避免进入页面即把持久化电平泄漏到音频管线）
+                if (Settings.isEqualizerEnabled) {
+                    TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+                }
             } else if (Settings.presetPos > 0 && Settings.presetPos < PRESET_LEVELS.length) {
                 presetSpinner.setSelection(Settings.presetPos);
                 applyPresetLevels(Settings.presetPos);
@@ -1067,6 +1095,9 @@ public class EqualizerFragment extends Fragment {
                     return;
                 }
                 Log.d(TAG, "onItemSelected: position=" + position);
+                // 注意：这里不取消进行中的系统效果软渐变——页面初始程序化选中也会走到这里，
+                // 若取消会把冷启动渐变拦腰截断；预设电平的主要染色由自研 AudioProcessor
+                // （内部带系数渐变）承担，系统 5 段锚点随渐变到旧目标无听感影响
                 Log.d(TAG, "Settings.seekbarpos BEFORE: " + Arrays.toString(Settings.seekbarpos));
                 try {
                     if (position != 0) {
@@ -1102,8 +1133,10 @@ public class EqualizerFragment extends Fragment {
                         }
                         dataset.updateValues(points);
                         chart.notifyDataUpdate();
-                        // 自定义预设：从 Settings 同步到自研 AudioProcessor
-                        TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+                        // 自定义预设：从 Settings 同步到自研 AudioProcessor（开关关闭时不下发）
+                        if (Settings.isEqualizerEnabled) {
+                            TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+                        }
                     }
                     Settings.presetPos = position;
                     Settings.savePresetPos(ctx, position);
@@ -1187,8 +1220,11 @@ public class EqualizerFragment extends Fragment {
         }
         dataset.updateValues(points);
         chart.notifyDataUpdate();
-        // 通知自研 AudioProcessor
-        TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+        // 通知自研 AudioProcessor（开关关闭时不下发：本方法也会在进入页面时被
+        // Spinner 初始选中回调触发，不能绕过总开关给音频管线染色）
+        if (Settings.isEqualizerEnabled) {
+            TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+        }
     }
 
     @Override
