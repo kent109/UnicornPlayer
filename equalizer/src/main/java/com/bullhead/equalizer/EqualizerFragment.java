@@ -72,6 +72,13 @@ public class EqualizerFragment extends Fragment {
     private static final int UPPER_BAND_LEVEL_MB = 1500;
 
     /**
+     * 频段电平步进（毫贝 mB）：1 dB。拖动时把 progress 对齐到该步进的整数倍，
+     * 使同一 dB 值在各 seekbar 上落在同一个刻度位置，避免连续像素定位带来的
+     * 相邻像素高低不一致。
+     */
+    private static final int BAND_LEVEL_STEP_MB = 100;
+
+    /**
      * 频段标签（固定频点，对应 TenBandEqualizerProcessor.BAND_LABELS）。
      * 与 app 模块保持一致；equalizer 模块不能反向依赖 app，所以在此硬编码。
      */
@@ -131,6 +138,13 @@ public class EqualizerFragment extends Fragment {
      * 一次拖动只加载一次，onStartTrackingTouch 时复位。
      */
     private boolean trackingTouchSwitchedToCustom;
+
+    /**
+     * 正在做拖动刻度吸附（{@link #snapToBandLevelStep}）。吸附时用 setProgress 回写，
+     * 该回调的 fromUser 为 false，需靠此标志把这次变化仍视为用户操作，
+     * 否则 customModifyFlag / 预设转自定义会被漏掉。
+     */
+    private boolean snappingBandLevel;
 
     private boolean isAudioEffectsAvailable = false;
 
@@ -459,28 +473,32 @@ public class EqualizerFragment extends Fragment {
                 mLinearLayout.setClipChildren(false);
             }
 
-            // === VerticalSeekBarWrapper（weight=8，clipChildren=false）===
-            // bottomMargin=8dp：为 thumb（16dp 圆，半径 8dp）在最低端预留绘制空间，
-            // 与下方频率标签之间形成间隙，避免 thumb 压住标签文字
+            // === VerticalSeekBarWrapper（weight，marginTop=20dp，clipChildren=false）===
+            // marginTop=20dp：为顶部 dB 数值 TextView 预留空间。必须放在 wrapper 上而不是
+            // seekBar 上——wrapper 的旋转居中算法假定子 View 盒位于 (0,0)，子 View 加 topMargin
+            // 会把整根条（含触摸热区）整体下移，最低端落到 wrapper 之外，thumb 虽因
+            // clipChildren=false 仍能画出来，但那里收不到触摸事件（表现为拖到底部后再按滑块没反应）。
+            // 条正好铺满 wrapper，底端内缩量由 seekBar 的 paddingLeft 决定（见下）
             VerticalSeekBarWrapper wrapper = new VerticalSeekBarWrapper(getContext());
             LinearLayout.LayoutParams wrapperParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 8f);
-            wrapperParams.bottomMargin = (int) (8 * density);
+                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+            wrapperParams.topMargin = (int) (20 * density);
             wrapper.setLayoutParams(wrapperParams);
             wrapper.setClipChildren(false);
 
-            // === VerticalSeekBar（marginTop=20dp，padding L10/T10/R4/B10，rotation=CW270）===
+            // === VerticalSeekBar（padding L8/T10/R4/B10，rotation=CW270）===
             VerticalSeekBar seekBar = new VerticalSeekBar(getContext());
             FrameLayout.LayoutParams seekParams = new FrameLayout.LayoutParams(
                     0, 0);
-            seekParams.topMargin = (int) (20 * density);
             seekBar.setLayoutParams(seekParams);
             seekBar.setProgressDrawable(ResourcesCompat.getDrawable(getResources(),
                     R.drawable.eq_seekbar, getContext().getTheme()));
             seekBar.setThumb(ResourcesCompat.getDrawable(getResources(),
                     R.drawable.custom_equalizer_thumb, getContext().getTheme()));
             seekBar.setRotationAngle(VerticalSeekBar.ROTATION_ANGLE_CW_270);
-            int padLeft = (int) (10 * density);
+            // CW270 旋转后：paddingLeft 映射为条的底端内缩、paddingRight 为顶端内缩，
+            // 底端取 8dp 让滑块更靠近下方频率标签
+            int padLeft = (int) (8 * density);
             int padTop = (int) (10 * density);
             int padRight = (int) (4 * density);
             int padBottom = (int) (10 * density);
@@ -488,12 +506,14 @@ public class EqualizerFragment extends Fragment {
             wrapper.addView(seekBar);
             innerLayout.addView(wrapper);
 
-            // === 频率标签 TextView（weight=1，textSize=10sp）===
+            // === 频率标签 TextView（wrap_content，textSize=10sp）===
             TextView textView = new TextView(getContext());
             LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             textView.setLayoutParams(textParams);
             textView.setGravity(Gravity.CENTER_VERTICAL);
+            // 去掉字体自带的行内留白，标签上移贴近条的底端
+            textView.setIncludeFontPadding(false);
             textView.setTextSize(10f);
             innerLayout.addView(textView);
 
@@ -544,9 +564,23 @@ public class EqualizerFragment extends Fragment {
             seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    // 拖动时按 1 dB 刻度跳变：非整刻度的 progress 立即吸附到最近刻度，
+                    // 吸附回写触发的嵌套回调（snappingBandLevel）承担后续更新
+                    if (fromUser && !snappingBandLevel) {
+                        int snapped = snapToBandLevelStep(progress, seekBar.getMax());
+                        if (snapped != progress) {
+                            snappingBandLevel = true;
+                            seekBar.setProgress(snapped);
+                            snappingBandLevel = false;
+                            return;
+                        }
+                    }
+                    // setProgress 回写的 fromUser 恒为 false，吸附期间仍按用户操作处理
+                    boolean changedByUser = fromUser || snappingBandLevel;
+
                     // 用户首次拖动：从预设模式立即切到"自定义"，并把已保存的自定义各频段
                     // 值加载到其余 9 个频段（当前拖动频段保持手指值）。必须在图表更新前完成。
-                    if (fromUser && Settings.presetPos != 0 && !trackingTouchSwitchedToCustom) {
+                    if (changedByUser && Settings.presetPos != 0 && !trackingTouchSwitchedToCustom) {
                         trackingTouchSwitchedToCustom = true;
                         switchToCustomFromPreset(equalizerBandIndex);
                     }
@@ -571,7 +605,7 @@ public class EqualizerFragment extends Fragment {
                     // 通知自研 AudioProcessor（替代 mEqualizer.setBandLevel）
                     TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
 
-                    if (fromUser) {
+                    if (changedByUser) {
                         customModifyFlag = true;
                     }
                 }
@@ -938,6 +972,20 @@ public class EqualizerFragment extends Fragment {
     private static String formatBandLevelDb(int levelMb) {
         int db = levelMb / 100;
         return (db > 0 ? "+" : "") + db + "dB";
+    }
+
+    /**
+     * 把 seekbar progress（相对电平下限的毫贝偏移）吸附到最近的 1 dB 刻度。
+     */
+    private static int snapToBandLevelStep(int progress, int max) {
+        int snapped = Math.round(progress / (float) BAND_LEVEL_STEP_MB) * BAND_LEVEL_STEP_MB;
+        if (snapped < 0) {
+            snapped = 0;
+        }
+        if (snapped > max) {
+            snapped = max;
+        }
+        return snapped;
     }
 
     public void equalizeSound() {
