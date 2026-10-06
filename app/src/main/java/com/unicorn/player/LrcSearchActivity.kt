@@ -256,7 +256,7 @@ class LrcSearchActivity : BaseActivity(),
             pendingSaveContent = simplifiedContent
             pendingSaveFileName = lrcFileName
             Toast.makeText(this, "请选择 Download 目录以授权保存", Toast.LENGTH_LONG).show()
-            openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
+            openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri(this))
         }
     }
 

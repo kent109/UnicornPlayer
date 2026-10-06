@@ -185,7 +185,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     private fun ensurePermissionAndDir(action: PendingAction) {
         if (!EqualizerConfigManager.hasPermission(this)) {
             pendingAction = action
-            openDocumentTreeLauncher.launch(EqualizerConfigManager.getInitialUri())
+            openDocumentTreeLauncher.launch(EqualizerConfigManager.getInitialUri(this))
             return
         }
         // 已授权：异步确保目录存在

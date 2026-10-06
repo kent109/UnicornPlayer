@@ -248,7 +248,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     private fun checkDirectoryMigration() {
         DirectoryMigrationManager.showMigrationDialog(this) {
             // 用户点击"开始迁移"，启动 SAF 选择器
-            migrationTreeLauncher.launch(LyricsSaveManager.getInitialUri())
+            migrationTreeLauncher.launch(LyricsSaveManager.getInitialUri(this))
         }
     }
 
@@ -739,7 +739,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     /** 检查 SAF 权限 + 确保目录存在，随后执行批量导出 */
     private fun ensurePlaylistExportDirAndExport() {
         if (!PlaylistFileManager.hasPermission(this)) {
-            playlistExportTreeLauncher.launch(PlaylistFileManager.getInitialUri())
+            playlistExportTreeLauncher.launch(PlaylistFileManager.getInitialUri(this))
             return
         }
         lifecycleScope.launch(Dispatchers.IO) {

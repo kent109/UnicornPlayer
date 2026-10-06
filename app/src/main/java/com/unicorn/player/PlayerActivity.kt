@@ -596,7 +596,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 pendingSaveContent = content
                 pendingSaveFileName = fileName
                 pendingSaveAudioPath = audioPath
-                openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
+                openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri(this))
                 return
             }
 
@@ -616,7 +616,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                         pendingSaveContent = content
                         pendingSaveFileName = fileName
                         pendingSaveAudioPath = audioPath
-                        openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
+                        openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri(this@PlayerActivity))
                     }
                     return@launch
                 }

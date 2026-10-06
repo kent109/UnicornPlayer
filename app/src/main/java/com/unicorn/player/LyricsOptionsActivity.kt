@@ -278,7 +278,7 @@ class LyricsOptionsActivity : BaseActivity() {
                                 isRestoringSwitch = true
                                 switchButton.isChecked = false
                                 isRestoringSwitch = false
-                                openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri())
+                                openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri(this@LyricsOptionsActivity))
                             }
                             return@setOnCheckedChangeListener
                         }

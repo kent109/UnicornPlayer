@@ -376,7 +376,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         pendingAction = action
         pendingExportPlaylistId = playlistId
         if (!PlaylistFileManager.hasPermission(requireContext())) {
-            openDocumentTreeLauncher.launch(PlaylistFileManager.getInitialUri())
+            openDocumentTreeLauncher.launch(PlaylistFileManager.getInitialUri(requireContext()))
             return
         }
         viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {

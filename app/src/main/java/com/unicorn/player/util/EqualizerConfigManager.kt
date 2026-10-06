@@ -36,9 +36,10 @@ object EqualizerConfigManager {
 
     /**
      * 构建 SAF 选择器的初始 URI，定位到 Download/Unicorn 目录。
-     * 该目录在迁移流程中已通过 MediaStore API 预创建。
+     * 如果目录不存在，会先通过 MediaStore API 预创建。
      */
-    fun getInitialUri(): Uri {
+    fun getInitialUri(context: Context): Uri {
+        DirectoryMigrationManager.ensureUnicornDirExists(context)
         return DocumentsContract.buildDocumentUri(
             "com.android.externalstorage.documents",
             "primary:Download/Unicorn"
