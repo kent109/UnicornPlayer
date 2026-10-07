@@ -88,16 +88,21 @@ class SongInfoHelper(private val context: Context) {
         // 音质显示
         val qualityText = getQualityText(song.quality)
 
+        // 文件路径显示：将主存储前缀替换为"主存储卡"
+        val pathText = song.path.replaceFirst("^/storage/emulated/0/".toRegex(), "主存储卡/")
+
         // 歌手、专辑为可编辑字段，单独保留 binding 引用
         val artistItemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context)).apply {
             tvLabel.text = "歌手"
             tvValue.text = song.artist
             root.background = null
+            setIconForLabel(ivIcon, "歌手")
         }
         val albumItemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context)).apply {
             tvLabel.text = "专辑"
             tvValue.text = song.album
             root.background = null
+            setIconForLabel(ivIcon, "专辑")
         }
         dialogBinding.infoContainer.addView(artistItemBinding.root)
         dialogBinding.infoContainer.addView(albumItemBinding.root)
@@ -107,7 +112,7 @@ class SongInfoHelper(private val context: Context) {
             Pair("时长", durationText),
             Pair("音质", qualityText),
             Pair("文件大小", fileSize),
-            Pair("文件路径", song.path)
+            Pair("文件路径", pathText)
         )
 
         infoItems.forEach { (label, value) ->
@@ -115,6 +120,7 @@ class SongInfoHelper(private val context: Context) {
             itemBinding.tvLabel.text = label
             itemBinding.tvValue.text = value
             itemBinding.root.background = null
+            setIconForLabel(itemBinding.ivIcon, label)
             dialogBinding.infoContainer.addView(itemBinding.root)
         }
 
@@ -478,11 +484,13 @@ class SongInfoHelper(private val context: Context) {
         container: android.view.ViewGroup,
         text: String,
         textColor: Int?,
+        label: String = text,
         onClick: () -> Unit
     ) {
         val itemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context))
         itemBinding.tvLabel.visibility = android.view.View.GONE
         itemBinding.tvValue.text = text
+        setIconForLabel(itemBinding.ivIcon, label)
         // 设置文字大小和样式与 tvLabel 一致
         itemBinding.tvValue.textSize = 16f
         itemBinding.tvValue.setTypeface(
@@ -507,6 +515,32 @@ class SongInfoHelper(private val context: Context) {
         }
         itemBinding.root.setOnClickListener { onClick() }
         container.addView(itemBinding.root)
+    }
+
+    /**
+     * 按标题为 item 左侧图标设置对应 drawable，无匹配则隐藏
+     */
+    private fun setIconForLabel(icon: android.widget.ImageView, label: String) {
+        val res = when (label) {
+            "歌手" -> R.drawable.ic_artist_s
+            "专辑" -> R.drawable.ic_album_s
+            "时长" -> R.drawable.ic_duration_s
+            "音质" -> R.drawable.ic_quality_s
+            "文件大小" -> R.drawable.ic_filesize_s
+            "文件路径" -> R.drawable.ic_filepath_s
+            "添加到歌单" -> R.drawable.ic_add_to_play
+            "分享本地文件" -> R.drawable.ic_share
+            "删除" -> R.drawable.ic_delete
+            "播放" -> R.drawable.ic_play2
+            "歌曲数量" -> R.drawable.ic_count_s
+            else -> null
+        }
+        if (res != null) {
+            icon.setImageResource(res)
+            icon.visibility = View.VISIBLE
+        } else {
+            icon.visibility = View.GONE
+        }
     }
 
     /**

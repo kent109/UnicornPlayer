@@ -5,56 +5,74 @@
     android:background="?attr/selectableItemBackground"
     android:clickable="true"
     android:focusable="true"
-    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
     android:paddingHorizontal="24dp"
-    android:paddingVertical="8dp">
+    android:paddingVertical="6dp">
 
-    <TextView
-        android:id="@+id/tvLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@color/onSurfaceVariant"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+    <ImageView
+        android:id="@+id/ivIcon"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginEnd="12dp"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
 
     <LinearLayout
-        android:id="@+id/llInfo"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:orientation="horizontal">
+        android:layout_weight="1"
+        android:orientation="vertical">
 
         <TextView
-            android:id="@+id/tvValue"
+            android:id="@+id/tvLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="@color/onSurface"
-            android:textSize="13sp" />
+            android:textColor="@color/onSurfaceVariant"
+            android:textSize="16sp"
+            android:textStyle="bold" />
 
-        <EditText
-            android:id="@+id/etValue"
+        <LinearLayout
+            android:id="@+id/llInfo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@android:color/transparent"
-            android:importantForAutofill="no"
-            android:inputType="text"
-            android:maxLength="20"
-            android:minWidth="2dp"
-            android:maxLines="1"
-            android:textColor="@color/onSurface"
-            android:textSize="13sp"
-            android:visibility="gone" />
+            android:layout_marginTop="2dp"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/tvAsterisk"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="2dp"
-            android:text="*"
-            android:textColor="@android:color/holo_red_light"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:visibility="gone" />
+            <TextView
+                android:id="@+id/tvValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/onSurface"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/etValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@android:color/transparent"
+                android:importantForAutofill="no"
+                android:inputType="text"
+                android:maxLength="20"
+                android:maxLines="1"
+                android:minWidth="2dp"
+                android:textColor="@color/onSurface"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tvAsterisk"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:text="*"
+                android:textColor="@android:color/holo_red_light"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
     </LinearLayout>
 

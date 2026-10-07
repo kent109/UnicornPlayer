@@ -54,6 +54,7 @@ class AlbumInfoDialog(
                 itemBinding.tvLabel.text = label
                 itemBinding.tvValue.text = value
                 itemBinding.root.background = null
+                setIconForLabel(itemBinding.ivIcon, label)
                 infoContainer.addView(itemBinding.root)
             }
 
@@ -136,6 +137,7 @@ class AlbumInfoDialog(
         val itemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context))
         itemBinding.tvLabel.visibility = android.view.View.GONE
         itemBinding.tvValue.text = text
+        setIconForLabel(itemBinding.ivIcon, text)
         itemBinding.tvValue.textSize = 16f
         itemBinding.tvValue.setTypeface(
             itemBinding.tvValue.typeface, android.graphics.Typeface.BOLD
@@ -149,5 +151,31 @@ class AlbumInfoDialog(
         itemBinding.tvValue.setTextColor(context.getColor(textColor))
         itemBinding.root.setOnClickListener { onClick() }
         container.addView(itemBinding.root)
+    }
+
+    /**
+     * 按标题为 item 左侧图标设置对应 drawable，无匹配则隐藏
+     */
+    private fun setIconForLabel(icon: android.widget.ImageView, label: String) {
+        val res = when (label) {
+            "歌手" -> R.drawable.ic_artist_s
+            "专辑" -> R.drawable.ic_album_s
+            "时长" -> R.drawable.ic_duration_s
+            "音质" -> R.drawable.ic_quality_s
+            "文件大小" -> R.drawable.ic_filesize_s
+            "文件路径" -> R.drawable.ic_filepath_s
+            "添加到歌单" -> R.drawable.ic_add_to_play
+            "分享本地文件" -> R.drawable.ic_share
+            "删除" -> R.drawable.ic_delete
+            "播放" -> R.drawable.ic_play2
+            "歌曲数量" -> R.drawable.ic_count_s
+            else -> null
+        }
+        if (res != null) {
+            icon.setImageResource(res)
+            icon.visibility = View.VISIBLE
+        } else {
+            icon.visibility = View.GONE
+        }
     }
 }
