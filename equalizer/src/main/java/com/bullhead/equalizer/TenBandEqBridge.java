@@ -28,11 +28,39 @@ public final class TenBandEqBridge {
 
     private static volatile BandLevelApplier sApplier;
 
+    /**
+     * 由 app 模块实现的低音强度应用器（strength 0-1000）。
+     */
+    public interface BassStrengthApplier {
+        void applyBassStrength(int strength);
+    }
+
+    private static volatile BassStrengthApplier sBassApplier;
+
     private TenBandEqBridge() {
     }
 
     public static void setApplier(BandLevelApplier applier) {
         sApplier = applier;
+    }
+
+    public static void setBassApplier(BassStrengthApplier applier) {
+        sBassApplier = applier;
+    }
+
+    /**
+     * 把低音强度（0-1000）应用到自研 AudioProcessor 的低音低架滤波器。
+     * 调用方：EqualizerFragment 低音旋钮 / 预设切换 / 配置导入。
+     */
+    public static void applyBassStrength(int strength) {
+        BassStrengthApplier applier = sBassApplier;
+        if (applier != null) {
+            try {
+                applier.applyBassStrength(strength);
+            } catch (Exception e) {
+                Log.e(TAG, "applyBassStrength failed", e);
+            }
+        }
     }
 
     /**

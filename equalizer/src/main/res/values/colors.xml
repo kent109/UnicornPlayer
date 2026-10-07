@@ -7,6 +7,9 @@
     <color name="analog_fill_color">#eeeeee</color>
     <color name="eq_icon_color">#ff2c2c2c</color>
 
+    <!-- 预设下拉项分割线，取值与 app 模块 @color/divider_color 一致（日间），需同步 -->
+    <color name="eq_divider_color">#1f000000</color>
+
     <color name="eq_surface">#FFFBFE</color>
     <color name="eq_onSurface">#1C1B1F</color>
     <color name="eq_onSurfaceVariant">#49454F</color>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 预设下拉项右侧的对钩，图形与 app 模块 drawable/ic_check.xml（歌曲排序选中态）一致。
+     equalizer 作为库模块不能反向依赖 app，故复制一份，改图标时需两边同步；
+     运行时在 EqualizerFragment.createCheckMarkDrawable 中按高亮色着色 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <path
+        android:fillColor="@color/eq_icon_color"
+        android:pathData="M102.74133,503.46667a42.666668,42.666668 0,0 1,60.352 0L388.26666,728.72534 870.144,226.77333a42.666668,42.666668 0,0 1,57.941334 -3.349333l2.389334,2.112a42.666668,42.666668 0,0 1,1.216 60.330666l-512,533.3333a42.666668,42.666668 0,0 1,-60.949333 0.618667l-256,-256a42.666668,42.666668 0,0 1,0 -60.330666z" />
+
+</vector>

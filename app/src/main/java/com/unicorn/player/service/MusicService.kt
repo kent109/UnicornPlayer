@@ -150,6 +150,11 @@ class MusicService : Service() {
     private lateinit var eqProcessor: TenBandEqualizerProcessor
     private lateinit var mediaSession: MediaSessionCompat
 
+    /** 起播 PCM 级淡入时长：系统增益效果已全部禁用（EQ/低音在 App 内、系数先于
+     * 信号落定），无需音量包络遮盖，置 0 关闭；仅保留处理器内 23ms 防爆淡入。
+     * 若后续出现起播瞬态，可临时改回 300~800 观察对比 */
+    private val startupFadeInMs = 0L
+
     /**
      * 服务生命周期内固定的 audioSessionId（onCreate 时预生成并 setAudioSessionId 到播放器）。
      * 让系统音效（Equalizer/BassBoost/PresetReverb）能在音频流启动前就挂到该 session 上：
@@ -326,11 +331,19 @@ class MusicService : Service() {
                 Settings.presetPos = savedPresetPos
                 val resolved =
                     com.bullhead.equalizer.EqualizerPresets.resolveLevels(applicationContext)
-                for (i in resolved.indices) {
-                    Settings.seekbarpos[i] = resolved[i]
+                // pos=0（自定义）且从未显式保存过 custom_preset 时，resolveLevels 返回全零；
+                // 此时不能用它覆盖上方 DataStore 恢复的真实曲线（用户拖动的频段保存在
+                // EQUALIZER_BAND_LEVELS），否则冷启动会以"平直频段+低音"起播，与均衡器页
+                // 实际显示/下发的曲线不一致。仅当解析出非零数据（内置预设或已保存的
+                // 自定义）或 DataStore 无任何记录时才采用解析结果。
+                val resolvedIsFlat = resolved.all { it == 0 }
+                if (!resolvedIsFlat || savedBandLevels == null) {
+                    for (i in resolved.indices) {
+                        Settings.seekbarpos[i] = resolved[i]
+                    }
                 }
             }
-            Log.d(TAG, "restoreEqualizerSettings: enabled=${Settings.isEqualizerEnabled}, presetPos=${Settings.presetPos}, bass=${Settings.bassStrength}, reverb=$reverbPreset")
+            Log.d(TAG, "restoreEqualizerSettings: enabled=${Settings.isEqualizerEnabled}, presetPos=${Settings.presetPos}, bass=${Settings.bassStrength}, reverb=$reverbPreset, seekbarpos=${Settings.seekbarpos.contentToString()}")
         } catch (e: Exception) {
             LogWriter.writeError(TAG, "restoreEqualizerSettings failed", e)
         }
@@ -345,8 +358,12 @@ class MusicService : Service() {
     private fun applyEqProcessorLevels() {
         if (Settings.isEqualizerEnabled) {
             eqProcessor.setBandLevels(Settings.seekbarpos)
+            eqProcessor.setBassStrength(
+                Settings.equalizerModel?.bassStrength?.toInt() ?: 0
+            )
         } else {
             eqProcessor.setBandLevels(IntArray(10))
+            eqProcessor.setBassStrength(0)
         }
     }
 
@@ -604,6 +621,9 @@ class MusicService : Service() {
         com.bullhead.equalizer.TenBandEqBridge.setApplier { levels ->
             eqProcessor.setBandLevels(levels)
         }
+        com.bullhead.equalizer.TenBandEqBridge.setBassApplier { strength ->
+            eqProcessor.setBassStrength(strength)
+        }
         val renderersFactory = object : DefaultRenderersFactory(this@MusicService) {
             override fun buildAudioSink(
                 context: Context,
@@ -747,8 +767,11 @@ class MusicService : Service() {
                             updateMediaSessionPlaybackState()
                             if (pendingAutoPlay) {
                                 player.play()
-                                // 服务重启自动播放：同样在音轨 start 后软渐变系统效果
-                                AudioEffectManager.softApplyPendingSettings()
+                                // 服务重启自动播放：同样请求 PCM 级起播淡入
+                                if (Settings.isEqualizerEnabled) {
+                                    TenBandEqualizerProcessor.instance
+                                        ?.requestStartupFadeIn(startupFadeInMs)
+                                }
                             }
                         }
                     }
@@ -1505,9 +1528,11 @@ class MusicService : Service() {
         // 确保音频效果管理器已初始化（在播放器准备好之后）
         initializeAudioEffects()
         player.play()
-        // AudioTrack 已 start：系统 EQ/低音效果以中性参数起链，此处启动 ~350ms 软渐变到目标值，
-        // 消除冷启动首帧满增益切入的爆音（无待渐变时是空操作）
-        AudioEffectManager.softApplyPendingSettings()
+        // EQ 打开时：PCM 级起播淡入（采样级包络，与出声帧严格同步）。系统效果链已在
+        // 创建时带上最终参数，此包络呈现恒定音色的纯响度渐入；EQ 关闭时不处理
+        if (Settings.isEqualizerEnabled) {
+            TenBandEqualizerProcessor.instance?.requestStartupFadeIn(startupFadeInMs)
+        }
         // 立即更新播放状态为true，确保通知栏能正确显示
         _isPlaying.value = true
         // 立即更新通知栏和MediaSession状态
@@ -2435,6 +2460,13 @@ class MusicService : Service() {
                         TAG,
                         "loadPlaybackState: setMediaItem+prepare, targetPos=$pendingRestorePosition, embedded=$restorePositionEmbedded, autoPlay=$pendingAutoPlay, suppressNotification=$pendingSuppressNotification"
                     )
+                    // 冷启动恢复 EQ 设置（含低音强度）并同步进 App 内 AudioProcessor。
+                    // 必须在 prepare 之前：处理器 configure（发生在 prepare 内）以
+                    // initial=true 一次性落定系数，EQ 从第一个采样帧即生效；若在
+                    // prepare 之后补发，会变成 mid-stream 渐变（先平直播放再渐入 EQ）
+                    restoreEqualizerSettings()
+                    applyEqProcessorLevels()
+                    initializeAudioEffects()
                     if (restorePositionEmbedded) {
                         player.setMediaItem(
                             MediaItem.fromUri(songPath),

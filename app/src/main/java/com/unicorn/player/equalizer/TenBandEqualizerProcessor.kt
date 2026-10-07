@@ -8,6 +8,7 @@ import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -50,6 +51,16 @@ class TenBandEqualizerProcessor : AudioProcessor {
 
         // Shelf Q 值：Butterworth（最大平坦响应）
         private const val SHELF_Q = 0.70710677f
+
+        // 低音增强低架滤波器（App 内实现，替代系统 BassBoost：strength 0-1000 → 0..+15dB）
+        private const val BASS_SHELF_FREQ_HZ = 100f
+        private const val BASS_MAX_GAIN_DB = 15f
+
+        /** 限幅器阈值（≈ -1.4 dBFS）：输出超过此电平即开始压缩，防止硬削波失真 */
+        private const val LIMITER_THRESHOLD = 0.85f
+
+        /** 限幅器释放时间常数（秒）：峰值回落后增益缓慢恢复，避免泵感 */
+        private const val LIMITER_RELEASE_S = 0.25f
 
         /**
          * 增益变更时的系数渐变帧数（44.1kHz 下约 46ms）。
@@ -104,8 +115,15 @@ class TenBandEqualizerProcessor : AudioProcessor {
     // ===== Biquad 系数（所有通道共享，增益/采样率变更时重算） =====
     private val coeffs = Array(NUM_BANDS) { BiquadCoeffs() }
 
+    // ===== 低音增强（对应原系统 BassBoost；strength 0-1000 → 0..+15dB 低架 @100Hz） =====
+    private var bassStrengthPending = 0
+    private var bassStrengthActive = 0
+    private var bassStrengthChanged = false
+    private val bassShelfCoeffs = BiquadCoeffs() // 默认恒等直通
+
     // ===== 每通道每频段的滤波器状态（Direct Form II Transposed） =====
     private var states: Array<Array<BiquadState>> = emptyArray()
+    private var bassShelfStates: Array<BiquadState> = emptyArray()
 
     // ===== 采样率缓存 =====
     private var sampleRate = 0
@@ -115,8 +133,26 @@ class TenBandEqualizerProcessor : AudioProcessor {
     private var clippedSamples = 0L
     private var peakMagnitude = 0f
 
+    // ===== 输出限幅器（全通道链接，瞬时攻击/指数释放） =====
+    // EQ 正增益叠加（频段 shelf + 低音低架可达 ~+12dB）会把满幅母带推过 ±1.0，
+    // 硬削波听感为"震颤/破音"。限幅器以连续增益压缩替代硬切顶，保响度去失真。
+    private var limiterEnvelope = 0f
+    private var limiterReleaseCoef = 0f
+    private var limitedFrames = 0L
+
+    // 单帧各通道样本暂存：先滤波求帧内峰值，再统一乘限幅增益后写出
+    private var frameValues = FloatArray(2)
+
     // ===== 冷启动淡入剩余帧数（0 = 无淡入） =====
     private var fadeInRemaining = 0
+
+    // ===== 起播 PCM 级音量淡入（采样级包络，遮盖 EQ 效果链切入的响度/音色突变） =====
+    // 主线程经 requestStartupFadeIn() 请求，音频线程在 queueInput 消费——淡入从真正
+    // 出声的第一帧开始，与音频流严格同步，不受主线程 Handler 抖动影响
+    @Volatile
+    private var pendingStartupFadeMs = 0L
+    private var startupFadeRemaining = 0
+    private var startupFadeTotal = 0
 
     // ===== 公共 API =====
 
@@ -143,7 +179,32 @@ class TenBandEqualizerProcessor : AudioProcessor {
         }
     }
 
+    /**
+     * 请求一次起播音量淡入：从下一个被处理的音频缓冲起，以 smoothstep 曲线把采样
+     * 增益从 0 渐变到 1（[durationMs] 毫秒）。仅在请求后确有音频帧流过时才启动，
+     * 与实际出声严格同步。重复调用以最后一次为准。可在任意线程调用。
+     */
+    fun requestStartupFadeIn(durationMs: Long) {
+        if (durationMs > 0) {
+            pendingStartupFadeMs = durationMs
+        }
+    }
+
     // ===== AudioProcessor 接口实现 =====
+
+    /**
+     * 设置低音增强强度（0-1000，对应原系统 BassBoost 的 strength）。
+     * 可在任意线程调用；音频线程在下一缓冲应用（中途变化走 46ms 系数渐变）。
+     */
+    fun setBassStrength(strength: Int) {
+        val s = strength.coerceIn(0, 1000)
+        synchronized(lock) {
+            if (s != bassStrengthPending) {
+                bassStrengthPending = s
+                bassStrengthChanged = true
+            }
+        }
+    }
 
     override fun configure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat == EMPTY_FORMAT) {
@@ -167,7 +228,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
             inputFormat.sampleRate == newSampleRate &&
             inputFormat.channelCount == channelCount &&
             inputFormat.encoding == encoding &&
-            states.isNotEmpty()
+            states.isNotEmpty() &&
+            bassShelfStates.isNotEmpty()
         inputFormat = inputAudioFormat
         outputFormat = inputAudioFormat
         active = true
@@ -175,6 +237,9 @@ class TenBandEqualizerProcessor : AudioProcessor {
         sampleRate = newSampleRate
         if (!sameFormat) {
             states = Array(channelCount) { Array(NUM_BANDS) { BiquadState() } }
+            bassShelfStates = Array(channelCount) { BiquadState() }
+            limiterEnvelope = 0f
+            limiterReleaseCoef = exp(-1f / (LIMITER_RELEASE_S * newSampleRate))
         }
 
         // 同步 pending → active 并计算初始系数
@@ -183,6 +248,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
                 bandLevelsActive[i] = bandLevelsPending[i]
             }
             bandLevelsChanged = false
+            bassStrengthActive = bassStrengthPending
+            bassStrengthChanged = false
         }
         // 全新格式：信号尚未开始，系数直接落定；同格式重配：保留现有系数与状态，不重算
         if (!sameFormat) {
@@ -195,7 +262,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
         Log.d(
             TAG,
             "Configured: sampleRate=$sampleRate, channels=$channelCount, encoding=$encoding" +
-                (if (sameFormat) " (same format, filter states preserved)" else " (new format, fresh states)")
+                (if (sameFormat) " (same format, filter states preserved)" else " (new format, fresh states)") +
+                ", bands=${bandLevelsActive.contentToString()}, bass=$bassStrengthActive"
         )
         return outputFormat
     }
@@ -205,17 +273,33 @@ class TenBandEqualizerProcessor : AudioProcessor {
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (!active || inputFormat == EMPTY_FORMAT) return
 
-        // 检查增益是否变化，重新计算系数（信号可能已在流动，必须走渐变而非直接换系数）
-        if (bandLevelsChanged) {
-            synchronized(lock) {
+        // 检查参数是否变化，重新计算系数（信号可能已在流动，必须走渐变而非直接换系数）
+        var paramsChanged = false
+        synchronized(lock) {
+            if (bandLevelsChanged) {
                 for (i in 0 until NUM_BANDS) {
                     bandLevelsActive[i] = bandLevelsPending[i]
                 }
                 bandLevelsChanged = false
+                paramsChanged = true
             }
-            Log.i(TAG, "Band levels changed mid-stream, ramping coefficients")
+            if (bassStrengthChanged) {
+                bassStrengthActive = bassStrengthPending
+                bassStrengthChanged = false
+                paramsChanged = true
+            }
+        }
+        if (paramsChanged) {
+            Log.i(
+                TAG,
+                "EQ params changed mid-stream: bands=${bandLevelsActive.contentToString()}, " +
+                    "bass=$bassStrengthActive, ramping coefficients"
+            )
             recalculateCoefficients(initial = false)
         }
+
+        // 消费起播淡入请求（若有）：本缓冲第一帧即包络起点
+        consumePendingStartupFade()
 
         val remaining = inputBuffer.remaining()
         val bytesPerSample = if (inputFormat.encoding == C.ENCODING_PCM_16BIT) 2 else 4
@@ -265,6 +349,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
         // 起头阶跃（听感上 23ms 不可察）；同时保证冷启动若存在"预缓冲被 flush 丢弃"，
         // 最终 start 时淡入仍然在册
         fadeInRemaining = FADE_IN_FRAMES
+        // 进行中的起播淡入一并终止：seek 是新的信号不连续点，交给上面的短防爆淡入
+        startupFadeRemaining = 0
         Log.i(TAG, "flush() called, filter states preserved, fade-in rearmed")
     }
 
@@ -274,6 +360,9 @@ class TenBandEqualizerProcessor : AudioProcessor {
                 states[channel][band].reset()
             }
         }
+        for (s in bassShelfStates) {
+            s.reset()
+        }
         ended = false
         buffer = EMPTY_BUFFER
         inputFormat = EMPTY_FORMAT
@@ -281,10 +370,16 @@ class TenBandEqualizerProcessor : AudioProcessor {
         active = false
         sampleRate = 0
         states = emptyArray()
+        bassShelfStates = emptyArray()
         framesSinceStats = 0L
         clippedSamples = 0L
         peakMagnitude = 0f
+        limitedFrames = 0L
+        limiterEnvelope = 0f
         fadeInRemaining = 0
+        pendingStartupFadeMs = 0L
+        startupFadeRemaining = 0
+        startupFadeTotal = 0
         Log.i(TAG, "reset() called, filter states cleared")
     }
 
@@ -296,20 +391,34 @@ class TenBandEqualizerProcessor : AudioProcessor {
         numFrames: Int,
         channelCount: Int
     ) {
+        if (frameValues.size < channelCount) {
+            frameValues = FloatArray(channelCount)
+        }
         repeat(numFrames) {
             // 每帧推进一次系数渐变（所有通道共享同一组系数）
             advanceAllRamps()
             // 冷启动/seek 淡入增益（无淡入时恒为 1，分支可预测，开销可忽略）
             val frameGain = nextFadeInGain()
+            // 第一遍：级联 10 个 biquad + 低音低架（低音在 App 内实现，替代系统
+            // BassBoost）+ 淡入，记录各通道样本并统计帧内峰值
+            var framePeak = 0f
             for (ch in 0 until channelCount) {
                 val sample = input.getShort().toInt()
                 // 16-bit signed → float [-1, 1)
                 var f = sample / 32768f
-                // 级联 10 个 biquad
                 for (band in 0 until NUM_BANDS) {
                     f = processBiquad(f, states[ch][band], coeffs[band])
                 }
+                f = processBiquad(f, bassShelfStates[ch], bassShelfCoeffs)
                 f *= frameGain
+                frameValues[ch] = f
+                val mag = if (f < 0f) -f else f
+                if (mag > framePeak) framePeak = mag
+            }
+            // 第二遍：限幅 + 写出（16-bit 下游无法表示 >1 的样本，越界即硬削波）
+            val limiterGain = advanceLimiter(framePeak)
+            for (ch in 0 until channelCount) {
+                var f = frameValues[ch] * limiterGain
                 if (f < 0f) {
                     if (f < -1f) {
                         clippedSamples++
@@ -337,49 +446,96 @@ class TenBandEqualizerProcessor : AudioProcessor {
         numFrames: Int,
         channelCount: Int
     ) {
+        if (frameValues.size < channelCount) {
+            frameValues = FloatArray(channelCount)
+        }
         repeat(numFrames) {
             advanceAllRamps()
             val frameGain = nextFadeInGain()
+            // 第一遍：滤波 + 淡入，记录各通道样本并统计帧内峰值
+            var framePeak = 0f
             for (ch in 0 until channelCount) {
                 var f = input.getFloat()
                 for (band in 0 until NUM_BANDS) {
                     f = processBiquad(f, states[ch][band], coeffs[band])
                 }
+                f = processBiquad(f, bassShelfStates[ch], bassShelfCoeffs)
                 f *= frameGain
-                // 下游 AudioTrack 转定点时会硬削波，这里统计越界样本（诊断削波爆音用）
-                if (f < 0f) {
-                    if (f < -1f) {
-                        clippedSamples++
-                        if (f > -peakMagnitude) peakMagnitude = -f
-                    } else if (-f > peakMagnitude) {
-                        peakMagnitude = -f
-                    }
-                } else {
-                    if (f > 1f) {
-                        clippedSamples++
-                        if (f > peakMagnitude) peakMagnitude = f
-                    } else if (f > peakMagnitude) {
-                        peakMagnitude = f
-                    }
-                }
+                frameValues[ch] = f
+                val mag = if (f < 0f) -f else f
+                if (mag > framePeak) framePeak = mag
+            }
+            // 第二遍：限幅 + 写出（下游 AudioTrack 转定点时 >1 的样本会被硬削波）
+            val limiterGain = advanceLimiter(framePeak)
+            for (ch in 0 until channelCount) {
+                val f = frameValues[ch] * limiterGain
+                val mag = if (f < 0f) -f else f
+                if (mag > peakMagnitude) peakMagnitude = mag
+                if (mag > 1f) clippedSamples++
                 output.putFloat(f)
             }
         }
         logStatsIfDue(numFrames)
     }
 
-    /** 每帧推进所有频段的系数渐变；无渐变时开销极小（10 次布尔判断）。 */
+    /**
+     * 帧级链接限幅器：包络上行瞬时跟随（无过冲）、下行按释放系数指数回落，
+     * 返回本帧输出增益。各通道取峰值统一压缩（保持声像稳定），阈值以上按比例
+     * 压缩而非硬切顶，消除 EQ 正增益叠加导致的削波震颤。
+     */
+    private fun advanceLimiter(framePeak: Float): Float {
+        limiterEnvelope = if (framePeak > limiterEnvelope) {
+            framePeak
+        } else {
+            framePeak + (limiterEnvelope - framePeak) * limiterReleaseCoef
+        }
+        return if (limiterEnvelope > LIMITER_THRESHOLD) {
+            limitedFrames++
+            LIMITER_THRESHOLD / limiterEnvelope
+        } else {
+            1f
+        }
+    }
+
+    /** 每帧推进所有频段与低音低架的系数渐变；无渐变时开销极小。 */
     private fun advanceAllRamps() {
         for (band in 0 until NUM_BANDS) {
             coeffs[band].advanceRamp()
         }
+        bassShelfCoeffs.advanceRamp()
     }
 
-    /** 每帧返回淡入增益：0 → 1 线性，淡入结束后恒为 1。 */
+    /** 消费待处理的起播淡入请求（音频线程，本缓冲含有效数据时触发）。 */
+    private fun consumePendingStartupFade() {
+        val ms = pendingStartupFadeMs
+        if (ms <= 0) return
+        pendingStartupFadeMs = 0
+        if (sampleRate <= 0) return
+        startupFadeTotal = ((ms * sampleRate) / 1000L).toInt().coerceAtLeast(1)
+        startupFadeRemaining = startupFadeTotal
+        // 启动包络起点同为增益 0，已覆盖 23ms 防爆淡入的作用，清掉避免双重包络
+        fadeInRemaining = 0
+        Log.i(TAG, "Startup fade-in armed: ${ms}ms = ${startupFadeTotal} frames @ ${sampleRate}Hz")
+    }
+
+    /**
+     * 每帧返回综合包络增益：短防爆淡入（线性）× 起播音量淡入（smoothstep），
+     * 均无活动时恒为 1（快速路径）。
+     */
     private fun nextFadeInGain(): Float {
-        if (fadeInRemaining <= 0) return 1f
-        val g = (FADE_IN_FRAMES - fadeInRemaining).toFloat() / FADE_IN_FRAMES
-        fadeInRemaining--
+        var g = 1f
+        if (fadeInRemaining > 0) {
+            g = (FADE_IN_FRAMES - fadeInRemaining).toFloat() / FADE_IN_FRAMES
+            fadeInRemaining--
+        }
+        if (startupFadeRemaining > 0) {
+            val t = 1f - startupFadeRemaining.toFloat() / startupFadeTotal
+            g *= t * t * (3f - 2f * t) // smoothstep：起止斜率为 0，无顿挫
+            startupFadeRemaining--
+            if (startupFadeRemaining == 0) {
+                Log.i(TAG, "Startup fade-in finished")
+            }
+        }
         return g
     }
 
@@ -388,9 +544,11 @@ class TenBandEqualizerProcessor : AudioProcessor {
         if (framesSinceStats >= STATS_LOG_INTERVAL_FRAMES) {
             Log.i(
                 TAG,
-                "stats: frames=$framesSinceStats, clippedSamples=$clippedSamples, peak=$peakMagnitude"
+                "stats: frames=$framesSinceStats, limitedFrames=$limitedFrames, " +
+                    "clippedSamples=$clippedSamples, peak=$peakMagnitude"
             )
             framesSinceStats = 0L
+            limitedFrames = 0L
             clippedSamples = 0L
             peakMagnitude = 0f
         }
@@ -465,6 +623,26 @@ class TenBandEqualizerProcessor : AudioProcessor {
                     )
                 }
             }
+        }
+
+        // 低音增强：低架滤波器 @100Hz，strength 0-1000 → 0..+15dB（RBJ low-shelf）
+        val bassGainDb = bassStrengthActive / 1000f * BASS_MAX_GAIN_DB
+        val ba = 10f.pow(bassGainDb / 40f)
+        val bw0 = 2f * Math.PI.toFloat() * BASS_SHELF_FREQ_HZ / fs
+        val bcosw0 = cos(bw0)
+        val bsinw0 = sin(bw0)
+        val balpha = bsinw0 / (2f * SHELF_Q)
+        val bsqrtA = sqrt(ba)
+        val ba0 = (ba + 1f) + (ba - 1f) * bcosw0 + 2f * bsqrtA * balpha
+        val sb0 = (ba * ((ba + 1f) - (ba - 1f) * bcosw0 + 2f * bsqrtA * balpha)) / ba0
+        val sb1 = (2f * ba * ((ba - 1f) - (ba + 1f) * bcosw0)) / ba0
+        val sb2 = (ba * ((ba + 1f) - (ba - 1f) * bcosw0 - 2f * bsqrtA * balpha)) / ba0
+        val sa1 = (-2f * ((ba - 1f) + (ba + 1f) * bcosw0)) / ba0
+        val sa2 = ((ba + 1f) + (ba - 1f) * bcosw0 - 2f * bsqrtA * balpha) / ba0
+        if (initial) {
+            bassShelfCoeffs.snapTo(sb0, sb1, sb2, sa1, sa2)
+        } else {
+            bassShelfCoeffs.rampTo(sb0, sb1, sb2, sa1, sa2, COEFF_RAMP_FRAMES)
         }
     }
 

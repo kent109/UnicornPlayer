@@ -2,6 +2,7 @@ package com.bullhead.equalizer;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.res.Resources;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
@@ -35,6 +36,17 @@ public class ObservableSpinner extends Spinner {
 
     /** 下拉条目高度（与 spinner_dropdown_item.xml 的 minHeight 保持一致） */
     private static final int DROPDOWN_ITEM_HEIGHT_DP = 40;
+
+    /** 下拉行间分割线厚度（与 drawable/eq_dropdown_divider 配套，样式对齐 app 模块歌曲排序弹层） */
+    private static final float DROPDOWN_DIVIDER_HEIGHT_DP = 0.8f;
+
+    /**
+     * 分割线像素高度，供 {@link EqualizerFragment} 设置 ListView divider 时使用，
+     * 与弹窗最大高度计算共用同一取值，避免两处不一致导致最后一项显示不全。
+     */
+    static int dropdownDividerHeightPx(Resources res) {
+        return Math.max(1, (int) (DROPDOWN_DIVIDER_HEIGHT_DP * res.getDisplayMetrics().density));
+    }
 
     @Nullable
     private Runnable onDropdownOpenedListener;
@@ -100,7 +112,10 @@ public class ObservableSpinner extends Spinner {
             Object popup = popupField.get(this);
             if (popup instanceof ListPopupWindow) {
                 float density = getResources().getDisplayMetrics().density;
-                int maxHeight = (int) (MAX_VISIBLE_ITEMS * DROPDOWN_ITEM_HEIGHT_DP * density);
+                // 11 项之间有 10 条分割线，必须一并计入，否则最后一项会被裁掉一截
+                int dividerPx = dropdownDividerHeightPx(getResources());
+                int maxHeight = (int) (MAX_VISIBLE_ITEMS * DROPDOWN_ITEM_HEIGHT_DP * density)
+                        + (MAX_VISIBLE_ITEMS - 1) * dividerPx;
                 ((ListPopupWindow) popup).setHeight(maxHeight);
             }
         } catch (Throwable t) {

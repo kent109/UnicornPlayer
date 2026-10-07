@@ -18,16 +18,12 @@ public class AudioEffectManager {
     private static volatile int sAudioSessionId = 0;
     private static final AtomicBoolean sIsInitialized = new AtomicBoolean(false);
 
-    // ===== 冷启动软启用（消除系统效果链首帧满增益切入的爆音与断层） =====
+    // ===== 效果参数渐变（播放中开关切换场景；冷启动由 AudioProcessor 采样级音量淡入负责） =====
     private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
-    /** 是否存在等待软渐变到目标值的新建效果链 */
-    private static boolean sPendingSoftApply = false;
     /** 渐变步进间隔：HAL 每次参数替换是一次小阶跃，步子越密听感越连续 */
     private static final long RAMP_INTERVAL_MS = 20L;
     /** 首步延迟：等 AudioTrack 信号稳定流出，避免与起播瞬态混叠 */
     private static final long RAMP_START_DELAY_MS = 120L;
-    /** 冷启动渐入总时长：约 1 秒，人耳感知为音色缓慢进入 */
-    private static final long SOFT_APPLY_DURATION_MS = 1000L;
     /** 播放中手动打开开关的渐入时长 */
     private static final long RAMP_TO_SETTINGS_DURATION_MS = 600L;
     /** 关闭开关的渐出时长：渐回中性后再 disable，消除关闭瞬间的断层 */
@@ -43,8 +39,10 @@ public class AudioEffectManager {
         sAudioSessionId = audioSessionId;
         sIsInitialized.set(true);
 
-        // 服务冷启动恢复路径：中性参数 enable + 待软渐变（消除首帧爆音）
-        createAudioEffects(context, audioSessionId, true);
+        // 冷启动：仅创建效果对象（EQ/低音保持 disable，实际增益全部由 App 内
+        // AudioProcessor 承担——系数在信号开始前落定，配合采样级起播淡入呈现
+        // 恒定音色的"拧音量旋钮"式纯响度渐入；混响按需启用）
+        createAudioEffects(context, audioSessionId);
     }
 
     public static synchronized void destroy() {
@@ -62,21 +60,19 @@ public class AudioEffectManager {
         }
 
         if (sEqualizer != null && sBassBoost != null && sPresetReverb != null) {
-            Log.w(TAG, "Audio effects already created, re-enabling based on Settings.isEqualizerEnabled");
-            boolean enabled = Settings.isEqualizerEnabled;
-            sEqualizer.setEnabled(enabled);
-            sBassBoost.setEnabled(enabled);
-            sPresetReverb.setEnabled(enabled);
-            // 注意：这里不能取消 pending 或立即写满参数——冷启动恢复路径会在 prepare 前
-            // 调到本方法，满参数写入会绕过软渐变重新引入首帧爆音。用户手动开关由
-            // EqualizerFragment 走 rampToSettings/softDisable 接管。
+            // 对象已存在：频段增益与低音已收编进 App 内 AudioProcessor，系统
+            // Equalizer/BassBoost 一律保持 disable（OPPO 等设备上"音轨存在前 enable"
+            // 的效果在效果链随音轨迁移时进入半激活状态，表现为起播无 EQ、片刻后突变）。
+            // 仅按需对齐 PresetReverb。
+            Log.d(TAG, "Audio effects already created, syncing reverb enable state");
+            syncReverbEnableState();
             return;
         }
 
         try {
             // 用户在均衡器页面交互（或播放中重新打开开关）触发的创建：
-            // 信号已在流动且用户期待即时生效，按原行为创建后立即写入完整参数
-            createAudioEffects(context, sAudioSessionId, false);
+            // 创建后立即写入完整参数再 enable
+            createAudioEffects(context, sAudioSessionId);
         } catch (Exception e) {
             Log.e(TAG, "Failed to create audio effects", e);
             releaseAudioEffects();
@@ -118,22 +114,6 @@ public class AudioEffectManager {
     }
 
     /**
-     * 冷启动/新建效果链后，由播放器在真正 play()（AudioTrack start）之后调用：
-     * 效果对象创建时以中性参数（EQ 0mB / bass 0 / reverb NONE）enable，首帧切入链路
-     * 不产生任何增益阶跃；出声 120ms 后用约 1 秒 smoothstep 曲线把 EQ 电平与低音强度
-     * 缓慢渐变到用户设置值，最后应用混响预设。幂等，重复调用安全。
-     */
-    public static synchronized void softApplyPendingSettings() {
-        if (!sPendingSoftApply || sEqualizer == null) {
-            return;
-        }
-        sPendingSoftApply = false;
-        startRampLocked(SOFT_APPLY_DURATION_MS, false);
-        Log.i(TAG, "Soft apply scheduled: ramp " + SOFT_APPLY_DURATION_MS + "ms after "
-                + RAMP_START_DELAY_MS + "ms delay");
-    }
-
-    /**
      * 播放中手动打开均衡器开关：从当前系统参数值平滑渐变到 Settings 目标值，
      * 避免一次性写入造成的音色断层。调用前效果对象需已 setEnabled(true)。
      */
@@ -155,18 +135,17 @@ public class AudioEffectManager {
         startRampLocked(SOFT_DISABLE_DURATION_MS, true);
     }
 
-    /** 是否有渐变在进行（或待启动）。渐变期间 UI 只更新显示，不得直写系统效果参数。 */
+    /** 是否有渐变在进行。渐变期间 UI 只更新显示，不得直写系统效果参数。 */
     public static synchronized boolean isRampActive() {
-        return sRampRunnable != null || sPendingSoftApply;
+        return sRampRunnable != null;
     }
 
-    /** 取消进行中/待启动的渐变（用户主动接管或销毁时调用）。 */
+    /** 取消进行中的渐变（用户主动接管或销毁时调用）。 */
     public static synchronized void cancelRamp() {
         if (sRampRunnable != null) {
             sMainHandler.removeCallbacks(sRampRunnable);
             sRampRunnable = null;
         }
-        sPendingSoftApply = false;
     }
 
     /**
@@ -285,44 +264,65 @@ public class AudioEffectManager {
         sMainHandler.postDelayed(sRampRunnable, RAMP_START_DELAY_MS);
     }
 
-    private static void createAudioEffects(Context context, int audioSessionId, boolean soft) {
+    private static void createAudioEffects(Context context, int audioSessionId) {
         try {
             sEqualizer = new Equalizer(0, audioSessionId);
             sBassBoost = new BassBoost(0, audioSessionId);
             sPresetReverb = new PresetReverb(0, audioSessionId);
 
             boolean enabled = Settings.isEqualizerEnabled;
-            // 无论软硬路径，enable 前先写入中性参数，避免链路使能瞬间带增益
-            applyNeutralSettings();
-            sEqualizer.setEnabled(enabled);
-            sBassBoost.setEnabled(enabled);
-            sPresetReverb.setEnabled(enabled);
-
+            // 频段增益与低音均已收编进 App 内 AudioProcessor（10 段 biquad + 低音低架），
+            // 系统 Equalizer/BassBoost 仅保留对象兼容 UI，一律不再 enable——避免
+            // "音轨存在前 enable 的效果"在效果链迁移时进入半激活状态（起播无 EQ、
+            // 片刻后突变、摩擦音）。PresetReverb 仍承担混响（无增益阶跃风险）。
             if (enabled) {
-                if (soft) {
-                    // 冷启动：标记待软渐变，等调用方在 AudioTrack start 后 softApplyPendingSettings()
-                    sPendingSoftApply = true;
-                    Log.i(TAG, "Audio effects created with NEUTRAL settings, pending soft apply, session ID: "
-                            + audioSessionId);
-                } else {
-                    // 播放中由用户操作创建：立即写入完整参数
-                    sPendingSoftApply = false;
-                    applyFullSettings();
-                    Log.d(TAG, "Audio effects created and fully applied, session ID: " + audioSessionId);
-                }
-            } else {
-                sPendingSoftApply = false;
-                Log.d(TAG, "Audio effects created but disabled, session ID: " + audioSessionId);
+                applyFullSettings();
             }
+            sEqualizer.setEnabled(false);
+            sBassBoost.setEnabled(false);
+            syncReverbEnableState();
+
+            Log.d(TAG, "Audio effects created (EQ/bass in-app, reverbOn="
+                    + (enabled && getReverbPresetSafe() != PresetReverb.PRESET_NONE)
+                    + "), session ID: " + audioSessionId);
         } catch (Exception e) {
             Log.e(TAG, "Failed to create audio effects", e);
             releaseAudioEffects();
         }
     }
 
+    /** 按开关状态与混响预设对齐 PresetReverb 的 enable（EQ 开且预设非 NONE 才启用）。 */
+    public static void syncReverbEnableState() {
+        if (sPresetReverb == null) {
+            return;
+        }
+        short reverbPreset = getReverbPresetSafe();
+        try {
+            sPresetReverb.setPreset(reverbPreset);
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "syncReverbEnableState: invalid reverb preset " + reverbPreset, e);
+            try {
+                sPresetReverb.setPreset(PresetReverb.PRESET_NONE);
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        try {
+            sPresetReverb.setEnabled(Settings.isEqualizerEnabled
+                    && reverbPreset != PresetReverb.PRESET_NONE);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "syncReverbEnableState: setEnabled failed", e);
+        }
+    }
+
+    private static short getReverbPresetSafe() {
+        if (Settings.equalizerModel == null) {
+            return PresetReverb.PRESET_NONE;
+        }
+        return Settings.equalizerModel.getReverbPreset();
+    }
+
     /**
-     * 立即把 Settings 中的完整目标参数写入系统效果（播放中用户交互路径）。
-     * 冷启动路径不要调用本方法——目标参数必须经 softApplyPendingSettings() 渐变。
+     * 立即把 Settings 中的完整目标参数写入系统效果（创建效果链 / 播放中用户交互路径）。
      */
     private static void applyFullSettings() {
         try {
@@ -385,30 +385,6 @@ public class AudioEffectManager {
         }
     }
 
-    /**
-     * 写入完全中性的参数：EQ 各频段 0mB、低音强度 0、混响 NONE（整条链近似直通）。
-     */
-    private static void applyNeutralSettings() {
-        try {
-            short numberOfBands = sEqualizer.getNumberOfBands();
-            for (short i = 0; i < numberOfBands; i++) {
-                sEqualizer.setBandLevel(i, (short) 0);
-            }
-        } catch (RuntimeException e) {
-            Log.e(TAG, "Neutral equalizer apply failed", e);
-        }
-        try {
-            sBassBoost.setStrength((short) 0);
-        } catch (RuntimeException e) {
-            Log.e(TAG, "Neutral bass apply failed", e);
-        }
-        try {
-            sPresetReverb.setPreset(PresetReverb.PRESET_NONE);
-        } catch (RuntimeException e) {
-            Log.e(TAG, "Neutral reverb apply failed", e);
-        }
-    }
-
     private static void releaseAudioEffects() {
         try {
             if (sEqualizer != null) {
@@ -426,7 +402,6 @@ public class AudioEffectManager {
                 sPresetReverb = null;
             }
 
-            sPendingSoftApply = false;
             sRampRunnable = null;
             Log.d(TAG, "Audio effects released");
         } catch (Exception e) {

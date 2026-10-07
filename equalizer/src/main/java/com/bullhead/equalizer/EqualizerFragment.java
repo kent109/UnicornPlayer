@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
+import android.graphics.drawable.Drawable;
 import android.media.audiofx.BassBoost;
 import android.media.audiofx.Equalizer;
 import android.media.audiofx.PresetReverb;
@@ -20,6 +21,7 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckedTextView;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -193,38 +195,10 @@ public class EqualizerFragment extends Fragment {
         }
 
         if (isAudioEffectsAvailable && Settings.isEqualizerEnabled) {
-            bassBoost.setEnabled(true);
-            presetReverb.setEnabled(true);
-            mEqualizer.setEnabled(true);
-            // 冷启动软渐变进行中：系统参数由渐变逐步下发，此处直写会造成音色断层。
-            // 仅 enable（无跳变），UI 仍按 Settings 目标值展示。
-            if (!AudioEffectManager.isRampActive()) {
-                BassBoost.Settings bassBoostSetting;
-                try {
-                    BassBoost.Settings bassBoostSettingTemp = bassBoost.getProperties();
-                    bassBoostSetting = new BassBoost.Settings(bassBoostSettingTemp.toString());
-                } catch (Exception e) {
-                    // 上报日志
-                    Log.e(TAG, "bassBoost.getProperties error:" + e.getMessage());
-                    bassBoostSetting = new BassBoost.Settings();
-                }
-                bassBoostSetting.strength = clampBassStrength(Settings.equalizerModel.getBassStrength());
-                // 同步回 EqualizerModel，确保后续读取也是合法值（修复 bassStrength=-1 导致的 crash）
-                Settings.equalizerModel.setBassStrength(bassBoostSetting.strength);
-                try {
-                    bassBoost.setProperties(bassBoostSetting);
-                } catch (RuntimeException e) {
-                    // setProperties 可能因底层 AudioEffect 状态异常而抛 RuntimeException
-                    Log.e(TAG, "bassBoost.setProperties failed, strength=" + bassBoostSetting.strength, e);
-                }
-
-                try {
-                    presetReverb.setPreset(clampReverbPreset(Settings.equalizerModel.getReverbPreset()));
-                } catch (IllegalArgumentException e) {
-                    Log.e(TAG, "Invalid reverb preset value: " + Settings.equalizerModel.getReverbPreset());
-                    presetReverb.setPreset(PresetReverb.PRESET_NONE);
-                }
-            }
+            // 频段增益与低音已收编进 App 内 AudioProcessor，系统 Equalizer/BassBoost
+            // 一律保持 disable（此处重新 enable 会在 App 内 EQ 之上叠加系统效果，
+            // 双份低频增益导致削波震颤）。仅按 Settings 对齐混响的启用状态。
+            AudioEffectManager.syncReverbEnableState();
         } else if (isAudioEffectsAvailable) { // 已调了全局初始化，但是开关没有打开
             bassBoost.setEnabled(false);
             presetReverb.setEnabled(false);
@@ -251,12 +225,16 @@ public class EqualizerFragment extends Fragment {
                 Settings.seekbarpos = customPreset;
             }
         }
-        // 频段电平交由自研 TenBandEqualizerProcessor 处理（通过桥接回调，无播放时安全空转，
-        // 待音频管线 configure 时生效）；开关关闭时下发全零。
+        // 频段电平与低音交由自研 TenBandEqualizerProcessor 处理（通过桥接回调，无播放时
+        // 安全空转，待音频管线 configure 时生效）；开关关闭时频段与低音一并清零，
+        // 否则低音低架会在 EQ 关闭后继续染色
         if (Settings.isEqualizerEnabled) {
             TenBandEqBridge.applyBandLevels(Settings.seekbarpos);
+            TenBandEqBridge.applyBassStrength(clampBassStrength(
+                    Settings.equalizerModel.getBassStrength()));
         } else {
             TenBandEqBridge.applyBandLevels(new int[NUM_BANDS]);
+            TenBandEqBridge.applyBassStrength(0);
         }
     }
 
@@ -302,29 +280,20 @@ public class EqualizerFragment extends Fragment {
                 setControlsEnabled(isChecked);
             }
             if (isChecked) {
-                // 系统音效对象可能尚未创建（未播放），仅在存在时 enable
-                if (mEqualizer != null) {
-                    mEqualizer.setEnabled(true);
-                }
-                if (bassBoost != null) {
-                    bassBoost.setEnabled(true);
-                }
-                if (presetReverb != null) {
-                    presetReverb.setEnabled(true);
-                }
                 // 打开瞬间从 Settings 重新应用全部值：覆盖"开关未开时导入、之后打开开关"的场景，
                 // 否则音效参数和 seekbar/旋钮都停留在 onCreate/onViewCreated 时的旧值。
-                // 系统参数的写入由 rampToSettings 平滑渐变完成（refreshFromSettingsOnEnable
-                // 检测到渐变活动时不会直写系统对象），避免打开瞬间音色断层
+                // 频段/低音增益由 App 内 AudioProcessor 承担（经 Bridge 下发），混响由
+                // applyBassAndReverbInternal 按需启用；系统 Equalizer/BassBoost 保持 disable。
                 refreshFromSettingsOnEnable();
-                AudioEffectManager.rampToSettings();
             } else {
-                // 关闭开关：自研 10 段 AudioProcessor 显式下发全零电平（内部有系数渐变，
-                // 平滑退出染色；Settings 中的预设值保留，下次打开开关由
-                // refreshFromSettingsOnEnable 恢复）。系统效果走 500ms 渐出回中性后 disable，
-                // 直接 setEnabled(false) 会让增益瞬间消失产生断层
+                // 关闭开关：自研 10 段 AudioProcessor 显式下发全零电平与零低音（内部有
+                // 系数渐变，平滑退出染色；Settings 中的预设值与低音值保留，下次打开开关
+                // 由 refreshFromSettingsOnEnable 恢复）。注意低音低架是处理器内独立的
+                // 第十一个滤波器，只清零频段不会带走低音，必须同时显式下发 0。
+                // 系统效果本就处于 disable 状态，直接统一关闭收尾即可，无增益阶跃可产生
                 TenBandEqBridge.applyBandLevels(new int[NUM_BANDS]);
-                AudioEffectManager.softDisable();
+                TenBandEqBridge.applyBassStrength(0);
+                AudioEffectManager.disableEffects();
             }
         });
 
@@ -405,19 +374,15 @@ public class EqualizerFragment extends Fragment {
             // 用户调节低音旋钮：终止进行中的渐变，以当前手势值为准
             AudioEffectManager.cancelRamp();
             // progress 可能为负（-2 = 指针垂直向下，效果关闭），换算前归一化为 0，
-            // 避免负 strength 传入 BassBoost.setStrength 抛 RuntimeException
+            // 避免负 strength 传入低音低架
             int p = Math.max(progress, 0);
             Settings.bassStrength = (short) (((float) 1000 / 19) * (p));
             Settings.equalizerModel.setBassStrength(Settings.bassStrength);
             Settings.saveBassProgress(ctx, p);
-            // 系统音效未初始化（未播放）时仅持久化，待播放后随效果初始化生效
-            if (bassBoost != null) {
-                try {
-                    bassBoost.setStrength(Settings.bassStrength);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
+            // 低音实际生效路径是 App 内 AudioProcessor 的低音低架滤波器：旋钮拖动
+            // 必须实时经 Bridge 下发（内部 46ms 系数渐变，平滑无爆音）。系统
+            // BassBoost 已 disable，仅写它不会产生任何听感变化。
+            TenBandEqBridge.applyBassStrength(Settings.bassStrength);
         });
 
         reverbController.setOnProgressChangedListener(progress -> {
@@ -486,8 +451,8 @@ public class EqualizerFragment extends Fragment {
                 mLinearLayout.setClipChildren(false);
             }
 
-            // === VerticalSeekBarWrapper（weight，marginTop=20dp，clipChildren=false）===
-            // marginTop=20dp：为顶部 dB 数值 TextView 预留空间。必须放在 wrapper 上而不是
+            // === VerticalSeekBarWrapper（weight，marginTop=10dp，clipChildren=false）===
+            // marginTop=10dp：为顶部 dB 数值 TextView 预留空间。必须放在 wrapper 上而不是
             // seekBar 上——wrapper 的旋转居中算法假定子 View 盒位于 (0,0)，子 View 加 topMargin
             // 会把整根条（含触摸热区）整体下移，最低端落到 wrapper 之外，thumb 虽因
             // clipChildren=false 仍能画出来，但那里收不到触摸事件（表现为拖到底部后再按滑块没反应）。
@@ -495,7 +460,7 @@ public class EqualizerFragment extends Fragment {
             VerticalSeekBarWrapper wrapper = new VerticalSeekBarWrapper(getContext());
             LinearLayout.LayoutParams wrapperParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-            wrapperParams.topMargin = (int) (20 * density);
+            wrapperParams.topMargin = (int) (10 * density);
             wrapper.setLayoutParams(wrapperParams);
             wrapper.setClipChildren(false);
 
@@ -513,7 +478,7 @@ public class EqualizerFragment extends Fragment {
             // 底端取 8dp 让滑块更靠近下方频率标签
             int padLeft = (int) (8 * density);
             int padTop = (int) (10 * density);
-            int padRight = (int) (4 * density);
+            int padRight = (int) (10 * density);
             int padBottom = (int) (10 * density);
             seekBar.setPadding(padLeft, padTop, padRight, padBottom);
             wrapper.addView(seekBar);
@@ -532,15 +497,13 @@ public class EqualizerFragment extends Fragment {
 
             frameLayout.addView(innerLayout);
 
-            // === 值显示 TextView（覆盖在顶部，gravity=center_horizontal|top，padding=4dp）===
+            // === 值显示 TextView（覆盖在顶部，gravity=center_horizontal|top）===
             TextView valueTextView = new TextView(getContext());
             FrameLayout.LayoutParams valueParams = new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             valueParams.gravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
             valueTextView.setLayoutParams(valueParams);
             valueTextView.setGravity(Gravity.CENTER);
-            int pad = (int) (4 * density);
-            valueTextView.setPadding(0, pad, 0, pad);
             valueTextView.setTextColor(getResources().getColor(R.color.text_color, getContext().getTheme()));
             valueTextView.setTextSize(10f);
             frameLayout.addView(valueTextView);
@@ -879,6 +842,9 @@ public class EqualizerFragment extends Fragment {
         boolean rampActive = AudioEffectManager.isRampActive();
         // 直接应用到 BassBoost（强度限制在 [0, 1000]）
         short safeBassStrength = clampBassStrength(bassStrength);
+        // 低音实际生效路径是 App 内 AudioProcessor 的低音低架滤波器（46ms 系数渐变，
+        // 天然平滑），始终直发；系统 BassBoost 已不再 enable，仅同步参数保持 UI 兼容
+        TenBandEqBridge.applyBassStrength(safeBassStrength);
         if (bassBoost != null && !rampActive) {
             try {
                 BassBoost.Settings bassSetting = bassBoost.getProperties();
@@ -888,11 +854,14 @@ public class EqualizerFragment extends Fragment {
                 Log.e(TAG, "applyBassAndReverb: bassBoost.setProperties failed, strength=" + safeBassStrength, e);
             }
         }
-        // 直接应用到 PresetReverb（预设限制在 [0, 6]）
+        // 直接应用到 PresetReverb（预设限制在 [0, 6]）；混响由系统 PresetReverb 承担，
+        // 非 NONE 预设且开关打开时需保持 enable（中途 enable 无增益阶跃风险）
         short safeReverbPreset = clampReverbPreset(reverbPreset);
         if (presetReverb != null && !rampActive) {
             try {
                 presetReverb.setPreset(safeReverbPreset);
+                presetReverb.setEnabled(Settings.isEqualizerEnabled
+                        && safeReverbPreset != PresetReverb.PRESET_NONE);
             } catch (IllegalArgumentException e) {
                 Log.e(TAG, "applyBassAndReverb: invalid reverb preset " + safeReverbPreset, e);
                 presetReverb.setPreset(PresetReverb.PRESET_NONE);
@@ -1013,6 +982,33 @@ public class EqualizerFragment extends Fragment {
         return snapped;
     }
 
+    /**
+     * 预设项高亮色：均衡器开启时取主题 colorPrimary，关闭时与其它控件一致置灰。
+     */
+    private int presetItemHighlightColor() {
+        if (!Settings.isEqualizerEnabled) {
+            return getResources().getColor(R.color.eq_disable_color, requireActivity().getTheme());
+        }
+        TypedValue typedValue = new TypedValue();
+        requireActivity().getTheme().resolveAttribute(
+                com.google.android.material.R.attr.colorPrimary, typedValue, true);
+        return typedValue.resourceId != 0
+                ? getResources().getColor(typedValue.resourceId, requireActivity().getTheme())
+                : typedValue.data;
+    }
+
+    /**
+     * 预设下拉项右侧的对钩图标，按高亮色着色。
+     */
+    private Drawable createCheckMarkDrawable(int color) {
+        Drawable check = ResourcesCompat.getDrawable(getResources(), R.drawable.ic_eq_check,
+                requireActivity().getTheme());
+        if (check != null) {
+            check.setTint(color);
+        }
+        return check;
+    }
+
     public void equalizeSound() {
         // Spinner/曲线构建不依赖系统音效对象（预设表为内置 10 段固定表），
         // 未播放时也要还原上次模式与频响曲线。
@@ -1024,18 +1020,7 @@ public class EqualizerFragment extends Fragment {
             public View getView(int position, View convertView, @NonNull ViewGroup parent) {
                 View view = super.getView(position, convertView, parent);
                 if (view instanceof TextView) {
-                    int color;
-                    if (Settings.isEqualizerEnabled) {
-                        TypedValue typedValue = new TypedValue();
-                        requireActivity().getTheme().resolveAttribute(
-                                com.google.android.material.R.attr.colorPrimary, typedValue, true);
-                        color = typedValue.resourceId != 0
-                                ? getResources().getColor(typedValue.resourceId, requireActivity().getTheme())
-                                : typedValue.data;
-                    } else {
-                        color = getResources().getColor(R.color.eq_disable_color, requireActivity().getTheme());
-                    }
-                    ((TextView) view).setTextColor(color);
+                    ((TextView) view).setTextColor(presetItemHighlightColor());
                 }
                 return view;
             }
@@ -1052,6 +1037,28 @@ public class EqualizerFragment extends Fragment {
                     listView.setVerticalScrollBarEnabled(false);
                     listView.setOverScrollMode(View.OVER_SCROLL_NEVER);
                     listView.setVerticalFadingEdgeEnabled(false);
+                }
+                // 行间分割线：与 app 模块歌曲排序弹层一致（0.8dp 高、左右各缩进 16dp、divider_color）。
+                // 下拉行不能加左右 margin，改用 ListView 的 divider（layer-list 内含 16dp 左右内缩）
+                if (parent instanceof android.widget.ListView) {
+                    android.widget.ListView listView = (android.widget.ListView) parent;
+                    listView.setDivider(ResourcesCompat.getDrawable(getResources(),
+                            R.drawable.eq_dropdown_divider, requireActivity().getTheme()));
+                    // 厚度与 ObservableSpinner 计算弹窗最大高度用的是同一个值
+                    listView.setDividerHeight(ObservableSpinner.dropdownDividerHeightPx(
+                            getResources()));
+                }
+                // 当前使用中的预设：右侧对钩 + 文字高亮；其余项常规文字色、无对钩。
+                // CheckedTextView 的 checkMark 默认 Gravity.END，画在行末右侧
+                if (dropdownView instanceof CheckedTextView) {
+                    CheckedTextView item = (CheckedTextView) dropdownView;
+                    boolean current = position == presetSpinner.getSelectedItemPosition();
+                    int highlight = presetItemHighlightColor();
+                    item.setTextColor(current
+                            ? highlight
+                            : getResources().getColor(R.color.text_color,
+                            requireActivity().getTheme()));
+                    item.setCheckMarkDrawable(current ? createCheckMarkDrawable(highlight) : null);
                 }
                 return dropdownView;
             }
@@ -1308,9 +1315,10 @@ public class EqualizerFragment extends Fragment {
         Log.d(TAG, "refreshAudioEffectsState: effects now available");
 
         boolean enabled = Settings.isEqualizerEnabled;
-        mEqualizer.setEnabled(enabled);
-        bassBoost.setEnabled(enabled);
-        presetReverb.setEnabled(enabled);
+        // 效果对象由 AudioEffectManager 创建时已按 Settings 处理好 enable 状态：
+        // 系统 Equalizer/BassBoost 保持 disable（增益由 App 内 AudioProcessor 承担），
+        // 此处仅再次对齐混响的启用状态
+        AudioEffectManager.syncReverbEnableState();
 
         // 解除遮罩，恢复控件（可用性跟随开关）
         applyEffectsAvailabilityUi();
