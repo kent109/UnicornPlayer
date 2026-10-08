@@ -69,7 +69,7 @@ class EmptyPlaylistActionDialog(
         NewPlaylistDialog(
             context = activity,
             initialName = "",
-            onConfirm = { name ->
+            onConfirm = { name, _ ->
                 val trimmed = name.trim()
                 if (trimmed.isNotEmpty()) {
                     val repository = MusicRepository(activity)

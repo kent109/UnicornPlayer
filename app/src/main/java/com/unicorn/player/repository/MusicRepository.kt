@@ -9,11 +9,13 @@ import android.provider.MediaStore
 import androidx.core.net.toUri
 import com.unicorn.player.ScanFilterActivity
 import com.unicorn.player.database.MusicDatabase
+import com.unicorn.player.model.Cover
 import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.PlaylistSong
 import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
 import com.unicorn.player.scanFiltersDataStore
+import com.unicorn.player.util.CoverStore
 import com.unicorn.player.util.PlaylistFileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -30,6 +32,7 @@ class MusicRepository(private val context: Context) {
     private val database = MusicDatabase.getDatabase(context)
     private val songDao = database.songDao()
     private val playlistDao = database.playlistDao()
+    private val coverDao = database.coverDao()
 
     suspend fun scanMusicFiles(config: ScanFilterConfig = ScanFilterConfig()): List<Song> = withContext(Dispatchers.IO) {
         val newSongs = mutableListOf<Song>()
@@ -426,9 +429,10 @@ class MusicRepository(private val context: Context) {
             playlistDao.countByName(name, excludeId) > 0
         }
 
-    suspend fun createPlaylist(name: String): Long = withContext(Dispatchers.IO) {
-        playlistDao.insertPlaylist(Playlist(name = name))
-    }
+    suspend fun createPlaylist(name: String, coverPath: String = ""): Long =
+        withContext(Dispatchers.IO) {
+            playlistDao.insertPlaylist(Playlist(name = name, coverPath = coverPath))
+        }
 
     /**
      * 按歌单名查询歌单（大小写无关），找不到返回 null
@@ -457,8 +461,57 @@ class MusicRepository(private val context: Context) {
         result
     }
 
-    suspend fun renamePlaylist(id: Long, name: String) = withContext(Dispatchers.IO) {
-        playlistDao.updatePlaylistName(id, name, System.currentTimeMillis())
+    suspend fun renamePlaylist(id: Long, name: String, coverPath: String? = null) =
+        withContext(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            if (coverPath != null) {
+                playlistDao.updatePlaylistNameAndCover(id, name, coverPath, now)
+            } else {
+                playlistDao.updatePlaylistName(id, name, now)
+            }
+        }
+
+    // ==================== 封面（歌手/专辑/歌单图片） ====================
+
+    fun getAllCovers() = coverDao.getAllCovers()
+
+    suspend fun upsertCover(cover: Cover) = withContext(Dispatchers.IO) {
+        coverDao.upsertCover(cover)
+    }
+
+    /**
+     * 恢复默认图片：删除歌手/专辑的封面记录并删除其副本文件。
+     * covers Flow 会自动驱动列表回退为默认图标。
+     */
+    suspend fun deleteCover(type: Int, name: String, coverPath: String) =
+        withContext(Dispatchers.IO) {
+            coverDao.deleteCover(type, name)
+            if (coverPath.isNotEmpty()) {
+                runCatching { File(coverPath).delete() }
+            }
+        }
+
+    /**
+     * 清理悬空封面记录：数据库记录的图片文件已不存在时，删除记录并尝试清理残留文件。
+     * 在封面加载完成后调用，保证列表回退为默认图标。
+     */
+    suspend fun cleanupMissingCovers() = withContext(Dispatchers.IO) {
+        var removed = false
+        coverDao.getAllCovers().first().forEach { cover ->
+            if (!File(cover.coverPath).exists()) {
+                coverDao.deleteCover(cover.type, cover.name)
+                removed = true
+            }
+        }
+        playlistDao.getAllPlaylists().first().forEach { playlist ->
+            val path = playlist.coverPath
+            if (path.isNotEmpty() && !File(path).exists()) {
+                playlistDao.updatePlaylistCoverPath(playlist.id, "")
+                runCatching { File(path).delete() }
+                removed = true
+            }
+        }
+        removed
     }
 
     suspend fun deletePlaylistById(id: Long) = withContext(Dispatchers.IO) {
@@ -467,6 +520,11 @@ class MusicRepository(private val context: Context) {
         // 需要完整 Playlist 对象供 @Delete，此处先取再删
         val pl = getPlaylistById(id) ?: return@withContext
         playlistDao.deletePlaylist(pl)
+        // 删除歌单封面副本及同组残留候选图
+        if (pl.coverPath.isNotEmpty()) {
+            runCatching { File(pl.coverPath).delete() }
+            CoverStore.cleanupPlaylistCoverGroup(context, id, keepPath = "")
+        }
         // 同步删除该歌单的导出文件（无授权/文件不存在时静默跳过）
         PlaylistFileManager.deleteExport(context, id)
     }

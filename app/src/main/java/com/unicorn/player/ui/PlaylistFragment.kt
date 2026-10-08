@@ -26,7 +26,10 @@ import com.unicorn.player.adapter.PlaylistAdapter
 import com.unicorn.player.adapter.SelectableImportPlaylistAdapter
 import com.unicorn.player.databinding.DialogPlaylistImportBinding
 import com.unicorn.player.databinding.FragmentPlaylistBinding
+import com.unicorn.player.model.Cover
 import com.unicorn.player.repository.MusicRepository
+import com.unicorn.player.util.CoverStore
+import com.unicorn.player.util.ImagePicker
 import com.unicorn.player.util.PlayHelper
 import com.unicorn.player.util.PlaylistFileManager
 import com.unicorn.player.viewmodel.PlaylistViewModel
@@ -59,6 +62,22 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
      */
     private lateinit var playlistSongsLauncher: ActivityResultLauncher<Intent>
 
+    /** 歌单封面系统选择器 */
+    private lateinit var coverPickerLauncher: ActivityResultLauncher<Intent>
+
+    /** 当前显示中的新建/编辑歌单弹窗（选图返回后刷新其封面预览） */
+    private var activeDialog: NewPlaylistDialog? = null
+
+    /** 发起选图时弹窗对应的歌单 id（-1 表示新建模式），用于副本分组命名 */
+    private var pendingCoverEditId: Long = -1L
+
+    companion object {
+        fun newInstance() = PlaylistFragment()
+
+        /** 歌单封面副本的分组键类型（CoverStore 中映射为 "playlist_" 前缀） */
+        private const val COVER_TYPE_PLAYLIST = 2
+    }
+
     /** SAF 授权完成后的待执行操作；NONE 表示没有挂起的操作。 */
     private var pendingAction: PendingAction = PendingAction.NONE
 
@@ -82,10 +101,6 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         }
     }
 
-    companion object {
-        fun newInstance() = PlaylistFragment()
-    }
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -98,11 +113,16 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setupPlaylistSongsLauncher()
+        setupCoverPickerLauncher()
         setupViewModel()
         setupRecyclerView()
         setupSwipeRefresh()
         setupFab()
         observeData()
+        // 悬空封面记录兜底清理（副本文件缺失时回退默认图标并清除记录）
+        viewLifecycleOwner.lifecycleScope.launch {
+            MusicRepository(requireContext()).cleanupMissingCovers()
+        }
     }
 
     override fun onStart() {
@@ -120,6 +140,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        activeDialog = null
         binding.recyclerView.adapter = null
         _binding = null
     }
@@ -540,13 +561,24 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         }
     }
 
-    private fun showNewPlaylistDialog(initialName: String = "", editId: Long = -1L) {
+    private fun showNewPlaylistDialog(
+        initialName: String = "",
+        editId: Long = -1L,
+        initialCoverPath: String = ""
+    ) {
         val isRename = editId != -1L
         NewPlaylistDialog(
             context = requireContext(),
             initialName = initialName,
+            initialCoverPath = initialCoverPath,
+            // 点击「修改」：弹窗不关闭，跳系统选图；结果回来后经 activeDialog.updateCover 刷新预览
+            onEditCover = { dialog ->
+                activeDialog = dialog
+                pendingCoverEditId = editId
+                coverPickerLauncher.launch(ImagePicker.createIntent(requireContext()))
+            },
             // 在 [onDuplicate] 里关闭对话框，避免先关闭再弹 Toast 的歧义
-            onConfirm = { name ->
+            onConfirm = { name, coverPath ->
                 // 统一在 ViewModel 内部 [trim] + 校验同名；同名时调用 [onDuplicate] 弹 Toast，
                 // 写库成功后 ViewModel 内部会自动 refreshPlaylistsInternal()，这里无需手动刷新。
                 val duplicateHandler: () -> Unit = {
@@ -560,12 +592,68 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
                     }
                 }
                 if (isRename) {
-                    viewModel.renamePlaylist(editId, name, duplicateHandler)
+                    val coverChanged =
+                        if (coverPath == initialCoverPath) null else coverPath
+                    viewModel.renamePlaylist(
+                        editId, name, coverChanged, duplicateHandler,
+                        onRenamed = {
+                            if (coverChanged != null) {
+                                CoverStore.cleanupPlaylistCoverGroup(
+                                    requireContext(), editId, keepPath = coverChanged
+                                )
+                            }
+                        }
+                    )
                 } else {
-                    viewModel.createPlaylist(name, duplicateHandler)
+                    // 写库后再整组清理该新歌单的临时副本组（含刚入库的路径本身会被
+                    // 保留：仅删除同前缀的其它候选图）
+                    viewModel.createPlaylist(
+                        name, coverPath, duplicateHandler,
+                        onCreated = { newId ->
+                            if (coverPath.isNotEmpty()) {
+                                CoverStore.cleanupPlaylistCoverGroup(
+                                    requireContext(), newId, keepPath = coverPath
+                                )
+                            }
+                        }
+                    )
                 }
             }
         ).show()
+    }
+
+    /**
+     * 歌单封面选择器：选图完成后写入私有目录副本；弹窗仍打开时刷新预览，
+     * 未点确定则不写库（候选副本由确认时的整组清理兜底）。
+     */
+    private fun setupCoverPickerLauncher() {
+        coverPickerLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            val editId = pendingCoverEditId
+            pendingCoverEditId = -1L
+            val uri = if (result.resultCode == Activity.RESULT_OK) {
+                ImagePicker.extractUri(result.data)
+            } else null
+            if (uri == null) return@registerForActivityResult
+            val saved = CoverStore.saveCover(
+                requireContext(), uri, COVER_TYPE_PLAYLIST, "p$editId"
+            )
+            if (saved == null) {
+                Toast.makeText(requireContext(), "图片读取失败，请重试", Toast.LENGTH_SHORT).show()
+                return@registerForActivityResult
+            }
+            val (_, path) = saved
+            val current = activeDialog
+            if (current == null || view == null || !current.isShowing()) {
+                // 弹窗已关闭：候选副本不写库，按组清理避免残留
+                CoverStore.cleanupPlaylistCoverGroup(
+                    requireContext(), editId, keepPath = ""
+                )
+                return@registerForActivityResult
+            }
+            current.updateCover(path)
+        }
     }
 
     // ==================== OnPlaylistClickListener ====================
@@ -584,7 +672,11 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         playlist: PlaylistViewModel.PlaylistInfo,
         position: Int
     ) {
-        showNewPlaylistDialog(initialName = playlist.name, editId = playlist.id)
+        showNewPlaylistDialog(
+            initialName = playlist.name,
+            editId = playlist.id,
+            initialCoverPath = playlist.coverPath
+        )
     }
 
     override fun onDeleteClicked(

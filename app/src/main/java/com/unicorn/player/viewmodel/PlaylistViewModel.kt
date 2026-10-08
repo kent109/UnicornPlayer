@@ -40,6 +40,7 @@ class PlaylistViewModel(
         val id: Long,
         val name: String,
         val icon: String,
+        val coverPath: String,
         val createdAt: Long,
         val updatedAt: Long,
         var songCount: Int,
@@ -192,6 +193,7 @@ class PlaylistViewModel(
         id = id,
         name = name,
         icon = icon,
+        coverPath = coverPath,
         createdAt = createdAt,
         updatedAt = updatedAt,
         songCount = songCount,
@@ -204,7 +206,12 @@ class PlaylistViewModel(
      * @param name 歌单名（会被 trim，空串视为不允许）
      * @param onDuplicate 当 [name] 已存在时调用；用于 Fragment 弹 Toast
      */
-    fun createPlaylist(name: String, onDuplicate: (() -> Unit)? = null) {
+    fun createPlaylist(
+        name: String,
+        coverPath: String = "",
+        onDuplicate: (() -> Unit)? = null,
+        onCreated: ((Long) -> Unit)? = null
+    ) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
@@ -213,7 +220,8 @@ class PlaylistViewModel(
                     onDuplicate?.invoke()
                     return@launch
                 }
-                repository.createPlaylist(trimmed)
+                val newId = repository.createPlaylist(trimmed, coverPath)
+                if (newId > 0) onCreated?.invoke(newId)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -223,8 +231,15 @@ class PlaylistViewModel(
 
     /**
      * 重命名歌单；除自身外存在同名时，回调 [onDuplicate] 而不写库。
+     * [coverPath] 非 null 时同时更新封面路径，写库成功后回调 [onRenamed]。
      */
-    fun renamePlaylist(id: Long, name: String, onDuplicate: (() -> Unit)? = null) {
+    fun renamePlaylist(
+        id: Long,
+        name: String,
+        coverPath: String? = null,
+        onDuplicate: (() -> Unit)? = null,
+        onRenamed: (() -> Unit)? = null
+    ) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
@@ -233,7 +248,8 @@ class PlaylistViewModel(
                     onDuplicate?.invoke()
                     return@launch
                 }
-                repository.renamePlaylist(id, trimmed)
+                repository.renamePlaylist(id, trimmed, coverPath)
+                onRenamed?.invoke()
             } catch (e: Exception) {
                 e.printStackTrace()
             }

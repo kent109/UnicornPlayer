@@ -22,7 +22,9 @@ class ArtistInfoDialog(
     private val context: Context,
     private val artist: Artist,
     private val onAddToPlaylist: () -> Unit,
-    private val onPlay: (() -> Unit)? = null
+    private val onPlay: (() -> Unit)? = null,
+    private val onEditCover: (() -> Unit)? = null,
+    private val onResetCover: (() -> Unit)? = null
 ) {
 
     companion object {
@@ -73,6 +75,25 @@ class ArtistInfoDialog(
             ) {
                 bottomSheetDialog.dismiss()
                 onAddToPlaylist()
+            }
+
+            if (onEditCover != null) {
+                addClickableItem(
+                    infoContainer, "修改头像", R.color.disc_playing_color_2
+                ) {
+                    bottomSheetDialog.dismiss()
+                    onEditCover()
+                }
+            }
+
+            // 仅当前为自定义图片时才提供「默认头像」
+            if (onResetCover != null && artist.coverPath.isNotEmpty()) {
+                addClickableItem(
+                    infoContainer, "默认头像", R.color.primary
+                ) {
+                    bottomSheetDialog.dismiss()
+                    onResetCover()
+                }
             }
         }
 
@@ -174,6 +195,10 @@ class ArtistInfoDialog(
             "删除" -> R.drawable.ic_delete
             "播放" -> R.drawable.ic_play2
             "歌曲数量" -> R.drawable.ic_count_s
+            "修改头像" -> R.drawable.ic_edit2
+            "修改封面" -> R.drawable.ic_edit2
+            "默认头像" -> R.drawable.ic_reset
+            "默认封面" -> R.drawable.ic_reset
             else -> null
         }
         if (res != null) {

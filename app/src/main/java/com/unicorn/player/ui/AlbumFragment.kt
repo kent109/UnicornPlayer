@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.AlbumSongsActivity
@@ -23,14 +24,18 @@ import com.unicorn.player.adapter.AlbumAdapter
 import com.unicorn.player.adapter.HeaderSpacerAdapter
 import com.unicorn.player.databinding.FragmentAlbumBinding
 import com.unicorn.player.model.Album
+import com.unicorn.player.model.Cover
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.ui.SongsFragment.SongListHost
+import com.unicorn.player.util.CoverStore
+import com.unicorn.player.util.ImagePicker
 import com.unicorn.player.util.PlayHelper
 import com.unicorn.player.util.PlaylistHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import com.unicorn.player.viewmodel.PlaylistViewModel
 import com.unicorn.player.viewmodel.PlaylistViewModelFactory
+import kotlinx.coroutines.launch
 
 /**
  * 专辑标签页 Fragment，按专辑名拼音首字母分组展示专辑列表。
@@ -44,12 +49,23 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
 
     private var host: SongListHost? = null
 
+    private lateinit var repository: MusicRepository
+
     private lateinit var viewModel: MusicViewModel
 
     private lateinit var playlistViewModel: PlaylistViewModel
 
     private lateinit var playlistSongsLauncher: ActivityResultLauncher<Intent>
     private lateinit var albumAdapter: AlbumAdapter
+
+    /** 系统图片选择器：选图完成后写入封面副本并更新数据库 */
+    private lateinit var coverPickerLauncher: ActivityResultLauncher<Intent>
+
+    /** 当前正在修改封面的专辑分组键（lowercase 名） */
+    private var pendingCoverKey: String? = null
+
+    /** 歌手/专辑封面记录，按 "artist_"/"album_" + lowercase 名索引 */
+    private var coverMap: Map<String, String> = emptyMap()
 
     /** 延迟恢复 ViewPager 的主线程 Handler，避免在字母选择回调里直接恢复导致手势冲突 */
     private val handler = Handler(Looper.getMainLooper())
@@ -86,6 +102,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
         setupViewModel()
         setupRecyclerView()
         setupPlaylistSongsLauncher()
+        setupCoverPickerLauncher()
         observeCurrentPlaying()
     }
 
@@ -106,7 +123,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     }
 
     private fun setupViewModel() {
-        val repository = MusicRepository(requireContext())
+        repository = MusicRepository(requireContext())
         val factory = MusicViewModelFactory(repository, requireContext())
         viewModel = ViewModelProvider(requireActivity(), factory)[MusicViewModel::class.java]
 
@@ -125,6 +142,15 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
             } else {
                 binding.emptyView.visibility = View.GONE
                 setWaveSideBarVisible(true)
+            }
+        }
+        // covers 表变化（修改封面）时自动重新提交列表
+        viewLifecycleOwner.lifecycleScope.launch {
+            repository.getAllCovers().collect { covers ->
+                coverMap = covers.associate {
+                    (CoverStore.coverKeyPrefix(it.type) + it.name) to it.coverPath
+                }
+                viewModel.albums.value?.let { submitAlbumItems(it) }
             }
         }
     }
@@ -155,6 +181,44 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
                 // 歌单内歌曲有改动 → 主动刷新列表（更新歌曲数量、更新时间）
                 playlistViewModel.refreshPlaylists()
             }
+        }
+    }
+
+    private fun setupCoverPickerLauncher() {
+        coverPickerLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            val key = pendingCoverKey
+            pendingCoverKey = null
+            val uri = if (result.resultCode == Activity.RESULT_OK) {
+                ImagePicker.extractUri(result.data)
+            } else null
+            if (uri == null || key == null) return@registerForActivityResult
+            val oldPath = coverMap[CoverStore.coverKeyPrefix(Cover.TYPE_ALBUM) + key] ?: ""
+            val saved = CoverStore.saveCover(
+                requireContext(), uri, Cover.TYPE_ALBUM, key
+            )
+            if (saved == null) {
+                Toast.makeText(requireContext(), "图片读取失败，请重试", Toast.LENGTH_SHORT).show()
+                return@registerForActivityResult
+            }
+            val (prefix, path) = saved
+            viewLifecycleOwner.lifecycleScope.launch {
+                repository.upsertCover(Cover(Cover.TYPE_ALBUM, key, path))
+                if (oldPath.isNotEmpty()) {
+                    CoverStore.deletePrevious(requireContext(), prefix, keepPath = path)
+                }
+            }
+        }
+    }
+
+    /** 恢复默认封面：删除封面记录与副本文件，covers Flow 会自动刷新列表 */
+    private fun resetAlbumCover(albumName: String) {
+        val key = albumName.lowercase()
+        val path = coverMap[CoverStore.coverKeyPrefix(Cover.TYPE_ALBUM) + key] ?: ""
+        if (path.isEmpty()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            repository.deleteCover(Cover.TYPE_ALBUM, key, path)
         }
     }
 
@@ -224,6 +288,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     private fun submitAlbumItems(albums: List<Album>) {
         val items = mutableListOf<AlbumAdapter.AlbumListItem>()
         val indexMap = LinkedHashMap<String, Int>()
+        val albumPrefix = CoverStore.coverKeyPrefix(Cover.TYPE_ALBUM)
 
         // 列表已按首字母有序，遇到新字母即插入 Header
         var currentLetter: String? = null
@@ -233,7 +298,10 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
                 indexMap[currentLetter] = items.size
                 items.add(AlbumAdapter.AlbumListItem.Header(currentLetter))
             }
-            items.add(AlbumAdapter.AlbumListItem.Item(album))
+            val coverPath = coverMap[albumPrefix + album.name.lowercase()] ?: ""
+            items.add(
+                AlbumAdapter.AlbumListItem.Item(album.copy(coverPath = coverPath))
+            )
         }
         letterIndexMap = indexMap
 
@@ -280,6 +348,13 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
                     albumName = album.name,
                     songs = sortedAlbumSongs
                 )
+            },
+            onEditCover = {
+                pendingCoverKey = album.name.lowercase()
+                coverPickerLauncher.launch(ImagePicker.createIntent(requireContext()))
+            },
+            onResetCover = {
+                resetAlbumCover(album.name)
             }
         ).show()
     }
@@ -309,11 +384,16 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
         // 取消进行中的动画，避免显隐快速切换时互相覆盖
         sideBar.animate().cancel()
         if (visible) {
+            // 已完全显示时直接跳过：onResume（如相册选图返回）重复调用不再重播淡入，
+            // 否则索引条会先置 0 透明度再淡入，表现为闪烁一下
+            if (sideBar.visibility == View.VISIBLE && sideBar.alpha == 1f) return
             // 先可见再以淡入动画显现
             sideBar.visibility = View.VISIBLE
             sideBar.alpha = 0f
             sideBar.animate().alpha(1f).setDuration(ALPHA_ANIM_DURATION_SHOW_MS).start()
         } else {
+            // 已在隐藏过程中或已隐藏，无需重复淡出
+            if (sideBar.visibility == View.GONE && sideBar.alpha == 0f) return
             // 淡出动画结束后再设为 GONE
             sideBar.animate().alpha(0f).setDuration(ALPHA_ANIM_DURATION_HIDE_MS).withEndAction {
                 sideBar.visibility = View.GONE

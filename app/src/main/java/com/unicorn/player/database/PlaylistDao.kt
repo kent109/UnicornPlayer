@@ -95,4 +95,16 @@ interface PlaylistDao {
      */
     @Query("UPDATE playlists SET name = :name, updatedAt = :updatedAt WHERE id = :id")
     fun updatePlaylistName(id: Long, name: String, updatedAt: Long): Int
+
+    /**
+     * 重命名歌单并更新封面路径、刷新更新时间
+     */
+    @Query("UPDATE playlists SET name = :name, coverPath = :coverPath, updatedAt = :updatedAt WHERE id = :id")
+    fun updatePlaylistNameAndCover(id: Long, name: String, coverPath: String, updatedAt: Long): Int
+
+    /**
+     * 仅更新封面路径（不刷新 updatedAt）
+     */
+    @Query("UPDATE playlists SET coverPath = :coverPath WHERE id = :id")
+    fun updatePlaylistCoverPath(id: Long, coverPath: String)
 }

@@ -7,11 +7,13 @@ package com.unicorn.player.model
  * @param songCount 该专辑的歌曲数量
  * @param songList 该专辑的歌曲列表
  * @param firstLetter 专辑名首字母分组（A-Z / #），由 ViewModel 后台计算后携带，避免 Fragment 重复算拼音
+ * @param coverPath 用户自定义封面的本地副本路径，空串表示使用默认图标
  */
 data class Album(
     val name: String,
     val artist: String,
     var songCount: Int,
     val songList: MutableList<Song> = mutableListOf(),
-    val firstLetter: String = ""
+    val firstLetter: String = "",
+    val coverPath: String = ""
 )

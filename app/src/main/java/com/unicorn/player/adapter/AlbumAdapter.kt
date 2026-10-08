@@ -9,6 +9,7 @@ import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemAlbumBinding
 import com.unicorn.player.databinding.ItemAlbumHeaderBinding
 import com.unicorn.player.model.Album
+import com.unicorn.player.util.CoverImage
 
 /**
  * 专辑列表适配器，展示按首字母分组的专辑。
@@ -84,17 +85,17 @@ class AlbumAdapter(
                 tvAlbumSubtitle.text = "${album.artist} - ${album.songCount} 首"
 
                 val isPlaying = album.name == currentPlayingAlbum
+                CoverImage.bind(
+                    ivAlbumIcon, album.coverPath, isPlaying, R.drawable.album_icon,
+                    imageInsetDp = 6
+                )
                 if (isPlaying) {
                     val highlightColor = ThemeSettingActivity.resolveHighlightColor(
                         ivAlbumIcon.context
                     )
-                    ivAlbumIcon.isSelected = true
-                    ivAlbumIcon.setColorFilter(highlightColor)
                     tvAlbumName.setTextColor(highlightColor)
                     tvAlbumSubtitle.setTextColor(highlightColor)
                 } else {
-                    ivAlbumIcon.isSelected = false
-                    ivAlbumIcon.clearColorFilter()
                     tvAlbumName.setTextColor(
                         ContextCompat.getColor(
                             tvAlbumName.context,

@@ -9,16 +9,18 @@ import android.content.Context
 import com.unicorn.player.model.Song
 import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.PlaylistSong
+import com.unicorn.player.model.Cover
 
 @Database(
-    entities = [Song::class, Playlist::class, PlaylistSong::class],
-    version = 4,
+    entities = [Song::class, Playlist::class, PlaylistSong::class, Cover::class],
+    version = 5,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
 
     abstract fun songDao(): SongDao
     abstract fun playlistDao(): PlaylistDao
+    abstract fun coverDao(): CoverDao
 
     companion object {
         @Volatile
@@ -34,6 +36,20 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 版本 4 → 5：playlists 表新增 coverPath 列；新增 covers 表（歌手/专辑自定义封面）
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE playlists ADD COLUMN coverPath TEXT NOT NULL DEFAULT ''")
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `covers` (" +
+                        "`type` INTEGER NOT NULL, `name` TEXT NOT NULL, " +
+                        "`coverPath` TEXT NOT NULL, PRIMARY KEY(`type`, `name`))"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): MusicDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -41,7 +57,7 @@ abstract class MusicDatabase : RoomDatabase() {
                     MusicDatabase::class.java,
                     "music_database"
                 )
-                    .addMigrations(MIGRATION_3_4) // 增量迁移，不清库
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5) // 增量迁移，不清库
                     .fallbackToDestructiveMigration() // 允许破坏性迁移（兜底）
                     .build()
                 INSTANCE = instance

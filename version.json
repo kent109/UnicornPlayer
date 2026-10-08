@@ -1,5 +1,5 @@
 {
-  "versionCode": 36,
-  "versionName": "1.3.4",
-  "changelog": "均衡器问题优化\n歌曲弹窗图标"
+  "versionCode": 37,
+  "versionName": "1.3.5",
+  "changelog": "删除歌曲扫描逻辑优化\n自定歌手专辑歌单图标"
 }

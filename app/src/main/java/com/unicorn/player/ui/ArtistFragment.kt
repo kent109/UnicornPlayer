@@ -3,6 +3,7 @@ package com.unicorn.player.ui
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -13,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.ArtistSongsActivity
@@ -20,9 +22,12 @@ import com.unicorn.player.adapter.ArtistAdapter
 import com.unicorn.player.adapter.HeaderSpacerAdapter
 import com.unicorn.player.databinding.FragmentArtistBinding
 import com.unicorn.player.model.Artist
+import com.unicorn.player.model.Cover
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.ui.SongsFragment.SongListHost
+import com.unicorn.player.util.CoverStore
+import com.unicorn.player.util.ImagePicker
 import com.unicorn.player.util.PinyinUtil
 import com.unicorn.player.util.PlayHelper
 import com.unicorn.player.util.PlaylistHelper
@@ -30,6 +35,7 @@ import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import com.unicorn.player.viewmodel.PlaylistViewModel
 import com.unicorn.player.viewmodel.PlaylistViewModelFactory
+import kotlinx.coroutines.launch
 
 /**
  * 歌手标签页 Fragment，按歌手名分组显示歌曲数量
@@ -41,12 +47,23 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
 
     private var host: SongListHost? = null
 
+    private lateinit var repository: MusicRepository
+
     private lateinit var viewModel: MusicViewModel
 
     private lateinit var playlistViewModel: PlaylistViewModel
 
     private lateinit var playlistSongsLauncher: ActivityResultLauncher<Intent>
     private lateinit var artistAdapter: ArtistAdapter
+
+    /** 系统图片选择器：选图完成后写入封面副本并更新数据库 */
+    private lateinit var coverPickerLauncher: ActivityResultLauncher<Intent>
+
+    /** 当前正在修改封面的歌手分组键（lowercase 名） */
+    private var pendingCoverKey: String? = null
+
+    /** 歌手/专辑封面记录，按分组键索引（key = "artist_"/"album_" + lowercase 名） */
+    private var coverMap: Map<String, String> = emptyMap()
 
     companion object {
         fun newInstance() = ArtistFragment()
@@ -67,6 +84,7 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
         setupViewModel()
         setupRecyclerView()
         setupPlaylistSongsLauncher()
+        setupCoverPickerLauncher()
         observeCurrentPlaying()
     }
 
@@ -77,7 +95,7 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
     }
 
     private fun setupViewModel() {
-        val repository = MusicRepository(requireContext())
+        repository = MusicRepository(requireContext())
         val factory = MusicViewModelFactory(repository, requireContext())
         viewModel = ViewModelProvider(requireActivity(), factory)[MusicViewModel::class.java]
 
@@ -94,6 +112,53 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
             } else {
                 binding.emptyView.visibility = View.GONE
             }
+        }
+        // covers 表变化（修改头像）时自动重新提交列表
+        viewLifecycleOwner.lifecycleScope.launch {
+            repository.getAllCovers().collect { covers ->
+                coverMap = covers.associate {
+                    (CoverStore.coverKeyPrefix(it.type) + it.name) to it.coverPath
+                }
+                viewModel.allSongs.value?.let { submitArtists(it) }
+            }
+        }
+    }
+
+    private fun setupCoverPickerLauncher() {
+        coverPickerLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            val key = pendingCoverKey
+            pendingCoverKey = null
+            val uri = if (result.resultCode == Activity.RESULT_OK) {
+                ImagePicker.extractUri(result.data)
+            } else null
+            if (uri == null || key == null) return@registerForActivityResult
+            val oldPath = coverMap["artist_$key"] ?: ""
+            val saved = CoverStore.saveCover(
+                requireContext(), uri, Cover.TYPE_ARTIST, key
+            )
+            if (saved == null) {
+                Toast.makeText(requireContext(), "图片读取失败，请重试", Toast.LENGTH_SHORT).show()
+                return@registerForActivityResult
+            }
+            val (prefix, path) = saved
+            viewLifecycleOwner.lifecycleScope.launch {
+                repository.upsertCover(Cover(Cover.TYPE_ARTIST, key, path))
+                if (oldPath.isNotEmpty()) {
+                    CoverStore.deletePrevious(requireContext(), prefix, keepPath = path)
+                }
+            }
+        }
+    }
+
+    /** 恢复默认头像：删除封面记录与副本文件，covers Flow 会自动刷新列表 */
+    private fun resetArtistCover(artistName: String) {
+        val key = artistName.lowercase()
+        val path = coverMap["artist_$key"] ?: ""
+        if (path.isEmpty()) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            repository.deleteCover(Cover.TYPE_ARTIST, key, path)
         }
     }
 
@@ -185,7 +250,8 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
                 name = displayCase[key] ?: key,
                 pinyinName = PinyinUtil.getPinyinString(displayCase[key] ?: key),
                 songCount = count,
-                songList = songList
+                songList = songList,
+                coverPath = coverMap["artist_$key"] ?: ""
             )
         }.sortedBy { it.pinyinName }
         artistAdapter.submitList(artists)
@@ -233,6 +299,13 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
                     artistName = artist.name,
                     songs = sortedArtistSongs
                 )
+            },
+            onEditCover = {
+                pendingCoverKey = artist.name.lowercase()
+                coverPickerLauncher.launch(ImagePicker.createIntent(requireContext()))
+            },
+            onResetCover = {
+                resetArtistCover(artist.name)
             }
         ).show()
     }

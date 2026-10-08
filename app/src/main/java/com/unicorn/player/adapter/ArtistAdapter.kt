@@ -10,6 +10,7 @@ import com.unicorn.player.R
 import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemArtistBinding
 import com.unicorn.player.model.Artist
+import com.unicorn.player.util.CoverImage
 
 class ArtistAdapter(
     private val listener: OnArtistClickListener
@@ -53,17 +54,17 @@ class ArtistAdapter(
                 tvSongCount.text = "${artist.songCount} 首"
 
                 val isPlaying = artist.name == currentPlayingArtist
+                CoverImage.bind(
+                    ivArtistIcon, artist.coverPath, isPlaying, R.drawable.artist_icon,
+                    imageInsetDp = 6
+                )
                 if (isPlaying) {
                     val highlightColor = ThemeSettingActivity.resolveHighlightColor(
                         ivArtistIcon.context
                     )
-                    ivArtistIcon.isSelected = true
-                    ivArtistIcon.setColorFilter(highlightColor)
                     tvArtistName.setTextColor(highlightColor)
                     tvSongCount.setTextColor(highlightColor)
                 } else {
-                    ivArtistIcon.isSelected = false
-                    ivArtistIcon.clearColorFilter()
                     tvArtistName.setTextColor(
                         ContextCompat.getColor(
                             tvArtistName.context,
