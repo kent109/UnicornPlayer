@@ -34,6 +34,7 @@ import com.unicorn.player.ui.EmptyPlaylistActionDialog
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.util.AudioTagEditor
+import com.unicorn.player.util.ScreenCornerUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -401,7 +402,11 @@ class PlayerFragment : Fragment() {
             behavior.isHideable = true
             behavior.skipCollapsed = true
 
-            val cornerRadius = 32f * designBottomSheet.resources.displayMetrics.density
+            val cornerRadius =
+                ScreenCornerUtil.getCornerRadiusPx(
+                    designBottomSheet.context,
+                    ScreenCornerUtil.SHEET_FALLBACK_CORNER_DP
+                )
             val drawable = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 setColor(designBottomSheet.context.getColor(R.color.surface))
@@ -473,7 +478,11 @@ class PlayerFragment : Fragment() {
             behavior.isHideable = true
             behavior.skipCollapsed = true
 
-            val cornerRadius = 32f * designBottomSheet.resources.displayMetrics.density
+            val cornerRadius =
+                ScreenCornerUtil.getCornerRadiusPx(
+                    designBottomSheet.context,
+                    ScreenCornerUtil.SHEET_FALLBACK_CORNER_DP
+                )
             val drawable = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 setColor(designBottomSheet.context.getColor(R.color.surface))

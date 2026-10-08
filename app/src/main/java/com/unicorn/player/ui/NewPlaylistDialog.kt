@@ -7,6 +7,7 @@ import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.unicorn.player.R
 import com.unicorn.player.databinding.DialogNewPlaylistBinding
+import com.unicorn.player.util.ScreenCornerUtil
 
 /**
  * 新建 / 编辑歌单 底部弹窗
@@ -51,7 +52,11 @@ class NewPlaylistDialog(
             // 用 GradientDrawable 替代 MaterialShapeDrawable，防止拖拽时圆角被动画化为 0
             val designBottomSheet = findViewById<android.view.ViewGroup>(com.google.android.material.R.id.design_bottom_sheet)
             designBottomSheet?.post {
-                val cornerRadius = 32f * designBottomSheet.resources.displayMetrics.density
+                val cornerRadius =
+                    ScreenCornerUtil.getCornerRadiusPx(
+                        designBottomSheet.context,
+                        ScreenCornerUtil.SHEET_FALLBACK_CORNER_DP
+                    )
                 val drawable = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     setColor(designBottomSheet.context.getColor(R.color.surface))

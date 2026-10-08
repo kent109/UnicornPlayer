@@ -18,6 +18,7 @@ import com.unicorn.player.databinding.ItemSongInfoBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.util.AudioTagEditor
 import com.unicorn.player.util.LogWriter
+import com.unicorn.player.util.ScreenCornerUtil
 import com.unicorn.player.util.ViewUtil
 import java.io.File
 import java.util.Locale
@@ -308,7 +309,11 @@ class SongInfoHelper(private val context: Context) {
             behavior.isHideable = true
             behavior.skipCollapsed = true
 
-            val cornerRadius = 32f * designBottomSheet.resources.displayMetrics.density
+            val cornerRadius =
+                ScreenCornerUtil.getCornerRadiusPx(
+                    designBottomSheet.context,
+                    ScreenCornerUtil.SHEET_FALLBACK_CORNER_DP
+                )
             val drawable = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 setColor(designBottomSheet.context.getColor(R.color.surface))

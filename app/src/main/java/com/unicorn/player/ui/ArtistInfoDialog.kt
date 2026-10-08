@@ -10,6 +10,7 @@ import com.unicorn.player.databinding.DialogSongInfoBinding
 import com.unicorn.player.databinding.ItemSongInfoBinding
 import com.unicorn.player.model.Artist
 import com.unicorn.player.util.LogWriter
+import com.unicorn.player.util.ScreenCornerUtil
 import com.unicorn.player.util.SizeUtil
 import java.io.File
 
@@ -88,7 +89,11 @@ class ArtistInfoDialog(
             behavior.isHideable = true
             behavior.skipCollapsed = true
 
-            val cornerRadius = 32f * designBottomSheet.resources.displayMetrics.density
+            val cornerRadius =
+                ScreenCornerUtil.getCornerRadiusPx(
+                    designBottomSheet.context,
+                    ScreenCornerUtil.SHEET_FALLBACK_CORNER_DP
+                )
             val drawable = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.RECTANGLE
                 setColor(designBottomSheet.context.getColor(R.color.surface))
