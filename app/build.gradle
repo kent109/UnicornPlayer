@@ -159,7 +159,7 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.11.1'
 
     // EQ
-    implementation project(':equalizer')
+    implementation 'com.github.kent109:AndroidEqualizer:1.0.0'
 
     // TagLib
     implementation 'io.github.amanrajaryan:TagLib:1.0.2'
