@@ -45,6 +45,7 @@ class ScanFilterActivity : BaseActivity() {
         val SKIP_SHORT_AUDIO = booleanPreferencesKey("skip_short_audio")
         val SKIP_SMALL_FILES = booleanPreferencesKey("skip_small_files")
         val SKIP_UNSUPPORTED_FORMATS = booleanPreferencesKey("skip_unsupported_formats")
+        val SCAN_DELETED_SONGS = booleanPreferencesKey("scan_deleted_songs")
         val EXCLUDED_DIRS = stringSetPreferencesKey("excluded_dirs")
         val INCLUDED_DIRS = stringSetPreferencesKey("included_dirs")
 
@@ -56,14 +57,16 @@ class ScanFilterActivity : BaseActivity() {
         val switchKeyMap = mapOf(
             "skip_short_audio" to SKIP_SHORT_AUDIO,
             "skip_small_files" to SKIP_SMALL_FILES,
-            "skip_unsupported_formats" to SKIP_UNSUPPORTED_FORMATS
+            "skip_unsupported_formats" to SKIP_UNSUPPORTED_FORMATS,
+            "scan_deleted_songs" to SCAN_DELETED_SONGS
         )
 
         // SWITCH 类型设置项的 key → 默认值 映射
         val switchDefaultMap = mapOf(
             "skip_short_audio" to false,
             "skip_small_files" to false,
-            "skip_unsupported_formats" to false
+            "skip_unsupported_formats" to false,
+            "scan_deleted_songs" to false
         )
     }
 
@@ -167,6 +170,15 @@ class ScanFilterActivity : BaseActivity() {
                     key = "skip_unsupported_formats",
                     title = "不扫描不支持的格式",
                     summary = "过滤设备无法解码或播放失败的格式",
+                    hasChevron = false,
+                    isFirst = false,
+                    isLast = false,
+                    type = SettingItemType.SWITCH
+                ),
+                SettingItem(
+                    key = "scan_deleted_songs",
+                    title = "扫描删除的歌曲",
+                    summary = "关闭时不扫描已删除的歌曲",
                     hasChevron = false,
                     isFirst = false,
                     isLast = false,

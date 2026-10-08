@@ -27,13 +27,6 @@ def getVersionInfo() {
 
 def versionInfo = getVersionInfo()
 
-// 保留 Kotlin 方法参数名到字节码，供 Room kapt 正确匹配 :param 占位符
-kapt {
-    arguments {
-        arg("javaParameters", "true")
-    }
-}
-
 android {
     namespace 'com.unicorn.player'
     compileSdkVersion 37
@@ -89,6 +82,8 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget = JvmTarget.JVM_1_8
+            // 保留 Kotlin 方法参数名到字节码，供 Room kapt 正确匹配查询里的 :param 占位符
+            javaParameters = true
         }
     }
     viewBinding {

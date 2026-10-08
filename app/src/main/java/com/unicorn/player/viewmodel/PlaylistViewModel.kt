@@ -72,7 +72,7 @@ class PlaylistViewModel(
     private var hasLoadedOnce = false
 
     /** 隐藏歌曲注册表的观察者引用，用于在 onCleared 时移除 */
-    private var hiddenRegistryObserver: androidx.lifecycle.Observer<Set<Long>>? = null
+    private var hiddenRegistryObserver: androidx.lifecycle.Observer<Set<String>>? = null
 
     init {
         viewModelScope.launch {
@@ -103,11 +103,11 @@ class PlaylistViewModel(
      * 当前实例也会收到通知并重新计算歌单歌曲数量，实现即时同步。
      */
     private fun observeHiddenRegistry() {
-        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
+        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongPaths.removeObserver(it) }
         hiddenRegistryObserver = androidx.lifecycle.Observer { _ ->
             viewModelScope.launch { refreshPlaylistsInternal() }
         }
-        HiddenSongRegistry.hiddenSongIds.observeForever(hiddenRegistryObserver!!)
+        HiddenSongRegistry.hiddenSongPaths.observeForever(hiddenRegistryObserver!!)
     }
 
     private fun observePlaySource() {
@@ -122,7 +122,7 @@ class PlaylistViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
+        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongPaths.removeObserver(it) }
         hiddenRegistryObserver = null
         playSourceObserver?.let { PlaySourceManager.playSourceTagChanged.removeObserver(it) }
         playSourceObserver = null
@@ -161,14 +161,14 @@ class PlaylistViewModel(
         if (onMain) _isLoading.value = true else _isLoading.postValue(true)
         try {
             val playlistList = repository.getAllPlaylists().first()
-            val hiddenIds = HiddenSongRegistry.currentIds()
+            val hiddenPaths = HiddenSongRegistry.currentPaths()
             val infos = playlistList.map { pl ->
                 try {
                     val allSongs = repository.getPlaylistSongs(pl.id).first()
-                    val visibleSongList = if (hiddenIds.isEmpty()) {
+                    val visibleSongList = if (hiddenPaths.isEmpty()) {
                         allSongs.toMutableList()
                     } else {
-                        allSongs.filter { it.id !in hiddenIds }.toMutableList()
+                        allSongs.filter { it.path !in hiddenPaths }.toMutableList()
                     }
                     val visibleCount = visibleSongList.size
                     pl.toInfo(visibleCount, visibleSongList)

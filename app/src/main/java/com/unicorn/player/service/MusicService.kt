@@ -105,7 +105,10 @@ object DataStoreKeys {
     // 播放来源标签：f0 / f1$歌手名 / f2$专辑名 / f3$歌单名；默认 f0（全部歌曲）
     val PLAY_SOURCE_TAG = stringPreferencesKey("play_source_tag")
 
-    // 用户从列表中隐藏的歌曲 ID 集合（从列表中删除的歌曲），下拉刷新时清除
+    // 用户从列表中隐藏的歌曲文件路径（从列表中删除的歌曲），是否随扫描恢复由扫描过滤开关决定
+    val HIDDEN_SONG_PATHS = stringSetPreferencesKey("hidden_song_paths")
+
+    // 旧版隐藏歌曲记录键（存 MediaStore 行 ID），仅在首次加载时迁移到 HIDDEN_SONG_PATHS 后删除
     val HIDDEN_SONG_IDS = stringSetPreferencesKey("hidden_song_ids")
 
     // 均衡器相关键

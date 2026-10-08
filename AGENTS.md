@@ -54,7 +54,7 @@ UnicornPlayer/
 ## 依赖
 
 **需要 KAPT**：Room 2.5.1、Glide 4.16.0
-**Kotlin kapt 参数**：`javaParameters=true`（Room 的 `:param` 占位符支持）- `app/build.gradle:11-15`
+**Kotlin 编译参数**：`javaParameters = true`（Room 的 `:param` 占位符支持）- `app/build.gradle` 的 `android { kotlin { compilerOptions { ... } } }`
 
 **关键库**：
 - Room 2.5.1（KAPT）
@@ -126,7 +126,7 @@ powershell -Command "(Get-Content '文件路径' -Raw) -replace '`r`n', '`r`n'"
 
 - **换行符**：所有新建的文本文件（.kt、.java、.xml、.md、.gradle）必须使用 CRLF，不能使用 LF
 - **ViewBinding**：始终使用 binding 视图，不要用 `findViewById`
-- **Room KAPT**：必须使用 `kapt` 插件并启用 `javaParameters` 以支持 `:param`
+- **Room KAPT**：必须使用 `kapt` 插件，并在 `android { kotlin { compilerOptions { javaParameters = true } } }` 中启用参数名。放到 `kapt { arguments { arg(...) } }` 里无效（Room 不读该选项），症状是 `kaptDebugKotlin` 报"Each bind variable in the query must have a matching method parameter"、`Unused parameters: arg0,arg1`
 - **Gradle 命令**：Windows 使用 `gradle`，不是 `./gradlew`
 - **包名前缀**：始终使用 `com.unicorn.player` 前缀
 - **包结构**：实际结构比文档中描述的大得多；检查 `app/src/main/java/com/unicorn/player/` 获取完整列表

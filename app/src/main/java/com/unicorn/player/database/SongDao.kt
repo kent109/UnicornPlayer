@@ -14,6 +14,12 @@ interface SongDao {
     fun getSongIdsSync(): List<Long>
 
     /**
+     * 同步查询全部歌曲（扫描时按 ID 比对路径变化，识别外部改名/移动）
+     */
+    @Query("SELECT * FROM songs")
+    fun getAllSongsSync(): List<Song>
+
+    /**
      * 同步查询全部歌曲路径（用于冷启动时按扩展名预检设备解码能力）
      */
     @Query("SELECT path FROM songs")
@@ -27,6 +33,18 @@ interface SongDao {
      */
     @Query("SELECT * FROM songs WHERE id = :songId")
     fun getSongByIdSync(songId: Long): Song?
+
+    /**
+     * 按 ID 查询文件路径（用于把按 MediaStore ID 传入的删除操作映射为按路径记录）
+     */
+    @Query("SELECT path FROM songs WHERE id = :songId")
+    fun getPathBySongIdSync(songId: Long): String?
+
+    /**
+     * 按 ID 批量查询文件路径（用于把旧版按 ID 记录的隐藏歌曲迁移为按路径记录）
+     */
+    @Query("SELECT path FROM songs WHERE id IN (:songIds)")
+    fun getPathsByIds(songIds: List<Long>): List<String>
 
     /**
      * 同步按文件路径查询单首歌曲（用于外部入库去重）
@@ -57,6 +75,12 @@ interface SongDao {
 
     @Update
     fun updateSong(song: Song)
+
+    /**
+     * 批量更新歌曲（扫描时刷新 ID 不变但路径已变的记录，如同 inode 改名）
+     */
+    @Update
+    fun updateSongs(songs: List<Song>)
 
     @Delete
     fun deleteSong(song: Song): Int

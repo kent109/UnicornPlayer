@@ -122,28 +122,37 @@ class MusicRepository(private val context: Context) {
             }
         }
 
-        // 2. 获取数据库中当前的歌曲ID列表
-        val existingSongIds = try {
-            songDao.getSongIdsSync()
+        // 2. 获取数据库中当前的歌曲（需要 id 与 path，用于识别外部改名）
+        val existingSongs = try {
+            songDao.getAllSongsSync()
         } catch (e: Exception) {
             emptyList()
         }
+        val existingPathById = existingSongs.associateBy({ it.id }, { it.path })
 
         // 3. 计算需要删除的歌曲（在数据库中但不在新扫描结果中）
-        val newSongIds = newSongs.map { it.id }
-        val songsToDelete = existingSongIds.filter { it !in newSongIds }
+        val newSongIds = newSongs.mapTo(HashSet()) { it.id }
+        val songsToDelete = existingPathById.keys.filter { it !in newSongIds }
 
         // 4. 删除不再存在的歌曲
         if (songsToDelete.isNotEmpty()) {
             songDao.deleteSongsByIds(songsToDelete)
         }
 
-        // 5. 插入新歌曲（使用 IGNORE 策略，跳过已存在的）
+        // 5. 新增歌曲用 IGNORE 插入，已存在的只更新路径变化的记录
         // 注意：不能用 REPLACE，因为 SQLite 的 REPLACE = DELETE + INSERT，
         // 会触发 playlist_songs 的 ForeignKey.CASCADE 误删已有歌单关联。
-        // 已存在的歌曲无需更新（元数据不变），只需插入新增的即可。
-        if (newSongs.isNotEmpty()) {
-            songDao.insertSongsIgnoreExisting(newSongs)
+        //
+        // 同 ID 但路径不同必须更新：MediaProvider 按 inode 索引，在文件管理器里改名后
+        // _ID 不变、只有 _data 变，若继续跳过该行曲库会停留在旧路径上，
+        // 既播放不了，也会让按路径记录的"已删除歌曲"把它一直过滤掉。
+        val songsToInsert = newSongs.filter { !existingPathById.containsKey(it.id) }
+        val songsToRefresh = newSongs.filter { existingPathById[it.id]?.let { p -> p != it.path } == true }
+        if (songsToInsert.isNotEmpty()) {
+            songDao.insertSongsIgnoreExisting(songsToInsert)
+        }
+        if (songsToRefresh.isNotEmpty()) {
+            songDao.updateSongs(songsToRefresh)
         }
 
         newSongs
@@ -208,6 +217,21 @@ class MusicRepository(private val context: Context) {
     }
 
     suspend fun getSongById(id: Long) = songDao.getSongById(id)
+
+    /**
+     * 按 MediaStore ID 查询文件路径（歌曲已不在库中时返回 null）
+     */
+    suspend fun getSongPath(songId: Long): String? = withContext(Dispatchers.IO) {
+        songDao.getPathBySongIdSync(songId)
+    }
+
+    /**
+     * 按 MediaStore ID 批量查询文件路径，用于迁移旧版按 ID 记录的隐藏歌曲。
+     * 空集合直接返回，避免 Room 生成非法的 `IN ()`。
+     */
+    suspend fun getSongPaths(songIds: Collection<Long>): List<String> = withContext(Dispatchers.IO) {
+        if (songIds.isEmpty()) emptyList() else songDao.getPathsByIds(songIds.toList())
+    }
 
     fun searchSongs(query: String) = songDao.searchSongs("%$query%")
 

@@ -3,6 +3,7 @@ package com.unicorn.player.viewmodel
 import android.content.Context
 import androidx.core.content.edit
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
@@ -82,10 +83,10 @@ class MusicViewModel(
     private var rawSongs: List<Song> = emptyList()
     // 歌单歌曲的原始列表（未过滤隐藏歌曲），用于注册表变化时重新过滤
     private var rawPlaylistSongs: List<Song> = emptyList()
-    // 标记隐藏 ID 集合是否已从 DataStore 加载完成，防止竞态闪烁
-    private var hiddenIdsReady = false
+    // 标记隐藏路径集合是否已从 DataStore 加载完成，防止竞态闪烁
+    private var hiddenPathsReady = false
     // 隐藏歌曲注册表的观察者引用，用于在 onCleared 时移除
-    private var hiddenRegistryObserver: androidx.lifecycle.Observer<Set<Long>>? = null
+    private var hiddenRegistryObserver: androidx.lifecycle.Observer<Set<String>>? = null
 
     // 监听歌曲列表变化，触发后台专辑分组计算
     // 歌曲列表为空时也需要 computeAlbums，确保 _albums 同步为空（否则 waveSideBar 仍显示）
@@ -118,21 +119,29 @@ class MusicViewModel(
     }
 
     /**
-     * 从 DataStore 加载隐藏歌曲 ID 集合，加载完成后启动 collectSongs 并注册跨实例观察
+     * 从 DataStore 加载隐藏歌曲路径集合，加载完成后启动 collectSongs 并注册跨实例观察。
+     * 首次加载时把旧版按 MediaStore ID 记录的隐藏歌曲迁移为按路径记录（并删除旧键）。
      */
     private fun loadHiddenSongs() {
         viewModelScope.launch {
             try {
                 val prefs = context.applicationDataStore.data.first()
-                val ids = prefs[DataStoreKeys.HIDDEN_SONG_IDS]
+                var paths = prefs[DataStoreKeys.HIDDEN_SONG_PATHS] ?: emptySet()
+                val legacyIds = prefs[DataStoreKeys.HIDDEN_SONG_IDS]
                     ?.mapNotNull { it.toLongOrNull() }
-                    ?.toSet() ?: emptySet()
-                HiddenSongRegistry.setIds(ids)
+                if (!legacyIds.isNullOrEmpty()) {
+                    paths = paths + repository.getSongPaths(legacyIds).toSet()
+                    context.applicationDataStore.edit {
+                        it[DataStoreKeys.HIDDEN_SONG_PATHS] = paths
+                        it.remove(DataStoreKeys.HIDDEN_SONG_IDS)
+                    }
+                }
+                HiddenSongRegistry.setPaths(paths)
             } catch (e: Exception) {
                 e.printStackTrace()
-                HiddenSongRegistry.setIds(emptySet())
+                HiddenSongRegistry.setPaths(emptySet())
             } finally {
-                hiddenIdsReady = true
+                hiddenPathsReady = true
                 collectSongs()
                 observeHiddenRegistry()
             }
@@ -140,37 +149,36 @@ class MusicViewModel(
     }
 
     /**
-     * 观察共享注册表的隐藏 ID 变化。当其他 ViewModel 实例隐藏歌曲时，
+     * 观察共享注册表的隐藏路径变化。当其他 ViewModel 实例隐藏歌曲时，
      * 当前实例也会收到通知并重新 emit 过滤后的列表，
      * 从而实现歌手/专辑/歌单页面的同步刷新。
      */
     private fun observeHiddenRegistry() {
         // 避免重复注册
-        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
-        hiddenRegistryObserver = androidx.lifecycle.Observer { ids ->
+        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongPaths.removeObserver(it) }
+        hiddenRegistryObserver = androidx.lifecycle.Observer { paths ->
             if (rawSongs.isEmpty()) return@Observer
-            val visible = rawSongs.filter { it.id !in ids }
+            val visible = rawSongs.filter { it.path !in paths }
             val sorted = sortSongsInternal(visible, _sortMode.value ?: SortMode.BY_TIME)
             _allSongs.postValue(sorted)
             _fullSongs.postValue(sorted)
             // 同步过滤歌单歌曲列表，使歌单页面也响应隐藏/恢复操作
             if (rawPlaylistSongs.isNotEmpty()) {
-                val visiblePlaylist = rawPlaylistSongs.filter { it.id !in ids }
+                val visiblePlaylist = rawPlaylistSongs.filter { it.path !in paths }
                 _playlistSongs.postValue(visiblePlaylist)
             }
         }
-        HiddenSongRegistry.hiddenSongIds.observeForever(hiddenRegistryObserver!!)
+        HiddenSongRegistry.hiddenSongPaths.observeForever(hiddenRegistryObserver!!)
     }
 
     /**
-     * 异步持久化隐藏歌曲 ID 集合到 DataStore
+     * 异步持久化隐藏歌曲路径集合到 DataStore
      */
-    private fun persistHiddenSongs(ids: Set<Long>) {
+    private fun persistHiddenSongs(paths: Set<String>) {
         viewModelScope.launch {
             try {
-                context.applicationDataStore.edit { prefs ->
-                    prefs[DataStoreKeys.HIDDEN_SONG_IDS] = ids.map { it.toString() }.toSet()
-                    prefs
+                context.applicationDataStore.edit {
+                    it[DataStoreKeys.HIDDEN_SONG_PATHS] = paths
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -184,18 +192,31 @@ class MusicViewModel(
      *
      * 注意：不从 playlist_songs 表物理删除。原因：
      * 1. PlaylistSong 外键带 CASCADE，scanMusicFiles 删除 songs 行时会自动清理关联；
-     * 2. 隐藏是"逻辑删除"，下拉刷新（clearHiddenSongs）后应恢复可见；
-     * 3. 歌单数量通过 HiddenSongRegistry.currentIds() 过滤计算，无需物理删除。
+     * 2. 隐藏是"逻辑删除"，开启"扫描删除的歌曲"后下拉刷新（clearHiddenSongs）可恢复可见；
+     * 3. 歌单数量通过 HiddenSongRegistry.currentPaths() 过滤计算，无需物理删除。
      */
-    fun hideSong(songId: Long) {
-        if (!hiddenIdsReady) return
-        if (HiddenSongRegistry.currentIds().contains(songId)) return
-        HiddenSongRegistry.hide(songId)
-        persistHiddenSongs(HiddenSongRegistry.currentIds())
+    fun hideSong(song: Song) {
+        if (!hiddenPathsReady) return
+        if (HiddenSongRegistry.currentPaths().contains(song.path)) return
+        HiddenSongRegistry.hide(song.path)
+        persistHiddenSongs(HiddenSongRegistry.currentPaths())
     }
 
     /**
-     * 清空隐藏集合（下拉刷新时调用）：持久化、重新 emit 完整列表
+     * 批量隐藏指定歌曲（多选删除），按 MediaStore ID 解析出文件路径后处理。
+     * ID 在媒体库重建后会变化，因此隐藏记录统一以路径保存。
+     */
+    suspend fun hideSongsByIds(songIds: Collection<Long>) {
+        if (!hiddenPathsReady || songIds.isEmpty()) return
+        val paths = repository.getSongPaths(songIds).toSet()
+        val merged = HiddenSongRegistry.currentPaths() + paths
+        if (merged.size == HiddenSongRegistry.currentPaths().size) return
+        HiddenSongRegistry.setPaths(merged)
+        persistHiddenSongs(merged)
+    }
+
+    /**
+     * 清空隐藏集合（"扫描删除的歌曲"开关打开时的下拉刷新调用）：持久化、重新 emit 完整列表
      */
     fun clearHiddenSongs() {
         HiddenSongRegistry.clear()
@@ -206,8 +227,8 @@ class MusicViewModel(
      * 过滤隐藏歌曲并按当前排序模式排序（共用逻辑）
      */
     private fun applyHiddenAndSort(songs: List<Song>): List<Song> {
-        val hidden = HiddenSongRegistry.currentIds()
-        val visible = songs.filter { it.id !in hidden }
+        val hidden = HiddenSongRegistry.currentPaths()
+        val visible = songs.filter { it.path !in hidden }
         return sortSongsInternal(visible, _sortMode.value ?: SortMode.BY_TIME)
     }
 
@@ -228,7 +249,7 @@ class MusicViewModel(
     private var songsCollected = false
 
     private fun collectSongs() {
-        if (!hiddenIdsReady) return
+        if (!hiddenPathsReady) return
         viewModelScope.launch {
             repository.getAllSongs().collect { songs ->
                 // 检测被外部删除的歌曲，清理其在隐藏集合中的残留
@@ -252,17 +273,18 @@ class MusicViewModel(
     }
 
     /**
-     * 对比新旧列表，找出已被外部删除的歌曲 ID，若存在于隐藏集合中则移除
+     * 对比新旧列表，找出已被外部删除（文件已不存在、扫描不再命中）的歌曲路径，
+     * 若存在于隐藏集合中则移除，避免隐藏记录无限累积
      */
     private fun cleanupRemovedSongs(newSongs: List<Song>) {
         if (rawSongs.isEmpty()) return
-        val newIds = newSongs.map { it.id }.toSet()
-        val removedIds = rawSongs.map { it.id }.toSet() - newIds
-        if (removedIds.isNotEmpty()) {
-            val hidden = HiddenSongRegistry.currentIds()
-            val cleaned = hidden - removedIds
+        val newPaths = newSongs.map { it.path }.toSet()
+        val removedPaths = rawSongs.map { it.path }.toSet() - newPaths
+        if (removedPaths.isNotEmpty()) {
+            val hidden = HiddenSongRegistry.currentPaths()
+            val cleaned = hidden - removedPaths
             if (cleaned.size < hidden.size) {
-                HiddenSongRegistry.setIds(cleaned)
+                HiddenSongRegistry.setPaths(cleaned)
                 persistHiddenSongs(cleaned)
             }
         }
@@ -271,7 +293,7 @@ class MusicViewModel(
     override fun onCleared() {
         super.onCleared()
         _allSongs.removeObserver(allSongsObserver)
-        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongIds.removeObserver(it) }
+        hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongPaths.removeObserver(it) }
         hiddenRegistryObserver = null
         playSourceObserver?.let { PlaySourceManager.playSourceTagChanged.removeObserver(it) }
         playSourceObserver = null
@@ -436,23 +458,27 @@ class MusicViewModel(
                 onScanned?.invoke(0)
                 return@launch
             }
-            // 下拉刷新（force=true）时清除隐藏集合，恢复完整列表
-            if (force) {
+            val prefs = try {
+                context.scanFiltersDataStore.data.first()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emptyPreferences()
+            }
+            // 下拉刷新（force=true）时是否恢复"已从列表删除的歌曲"，由扫描过滤开关决定：
+            // 关闭（默认）时保留隐藏记录，已删除的歌曲继续被过滤；打开时清空记录、恢复完整列表
+            if (force && (prefs[ScanFilterActivity.SCAN_DELETED_SONGS] ?: false)) {
                 clearHiddenSongs()
             }
             _isLoading.postValue(true)
             val count = try {
-                val config = runBlocking {
-                    val prefs = context.scanFiltersDataStore.data.first()
-                    ScanFilterConfig(
-                        skipShortAudio = prefs[ScanFilterActivity.SKIP_SHORT_AUDIO] ?: false,
-                        skipSmallFiles = prefs[ScanFilterActivity.SKIP_SMALL_FILES] ?: false,
-                        skipUnsupportedFormats = prefs[ScanFilterActivity.SKIP_UNSUPPORTED_FORMATS]
-                            ?: false,
-                        excludedDirs = prefs[ScanFilterActivity.EXCLUDED_DIRS] ?: emptySet(),
-                        includedDirs = prefs[ScanFilterActivity.INCLUDED_DIRS] ?: emptySet()
-                    )
-                }
+                val config = ScanFilterConfig(
+                    skipShortAudio = prefs[ScanFilterActivity.SKIP_SHORT_AUDIO] ?: false,
+                    skipSmallFiles = prefs[ScanFilterActivity.SKIP_SMALL_FILES] ?: false,
+                    skipUnsupportedFormats = prefs[ScanFilterActivity.SKIP_UNSUPPORTED_FORMATS]
+                        ?: false,
+                    excludedDirs = prefs[ScanFilterActivity.EXCLUDED_DIRS] ?: emptySet(),
+                    includedDirs = prefs[ScanFilterActivity.INCLUDED_DIRS] ?: emptySet()
+                )
                 val count = repository.scanMusicFiles(config).size
                 // 手动扫描完成后强制重跑解码能力预检，覆盖新引入的文件格式
                 if (count > 0) {
@@ -536,7 +562,7 @@ class MusicViewModel(
             try {
                 repository.getPlaylistSongs(playlistId).collect { songs ->
                     rawPlaylistSongs = songs
-                    val filtered = songs.filter { it.id !in HiddenSongRegistry.currentIds() }
+                    val filtered = songs.filter { it.path !in HiddenSongRegistry.currentPaths() }
                     _playlistSongs.postValue(filtered)
                 }
             } catch (e: Exception) {
@@ -550,7 +576,7 @@ class MusicViewModel(
      */
     fun updatePlaylistSongs(songs: List<Song>) {
         rawPlaylistSongs = songs
-        val filtered = songs.filter { it.id !in HiddenSongRegistry.currentIds() }
+        val filtered = songs.filter { it.path !in HiddenSongRegistry.currentPaths() }
         _playlistSongs.postValue(filtered)
     }
 
@@ -604,7 +630,7 @@ class MusicViewModel(
             try {
                 repository.getPlaylistSongs(playlistId).collect { songs ->
                     rawPlaylistSongs = songs
-                    val filtered = songs.filter { it.id !in HiddenSongRegistry.currentIds() }
+                    val filtered = songs.filter { it.path !in HiddenSongRegistry.currentPaths() }
                     _playlistSongs.postValue(filtered)
                 }
             } catch (e: Exception) {

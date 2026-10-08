@@ -191,8 +191,8 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
                 if (musicService?.currentSong?.value?.id == song.id) {
                     musicService?.removeCurrentSong()
                 }
-                // 持久化隐藏 ID + 更新列表
-                viewModel.hideSong(song.id)
+                // 持久化隐藏路径 + 更新列表
+                viewModel.hideSong(song)
                 // 同步服务播放列表
                 updateServiceSongList()
             }
@@ -930,8 +930,8 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
                         if (musicService?.currentSong?.value?.id == songId) {
                             musicService?.removeCurrentSong()
                         }
-                        viewModel.hideSong(songId)
                     }
+                    viewModel.hideSongsByIds(clone)
                     updateServiceSongList()
                 }
             }
