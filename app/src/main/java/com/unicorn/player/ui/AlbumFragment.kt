@@ -240,7 +240,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
             }
             val position = letterIndexMap[letter] ?: return@setOnSelectIndexItemListener
             (binding.recyclerView.layoutManager as? LinearLayoutManager)
-                ?.scrollToPositionWithOffset(position, 0)
+                ?.scrollToPositionWithOffset(position + 1, 0)
         }
     }
 
