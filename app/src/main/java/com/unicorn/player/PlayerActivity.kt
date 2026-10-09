@@ -165,6 +165,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     var isLrcFullscreen = false
         private set
 
+    // 非全屏时歌词区顶部与 playPauseButton 底部之间额外留出的间距
+    private val lrcTopGap: Int by lazy { DisplayUtil.dp2px(this, 14f) }
+
     // 进入全屏时正在播放的歌曲路径，用于判断切歌时是否退出全屏
     private var fullscreenSongPath: String? = null
 
@@ -466,6 +469,8 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             .setShowTimeText(false)
             .setShowTriangle(false)
             .setShowSelectLine(false)
+            // 行间距：库默认 LinePadding=40px（约 13dp 额外间隔），视觉上偏大，收紧为 10dp
+            .setLinePadding(DisplayUtil.dp2px(this, 10f))
         // 应用设置（确保 ShowTimeText/ShowTriangle 生效）
         lrcView.commitLrcSettings()
         // 三角形宽度默认 0，库只在 viewWidth>0 且 TriangleWidth==0 时按 viewWidth/50 赋默认值；
@@ -1061,7 +1066,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      *
      * playPauseButton 位于 ViewPager2 的 Fragment 内，不是 ConstraintLayout
      * 的直接子 View，无法直接建立约束（预加载的多个 Fragment 还存在同 ID 按钮），
-     * 因此采用：topToTop=parent + 动态 topMargin（按钮底部相对根布局的 Y 值）。
+     * 因此采用：topToTop=parent + 动态 topMargin（按钮底部相对根布局的 Y 值 + lrcTopGap）。
      * 由 preDrawListener 在每帧绘制前调用；值未变化时不重复设置，避免布局循环。
      *
      * @param force true 时强制重新应用（如刚退出全屏）
@@ -1073,8 +1078,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         binding.root.getLocationOnScreen(rootLocation)
         val buttonLocation = IntArray(2)
         button.getLocationOnScreen(buttonLocation)
-        val targetTop = buttonLocation[1] + button.height - rootLocation[1]
-        if (targetTop <= 0) return
+        val buttonBottom = buttonLocation[1] + button.height - rootLocation[1]
+        if (buttonBottom <= 0) return
+        val targetTop = buttonBottom + lrcTopGap
 
         val params = binding.lrcViewContainer.layoutParams as ConstraintLayout.LayoutParams
         if (!force &&
