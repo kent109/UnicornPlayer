@@ -111,6 +111,21 @@ class SongMultiChoiceFragment : Fragment(), SongMultiChoiceFragmentAdapter.OnChe
         setViewModelData()
         updateSelectUI(false)
         initButtonLayout()
+        refreshBottomPanelStyle()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshBottomPanelStyle()
+    }
+
+    private fun refreshBottomPanelStyle() {
+        ThemeSettingActivity.applyBottomPanelStyle(
+            binding.actionButtonsLayout,
+            binding.actionButtonsContent,
+            ThemeSettingActivity.resolveBottomPanelMode(requireContext()),
+            0
+        )
     }
 
     private fun setViewModelData() {

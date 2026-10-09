@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import androidx.appcompat.app.AppCompatDelegate
@@ -54,6 +55,10 @@ class ThemeSettingActivity : BaseActivity() {
         val SONG_ICON_MODE = intPreferencesKey("song_icon_mode")
         const val SONG_ICON_MODE_DISC = 0
         const val SONG_ICON_MODE_CASSETTE = 1
+
+        val BOTTOM_PANEL_MODE = intPreferencesKey("bottom_panel_mode")
+        const val BOTTOM_PANEL_MODE_CARD = 0
+        const val BOTTOM_PANEL_MODE_BANNER = 1
 
         private val COLOR_THEME_RES = intArrayOf(
             R.style.Theme_UnicornPlayer_Color1,
@@ -133,6 +138,54 @@ class ThemeSettingActivity : BaseActivity() {
             }
         }
 
+        fun resolveBottomPanelMode(context: Context): Int {
+            val prefs = runBlocking {
+                try {
+                    context.applicationContext.themeDataStore.data.first()
+                } catch (e: Exception) {
+                    null
+                }
+            } ?: return BOTTOM_PANEL_MODE_CARD
+            return prefs[BOTTOM_PANEL_MODE] ?: BOTTOM_PANEL_MODE_CARD
+        }
+
+        fun getBottomPanelSummary(context: Context): String {
+            val mode = resolveBottomPanelMode(context)
+            return when (mode) {
+                BOTTOM_PANEL_MODE_BANNER -> "横幅"
+                else -> "卡片"
+            }
+        }
+
+        /**
+         * 应用底部面板（播放条、多选操作栏）样式：横幅模式去掉圆角并把左右 8dp 间距填满屏幕宽度，
+         * 同时把这 8dp 补进内容区的左右内边距，使封面与各按钮的屏幕位置和卡片模式保持一致，
+         * 高度与上下间距不变。
+         *
+         * @param cardContentPaddingDp 卡片模式下内容区已有的左右内边距
+         */
+        fun applyBottomPanelStyle(
+            panel: CardView, content: View?, mode: Int, cardContentPaddingDp: Int
+        ) {
+            val density = panel.resources.displayMetrics.density
+            val gap = (8f * density).toInt()
+            val isBanner = mode == BOTTOM_PANEL_MODE_BANNER
+
+            panel.radius = if (isBanner) 0f else gap.toFloat()
+
+            val lp = panel.layoutParams
+            if (lp is ViewGroup.MarginLayoutParams) {
+                lp.leftMargin = if (isBanner) 0 else gap
+                lp.rightMargin = if (isBanner) 0 else gap
+                panel.layoutParams = lp
+            }
+
+            val padding = (cardContentPaddingDp * density).toInt() + if (isBanner) gap else 0
+            content?.let {
+                it.setPadding(padding, it.paddingTop, padding, it.paddingBottom)
+            }
+        }
+
         fun resolveThemeColorIndex(context: Context): Int {
             val prefs = runBlocking {
                 try {
@@ -192,6 +245,7 @@ class ThemeSettingActivity : BaseActivity() {
 
     private lateinit var binding: ActivityThemeSettingBinding
     private var themePopup: PopupWindow? = null
+    private var bottomPanelPopup: PopupWindow? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -208,6 +262,9 @@ class ThemeSettingActivity : BaseActivity() {
         binding.settingsContainer
             .findViewWithTag<android.widget.TextView>("highlight_color_summary")
             ?.text = HighlightColorActivity.getHighlightColorSummary(this)
+        binding.settingsContainer
+            .findViewWithTag<android.widget.TextView>("icon_mode_summary")
+            ?.text = getIconModeSummary(this)
         updateColorPreview("theme_color")
         updateColorPreview("highlight_color")
     }
@@ -279,13 +336,24 @@ class ThemeSettingActivity : BaseActivity() {
                 SettingItem(
                     key = "icon_mode",
                     title = "图标外观",
+                    summary = getIconModeSummary(this),
                     hasChevron = true,
                     isFirst = false,
-                    isLast = true,
+                    isLast = false,
                     type = SettingItemType.NORMAL,
                     onClick = {
                         startActivity(android.content.Intent(this, IconSettingActivity::class.java))
                     }
+                ),
+                SettingItem(
+                    key = "bottom_panel",
+                    title = "底部面板",
+                    summary = getBottomPanelSummary(this),
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = true,
+                    type = SettingItemType.SELECT,
+                    onClick = { anchor -> showBottomPanelMenu(anchor) }
                 )
             )
         )
@@ -458,6 +526,65 @@ class ThemeSettingActivity : BaseActivity() {
             screenWidth - anchorLoc[0] - popupWidthPx
         )
         themePopup?.showAsDropDown(anchorView, clampedXOff, -50)
+    }
+
+    private fun showBottomPanelMenu(anchorView: View) {
+        bottomPanelPopup?.let {
+            if (it.isShowing) {
+                it.dismiss()
+                return
+            }
+        }
+
+        val popupView = LayoutInflater.from(this).inflate(R.layout.popup_bottom_panel, null)
+        val tvCard = popupView.findViewById<android.widget.TextView>(R.id.tvBottomPanelCard)
+        val tvBanner = popupView.findViewById<android.widget.TextView>(R.id.tvBottomPanelBanner)
+
+        val currentMode = resolveBottomPanelMode(this)
+        val checkColor = resolveHighlightColor(this)
+        val normalColor = ContextCompat.getColor(this, R.color.text_primary)
+
+        setupThemeModeItem(tvCard, currentMode == BOTTOM_PANEL_MODE_CARD, checkColor, normalColor)
+        setupThemeModeItem(tvBanner, currentMode == BOTTOM_PANEL_MODE_BANNER, checkColor, normalColor)
+
+        tvCard.setOnClickListener { onBottomPanelModeSelected(BOTTOM_PANEL_MODE_CARD) }
+        tvBanner.setOnClickListener { onBottomPanelModeSelected(BOTTOM_PANEL_MODE_BANNER) }
+
+        val popupWidthPx = (180 * resources.displayMetrics.density).toInt()
+
+        bottomPanelPopup = PopupWindow(
+            popupView, popupWidthPx, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true
+        ).apply {
+            elevation = 8f
+            isOutsideTouchable = true
+            animationStyle = R.style.PopupAnimation
+            setOnDismissListener { bottomPanelPopup = null }
+        }
+
+        val anchorLoc = IntArray(2)
+        anchorView.getLocationOnScreen(anchorLoc)
+        val screenWidth = resources.displayMetrics.widthPixels
+        val xOff = anchorView.width - popupWidthPx
+        val clampedXOff = xOff.coerceIn(
+            -anchorLoc[0],
+            screenWidth - anchorLoc[0] - popupWidthPx
+        )
+        bottomPanelPopup?.showAsDropDown(anchorView, clampedXOff, -50)
+    }
+
+    private fun onBottomPanelModeSelected(mode: Int) {
+        lifecycleScope.launch {
+            try {
+                applicationContext.themeDataStore.edit { it[BOTTOM_PANEL_MODE] = mode }
+            } catch (e: Exception) {
+                Log.e(TAG, "写入 bottom_panel_mode 失败", e)
+            }
+        }
+        binding.settingsContainer
+            .findViewWithTag<android.widget.TextView>("bottom_panel_summary")
+            ?.text = if (mode == BOTTOM_PANEL_MODE_BANNER) "横幅" else "卡片"
+        bottomPanelPopup?.dismiss()
+        bottomPanelPopup = null
     }
 
     private fun setupThemeModeItem(

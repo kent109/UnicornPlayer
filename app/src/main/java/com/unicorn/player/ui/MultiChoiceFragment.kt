@@ -149,6 +149,12 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
         initList = getCurrentList()
         updateSelectUI(false)
         initButtonLayout()
+        refreshBottomPanelStyle()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshBottomPanelStyle()
     }
 
     private fun setupViewModel() {
@@ -225,6 +231,15 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
             3 -> binding.flAddToPlaylist.visibility = View.GONE
             else -> binding.flExport.visibility = View.GONE
         }
+    }
+
+    private fun refreshBottomPanelStyle() {
+        ThemeSettingActivity.applyBottomPanelStyle(
+            binding.actionButtonsLayout,
+            binding.actionButtonsContent,
+            ThemeSettingActivity.resolveBottomPanelMode(requireContext()),
+            0
+        )
     }
 
     private fun getArtistList(): List<Artist> {

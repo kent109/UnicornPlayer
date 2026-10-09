@@ -5,6 +5,7 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.datastore.preferences.core.edit
@@ -23,6 +24,7 @@ abstract class BaseActivity : AppCompatActivity() {
 
     private var currentThemeRes = 0
     private var currentHighlightColor = 0
+    private var currentBottomPanelMode = ThemeSettingActivity.BOTTOM_PANEL_MODE_CARD
 
     override fun onCreate(savedInstanceState: Bundle?) {
         currentThemeRes = resolveColorTheme()
@@ -30,6 +32,7 @@ abstract class BaseActivity : AppCompatActivity() {
             setTheme(currentThemeRes)
         }
         currentHighlightColor = ThemeSettingActivity.resolveHighlightColor(this)
+        currentBottomPanelMode = ThemeSettingActivity.resolveBottomPanelMode(this)
         super.onCreate(savedInstanceState)
     }
 
@@ -48,11 +51,13 @@ abstract class BaseActivity : AppCompatActivity() {
     override fun setContentView(layoutResID: Int) {
         super.setContentView(layoutResID)
         applySystemBarInsets()
+        refreshBottomPanelStyle()
     }
 
     override fun setContentView(view: View) {
         super.setContentView(view)
         applySystemBarInsets()
+        refreshBottomPanelStyle()
     }
 
     /**
@@ -103,6 +108,24 @@ abstract class BaseActivity : AppCompatActivity() {
         if (newHighlightColor != currentHighlightColor) {
             recreate()
         }
+        val newBottomPanelMode = ThemeSettingActivity.resolveBottomPanelMode(this)
+        if (newBottomPanelMode != currentBottomPanelMode) {
+            currentBottomPanelMode = newBottomPanelMode
+            refreshBottomPanelStyle()
+        }
+    }
+
+    /**
+     * 按"底部面板"样式设置调整本页播放条；不含播放条的页面直接返回。
+     */
+    private fun refreshBottomPanelStyle() {
+        val bottomPlayer = findViewById<View>(R.id.bottomPlayer) as? CardView ?: return
+        ThemeSettingActivity.applyBottomPanelStyle(
+            bottomPlayer,
+            findViewById<View>(R.id.playerBarContent),
+            currentBottomPanelMode,
+            8
+        )
     }
 
     private fun resolveColorTheme(): Int {
