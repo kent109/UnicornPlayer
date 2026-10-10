@@ -46,7 +46,8 @@ abstract class BaseActivity : AppCompatActivity() {
      * 此处统一在根视图上监听 WindowInsets：
      * - 顶部：状态栏高度作为 paddingTop，所有 Activity 自动避让状态栏
      * - 底部：导航栏高度作为 paddingBottom，内容不被虚拟导航键遮挡
-     * - 当检测到有虚拟导航键时，去掉底部播放条的 8dp marginBottom，避免双重间距
+     * - 播放条底部 margin：虚拟按键导航时为 0（paddingBottom 已避让）；
+     *   手势导航时保留 8dp（指示条悬浮不占位，如 ColorOS 上报 inset 为 0）
      */
     override fun setContentView(layoutResID: Int) {
         super.setContentView(layoutResID)
@@ -67,34 +68,49 @@ abstract class BaseActivity : AppCompatActivity() {
     protected open val applySystemBarInsets: Boolean
         get() = true
 
+    private var lastNavBottomPx = 0
+    private var lastMandatoryBottomPx = 0
+
     private fun applySystemBarInsets() {
         if (!applySystemBarInsets) return
         val rootView = findViewById<View>(android.R.id.content) ?: return
-        val density = resources.displayMetrics.density
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val mandatoryGestures =
+                insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
             v.setPadding(
                 v.paddingLeft,
                 systemBars.top,
                 v.paddingRight,
                 systemBars.bottom
             )
-            // 有虚拟导航键时，去掉底部播放条的底部 margin（8dp），
-            // 由根视图的 paddingBottom 避让导航键，避免双重间距；
-            // 手势导航时恢复 8dp marginBottom。
-            val bottomPlayer = findViewById<View>(R.id.bottomPlayer)
-            if (bottomPlayer != null) {
-                val mbDp = if (systemBars.bottom > 0) 0 else 8
-                val lp = bottomPlayer.layoutParams
-                if (lp is ViewGroup.MarginLayoutParams) {
-                    lp.bottomMargin = (mbDp * density).toInt()
-                    bottomPlayer.layoutParams = lp
-                }
-            }
+            lastNavBottomPx = systemBars.bottom
+            lastMandatoryBottomPx = mandatoryGestures.bottom
+            findViewById<View>(R.id.bottomPlayer)?.let { applyBottomPanelMargin(it) }
             insets
         }
         // 强制请求一次 insets 派发，确保 listener 被触发
         ViewCompat.requestApplyInsets(rootView)
+    }
+
+    /**
+     * 底部面板（播放条 / 多选操作栏）的底部 margin 规则：
+     * - 横幅面板恒为 0；
+     * - 卡片面板在虚拟按键导航时为 0（由根视图 paddingBottom 避让），手势导航时为 8dp。
+     * 虚拟按键的导航栏高度不低于底部强制手势区；
+     * 手势导航的指示条要么上报 0（如 ColorOS），要么低于强制手势区。
+     */
+    fun applyBottomPanelMargin(panel: View) {
+        val lp = panel.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        val density = resources.displayMetrics.density
+        val isThreeButton =
+            lastNavBottomPx > 0 && lastNavBottomPx >= lastMandatoryBottomPx
+        val mbDp = if (
+            currentBottomPanelMode == ThemeSettingActivity.BOTTOM_PANEL_MODE_BANNER ||
+            isThreeButton
+        ) 0 else 8
+        lp.bottomMargin = (mbDp * density).toInt()
+        panel.layoutParams = lp
     }
 
     override fun onResume() {
@@ -112,6 +128,8 @@ abstract class BaseActivity : AppCompatActivity() {
         if (newBottomPanelMode != currentBottomPanelMode) {
             currentBottomPanelMode = newBottomPanelMode
             refreshBottomPanelStyle()
+            // 重新派发 insets，让 listener 按新面板模式重算播放条底部 margin
+            findViewById<View>(android.R.id.content)?.let { ViewCompat.requestApplyInsets(it) }
         }
     }
 

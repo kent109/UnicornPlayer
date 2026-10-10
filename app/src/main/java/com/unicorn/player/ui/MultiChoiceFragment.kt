@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.unicorn.player.BaseActivity
 import com.unicorn.player.R
 import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.FragmentMultiChoiceBinding
@@ -240,6 +241,7 @@ class MultiChoiceFragment : Fragment(), MultiChoiceFragmentAdapter.OnCheckChange
             ThemeSettingActivity.resolveBottomPanelMode(requireContext()),
             0
         )
+        (activity as? BaseActivity)?.applyBottomPanelMargin(binding.actionButtonsLayout)
     }
 
     private fun getArtistList(): List<Artist> {
