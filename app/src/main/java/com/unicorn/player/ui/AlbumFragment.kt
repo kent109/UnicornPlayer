@@ -231,7 +231,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
             "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "#", "↓"
         )
         binding.waveSideBar.setOnSelectIndexItemListener { letter ->
-            // 手指正在 WaveSideBar 上检索字母（每次字母变化都会回调），此时禁用 ViewPager
+            // 手指正在索引条上检索字母（每次字母变化都会回调），此时禁用 ViewPager
             setViewPagerSwipe(false)
             // 重置延迟恢复：若一定时间内再无新回调，说明手指已松开，恢复 ViewPager
             restoreViewPagerRunnable?.let { handler.removeCallbacks(it) }

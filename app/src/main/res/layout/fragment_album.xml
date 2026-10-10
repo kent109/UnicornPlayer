@@ -64,7 +64,7 @@
     </LinearLayout>
 
     <!-- 右侧字母导航栏，用于按分组首字母快速定位，默认隐藏，有数据时由代码显示 -->
-    <com.nanchen.wavesidebar.WaveSideBarView
+    <com.unicorn.player.widget.UnicornSideBarView
         android:id="@+id/waveSideBar"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -76,8 +76,6 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:sidebar_lazy_respond="false"
-        app:sidebar_text_color="@color/onSurfaceVariant" />
+        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
