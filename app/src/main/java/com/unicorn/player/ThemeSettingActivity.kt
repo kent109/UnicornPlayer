@@ -262,9 +262,6 @@ class ThemeSettingActivity : BaseActivity() {
         binding.settingsContainer
             .findViewWithTag<android.widget.TextView>("highlight_color_summary")
             ?.text = HighlightColorActivity.getHighlightColorSummary(this)
-        binding.settingsContainer
-            .findViewWithTag<android.widget.TextView>("icon_mode_summary")
-            ?.text = getIconModeSummary(this)
         updateColorPreview("theme_color")
         updateColorPreview("highlight_color")
     }
@@ -336,7 +333,6 @@ class ThemeSettingActivity : BaseActivity() {
                 SettingItem(
                     key = "icon_mode",
                     title = "图标外观",
-                    summary = getIconModeSummary(this),
                     hasChevron = true,
                     isFirst = false,
                     isLast = false,
