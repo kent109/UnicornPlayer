@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <objectAnimator xmlns:android="http://schemas.android.com/apk/res/android"
-    android:duration="240000"
     android:propertyName="pathData"
-    android:valueFrom="M50,71 a32,32 0 1,0 64,0 a32,32 0 1,0 -64,0 Z"
-    android:valueTo="M54,71 a28,28 0 1,0 56,0 a28,28 0 1,0 -56,0 Z"
-    android:valueType="pathType" />
+    android:duration="240000"
+    android:interpolator="@anim/inter_slow_start"
+    android:valueFrom="M82.00,39.00 C99.67,39.00 114.00,53.33 114.00,71.00 C114.00,88.67 99.67,103.00 82.00,103.00 C64.33,103.00 50.00,88.67 50.00,71.00 C50.00,53.33 64.33,39.00 82.00,39.00 Z"
+    android:valueTo="M82.00,49.00 C94.15,49.00 104.00,58.85 104.00,71.00 C104.00,83.15 94.15,93.00 82.00,93.00 C69.85,93.00 60.00,83.15 60.00,71.00 C60.00,58.85 69.85,49.00 82.00,49.00 Z"
+    android:valueType="pathType">
+    <!-- 左黑环 32->22 慢启动收缩(accelerate t^1.5: 前段慢但可见, 后段接近匀速), 终态=白芯圈r=22=视觉归零; 贝塞尔圆无抖动 -->
+</objectAnimator>

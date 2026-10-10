@@ -10,7 +10,7 @@
         android:name="reel_right"
         android:animation="@animator/anim_rotate_reel" />
 
-    <!-- 缠带：左盘减小到下限27、右盘增大到上限33（不再写死4分钟；半径到上限/下限后定格，切歌start()复位） -->
+    <!-- 缠带：左盘（黑环）缩到卷轴芯(r=22)、右盘增大到36，两者均在第60秒整完成收尾、看着同步（切歌start()复位） -->
     <target
         android:name="ring_left"
         android:animation="@animator/anim_reel_ring_shrink" />
@@ -19,9 +19,13 @@
         android:name="ring_right"
         android:animation="@animator/anim_reel_ring_grow" />
 
-    <!-- 黑线顶端跟随黑环边缘同步平移（含切角） -->
+    <!-- 黑线顶端跟随黑环边缘同步平移（含切角）；左右拆开: 左线慢启动随左环、右线线性随右环 -->
     <target
-        android:name="tape_lines"
-        android:animation="@animator/anim_reel_lines" />
+        android:name="tape_line_left"
+        android:animation="@animator/anim_reel_lines_left" />
+
+    <target
+        android:name="tape_line_right"
+        android:animation="@animator/anim_reel_lines_right" />
 
 </animated-vector>

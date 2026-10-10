@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- accelerate factor=0.75 => pow(t, 1.5): slow start, progressively steady tail -->
+<accelerateInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:factor="0.75" />

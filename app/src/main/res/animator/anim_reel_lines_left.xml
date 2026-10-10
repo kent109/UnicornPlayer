@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<objectAnimator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="240000"
+    android:interpolator="@anim/inter_slow_start"
+    android:propertyName="pathData"
+    android:valueFrom="M36.56,110.58 L49.28,68.14 L52.03,60.98 L53.00,60.00 L53.57,60.17 L51.72,68.86 L39.44,111.42 Z"
+    android:valueTo="M36.56,110.58 L59.62,65.45 L63.66,59.69 L64.73,59.03 L65.21,59.31 L61.63,66.64 L39.44,111.42 Z"
+    android:valueType="pathType">
+    <!-- 左黑线跟随左环(慢启动t^1.5): 顶端跟随黑环半径且切点沿环缘滑动(顶端外移TIP_INSET=1.0, 切点上抬SLIDE_GAIN=1.3, 收窄TIP_TAPER=0.70), 左带 32->22; 两帧valueFrom/valueTo原生morph -->
+</objectAnimator>

@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <objectAnimator xmlns:android="http://schemas.android.com/apk/res/android"
-    android:duration="240000"
     android:propertyName="pathData"
-    android:valueFrom="M126,71 a32,32 0 1,0 64,0 a32,32 0 1,0 -64,0 Z"
-    android:valueTo="M122,71 a36,36 0 1,0 72,0 a36,36 0 1,0 -72,0 Z"
-    android:valueType="pathType" />
+    android:duration="240000"
+    android:interpolator="@android:interpolator/linear"
+    android:valueFrom="M158.00,39.00 C175.67,39.00 190.00,53.33 190.00,71.00 C190.00,88.67 175.67,103.00 158.00,103.00 C140.33,103.00 126.00,88.67 126.00,71.00 C126.00,53.33 140.33,39.00 158.00,39.00 Z"
+    android:valueTo="M158.00,35.00 C177.88,35.00 194.00,51.12 194.00,71.00 C194.00,90.88 177.88,107.00 158.00,107.00 C138.12,107.00 122.00,90.88 122.00,71.00 C122.00,51.12 138.12,35.00 158.00,35.00 Z"
+    android:valueType="pathType">
+    <!-- 右黑环 32->36 线性(linear插值器); 贝塞尔圆无抖动 -->
+</objectAnimator>
