@@ -65,6 +65,8 @@
     <color name="quality_sq">#FFD700</color>   <!-- 金色 -->
     <color name="import_playlist">#78C57C</color>
 
+    <color name="highlight_color">@android:color/holo_red_dark</color>
+
     <!-- 歌词控件颜色 - 夜间模式 -->
     <color name="lrc_normal_row">@color/onSurface</color>    <!-- 默认行颜色 -->
     <color name="lrc_select_line">#D0BCFF</color>            <!-- 选中行颜色 -->
@@ -73,11 +75,11 @@
     <color name="lrc_try_select_row">#55D0BCFF</color>       <!-- 尝试选中行颜色 -->
 
     <!-- 唱片播放状态环形颜色（7种高亮色 - 夜间模式） -->
-    <color name="disc_playing_color_1">#FFF82020</color>
-    <color name="disc_playing_color_2">#FFFF7F00</color>
-    <color name="disc_playing_color_3">#FFF6DD0E</color>
-    <color name="disc_playing_color_4">#0DFB17</color>
-    <color name="disc_playing_color_5">#07E6FA</color>
-    <color name="disc_playing_color_6">#FF2E66F2</color>
-    <color name="disc_playing_color_7">#FFB224F4</color>
+    <color name="disc_playing_color_1">#FFBA1818</color>
+    <color name="disc_playing_color_2">#FFD96C00</color>
+    <color name="disc_playing_color_3">#FFD1BC0C</color>
+    <color name="disc_playing_color_4">#FF0ABE11</color>
+    <color name="disc_playing_color_5">#FF05ACBC</color>
+    <color name="disc_playing_color_6">#FF295CDA</color>
+    <color name="disc_playing_color_7">#FFA020DC</color>
 </resources>

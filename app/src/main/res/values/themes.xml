@@ -77,57 +77,57 @@
         <item name="android:textColor">@color/secondary</item>
     </style>
 
-    <!-- 主题色1: 红 #F62D2D -->
+    <!-- 主题色1: 红（色值取 disc_playing_color_1） -->
     <style name="Theme.UnicornPlayer.Color1" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#F62D2D</item>
+        <item name="colorPrimary">@color/disc_playing_color_1</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#ED6E98</item>
         <item name="colorOnPrimaryContainer">#4a004a</item>
     </style>
 
-    <!-- 主题色2: 橙 #FF7F00 -->
+    <!-- 主题色2: 橙（色值取 disc_playing_color_2） -->
     <style name="Theme.UnicornPlayer.Color2" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#FF7F00</item>
+        <item name="colorPrimary">@color/disc_playing_color_2</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#F8B14C</item>
         <item name="colorOnPrimaryContainer">#5a0030</item>
     </style>
 
-    <!-- 主题色3: 黄 #FFE64E -->
+    <!-- 主题色3: 黄（色值取 disc_playing_color_3） -->
     <style name="Theme.UnicornPlayer.Color3" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#FFE64E</item>
+        <item name="colorPrimary">@color/disc_playing_color_3</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#F6E661</item>
         <item name="colorOnPrimaryContainer">#5a4a0f</item>
     </style>
 
-    <!-- 主题色4: 绿 #18E618 -->
+    <!-- 主题色4: 绿（色值取 disc_playing_color_4） -->
     <style name="Theme.UnicornPlayer.Color4" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#18E618</item>
+        <item name="colorPrimary">@color/disc_playing_color_4</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#93F483</item>
         <item name="colorOnPrimaryContainer">#1a4a2a</item>
     </style>
 
-    <!-- 主题色5: 青 #07F8F8 -->
+    <!-- 主题色5: 青（色值取 disc_playing_color_5） -->
     <style name="Theme.UnicornPlayer.Color5" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#07F8F8</item>
+        <item name="colorPrimary">@color/disc_playing_color_5</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#A6F2F6</item>
         <item name="colorOnPrimaryContainer">#0f2d5a</item>
     </style>
 
-    <!-- 主题色6: 蓝 #164DF0 -->
+    <!-- 主题色6: 蓝（色值取 disc_playing_color_6） -->
     <style name="Theme.UnicornPlayer.Color6" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#164DF0</item>
+        <item name="colorPrimary">@color/disc_playing_color_6</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#5B78ED</item>
         <item name="colorOnPrimaryContainer">#0f5a5a</item>
     </style>
 
-    <!-- 主题色7: 紫 #B400FF -->
+    <!-- 主题色7: 紫（色值取 disc_playing_color_7） -->
     <style name="Theme.UnicornPlayer.Color7" parent="Theme.UnicornPlayer">
-        <item name="colorPrimary">#B400FF</item>
+        <item name="colorPrimary">@color/disc_playing_color_7</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#E37CF4</item>
         <item name="colorOnPrimaryContainer">#2d0f5a</item>

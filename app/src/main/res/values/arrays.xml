@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 主题色列表：色值统一定义在 colors.xml 的 disc_playing_color_N，此处只引用 -->
     <integer-array name="theme_color_values">
-        <item>0xFFF62D2D</item>
-        <item>0xFFFF7F00</item>
-        <item>0xFFFFE64E</item>
-        <item>0xFF18E618</item>
-        <item>0xFF07F8F8</item>
-        <item>0xFF164DF0</item>
-        <item>0xFFB400FF</item>
+        <item>@color/disc_playing_color_1</item>
+        <item>@color/disc_playing_color_2</item>
+        <item>@color/disc_playing_color_3</item>
+        <item>@color/disc_playing_color_4</item>
+        <item>@color/disc_playing_color_5</item>
+        <item>@color/disc_playing_color_6</item>
+        <item>@color/disc_playing_color_7</item>
     </integer-array>
 </resources>
