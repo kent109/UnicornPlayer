@@ -1273,7 +1273,7 @@ class MusicService : Service() {
         // 检查文件是否存在
         val file = java.io.File(song.path)
         if (!file.exists()) {
-            LogWriter.writeError(TAG, "Song file not found: ${song.path}")
+            Log.i(TAG, "Song file not found: ${song.path}")
             android.widget.Toast.makeText(
                 this, "暂不支持播放该格式", android.widget.Toast.LENGTH_SHORT
             ).show()
@@ -2398,7 +2398,7 @@ class MusicService : Service() {
                 // 检查文件是否存在
                 val file = java.io.File(songPath)
                 if (!file.exists()) {
-                    LogWriter.writeError(TAG, "Song file not found: $songPath")
+                    Log.i(TAG, "Song file not found: $songPath")
                     return@launch
                 }
 

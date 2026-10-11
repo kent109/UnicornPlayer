@@ -128,6 +128,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         super.onDestroyView()
         songAdapter.stopCurrentSongAnimation()
         recyclerView = null
+        hideHandler.removeCallbacksAndMessages(null)
         _binding = null
     }
 
@@ -340,6 +341,8 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
                 recyclerView: androidx.recyclerview.widget.RecyclerView,
                 newState: Int
             ) {
+                // 主题切换重建时 RecyclerView 会先 detach 并派发 IDLE，此时视图已销毁
+                val binding = _binding ?: return
                 when (newState) {
                     androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_DRAGGING -> {
                         isScrolling = true
@@ -366,6 +369,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
                 dx: Int,
                 dy: Int
             ) {
+                val binding = _binding ?: return
                 if (isScrolling) {
                     binding.btnScrollToCurrent.visibility = View.GONE
                 }
