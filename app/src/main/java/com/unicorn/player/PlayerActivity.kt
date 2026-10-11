@@ -8,6 +8,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.util.TypedValue
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
 import android.view.animation.AnimationUtils
@@ -99,6 +100,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
         /** onPause→onStart 间隔超过该值才视为"灭屏/后台离开"，需要抑制恢复 */
         private const val AWAY_THRESHOLD_MS = 2000L
+
+        /** 松手切歌所需的最小水平拖动距离（占播放页宽度的比例），小于该值的轻扫一律弹回 */
+        private const val MIN_SWIPE_DRAG_RATIO = 0.5f
     }
 
     // 匹配 LRC 行内所有时间戳标记 [mm:ss.xx] / [mm:ss.xxx]
@@ -259,6 +263,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             transformPage(page, position)
         }
 
+        // 禁用轻扫切歌，需要拖动足够距离才翻页
+        disableLightFling()
+
         // 向下箭头点击收起播放页面
         binding.ivCollapse.setOnClickListener {
             if (isLrcFullscreen) {
@@ -379,6 +386,69 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 transformPage(child, position)
             }
         }
+    }
+
+    /**
+     * 禁用轻扫（fling）切歌：手指水平位移不足 MIN_SWIPE_DRAG_RATIO × 页宽时松手，
+     * 作废这次手势并动画回到按下时的那一页，不切歌也不重播。
+     *
+     * ViewPager2 的翻页判定在内部 RecyclerView 的 SnapHelper fling 回调里（只看速度），
+     * 没有对外开关；OnItemTouchListener 会在 RecyclerView 读取 UP 的 action 之前先收到
+     * 同一个事件对象，所以在此把 action 改写为 CANCEL 即可阻止 fling。
+     */
+    private fun disableLightFling() {
+        val pager = binding.viewPager
+        val rv = pager.getChildAt(0) as? RecyclerView ?: return
+        rv.addOnItemTouchListener(object : RecyclerView.OnItemTouchListener {
+            private var downX = 0f
+            private var downItem = 0
+
+            override fun onInterceptTouchEvent(
+                recyclerView: RecyclerView,
+                event: MotionEvent
+            ): Boolean {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = event.rawX
+                        downItem = pager.currentItem
+                    }
+
+                    MotionEvent.ACTION_UP -> {
+                        val minDrag = pager.width * MIN_SWIPE_DRAG_RATIO
+                        // 只在播放页自身被拖动时介入，避免打断进度条、歌词等子 View 的手势
+                        if (kotlin.math.abs(event.rawX - downX) < minDrag
+                            && recyclerView.scrollState == RecyclerView.SCROLL_STATE_DRAGGING
+                            && pageOffset(recyclerView, downItem) != 0
+                        ) {
+                            event.action = MotionEvent.ACTION_CANCEL
+                            recyclerView.post {
+                                val dx = pageOffset(recyclerView, downItem)
+                                if (dx != 0) recyclerView.smoothScrollBy(dx, 0)
+                            }
+                        }
+                    }
+                }
+                return false
+            }
+
+            override fun onTouchEvent(recyclerView: RecyclerView, event: MotionEvent) {}
+
+            override fun onRequestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {}
+        })
+    }
+
+    /**
+     * 把 position 页对齐回去所需的滚动量（该页取不到时返回 0，即不介入）。
+     * scrollBy 的正方向让子 View 左移，所以滚动量就是 child.left 本身。
+     *
+     * 方向不能反：ScrollEventAdapter 按回位第一帧的滚动方向推算目标页（正向 = mPosition+1，
+     * 反向 = mPosition），只有算回原页才不会派发 onPageSelected；算错就会误切歌、重播当前歌曲。
+     */
+    private fun pageOffset(rv: RecyclerView, position: Int): Int {
+        val child = (0 until rv.childCount)
+            .map { rv.getChildAt(it) }
+            .firstOrNull { rv.getChildAdapterPosition(it) == position }
+        return child?.left ?: 0
     }
 
     /**
