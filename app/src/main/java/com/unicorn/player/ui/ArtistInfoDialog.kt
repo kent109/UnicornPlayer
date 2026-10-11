@@ -117,7 +117,7 @@ class ArtistInfoDialog(
                 )
             val drawable = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                setColor(designBottomSheet.context.getColor(R.color.surface))
+                setColor(designBottomSheet.context.getColor(R.color.surface_panel))
                 cornerRadii = floatArrayOf(
                     cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f, 0f, 0f
                 )

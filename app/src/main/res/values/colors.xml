@@ -28,6 +28,12 @@
     <color name="onSurface">#1C1B1F</color>
     <color name="surfaceVariant">#E7E0EC</color>
     <color name="onSurfaceVariant">#49454F</color>
+    <!-- 悬浮面板背景：BottomSheetDialog / AlertDialog / 底部播放条 / 多选底部面板 -->
+    <color name="surface_panel">#FFFBFE</color>
+    <!-- 列表项背景 -->
+    <color name="list_item_bg">#FFFBFE</color>
+    <!-- RecyclerView 列表项背景 -->
+    <color name="recycler_item_bg">#FFFBFE</color>
 
     <!-- 不支持播放格式的角标背景（日间） -->
     <color name="songUnsupportedBg">#E0E0E0</color>

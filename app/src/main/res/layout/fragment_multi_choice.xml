@@ -89,7 +89,7 @@
             android:id="@+id/actionButtonsContent"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="@color/surface"
+            android:background="@color/surface_panel"
             android:divider="@drawable/vert_divider"
             android:dividerPadding="24dp"
             android:gravity="center_vertical"

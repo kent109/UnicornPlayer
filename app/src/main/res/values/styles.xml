@@ -11,8 +11,8 @@
     </style>
 
     <style name="BottomSheetStyle" parent="Widget.MaterialComponents.BottomSheet.Modal">
-        <!-- 使用 surface 颜色，在 values/colors.xml（白）与 values-night/colors.xml（黑）中自动适配 -->
-        <item name="backgroundTint">@color/surface</item>
+        <!-- 使用悬浮面板颜色，在 values/colors.xml（白）与 values-night/colors.xml（黑）中自动适配 -->
+        <item name="backgroundTint">@color/surface_panel</item>
         <item name="shapeAppearance">@style/ShapeAppearanceBottomSheet</item>
     </style>
 

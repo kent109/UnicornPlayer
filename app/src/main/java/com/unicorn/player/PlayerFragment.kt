@@ -409,7 +409,7 @@ class PlayerFragment : Fragment() {
                 )
             val drawable = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setColor(designBottomSheet.context.getColor(R.color.surface))
+                setColor(designBottomSheet.context.getColor(R.color.surface_panel))
                 cornerRadii = floatArrayOf(
                     cornerRadius, cornerRadius, cornerRadius, cornerRadius,
                     0f, 0f, 0f, 0f
@@ -485,7 +485,7 @@ class PlayerFragment : Fragment() {
                 )
             val drawable = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setColor(designBottomSheet.context.getColor(R.color.surface))
+                setColor(designBottomSheet.context.getColor(R.color.surface_panel))
                 cornerRadii = floatArrayOf(
                     cornerRadius, cornerRadius, cornerRadius, cornerRadius,
                     0f, 0f, 0f, 0f
