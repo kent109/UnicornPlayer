@@ -170,7 +170,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         private set
 
     // 非全屏时歌词区顶部与 playPauseButton 底部之间额外留出的间距
-    private val lrcTopGap: Int by lazy { DisplayUtil.dp2px(this, 11f) }
+    private val lrcTopGap: Int by lazy { DisplayUtil.dp2px(this, 16f) }
 
     // 进入全屏时正在播放的歌曲路径，用于判断切歌时是否退出全屏
     private var fullscreenSongPath: String? = null
@@ -231,6 +231,16 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             }
         }
 
+    // "开启歌词"用的 SAF 目录选择器：授权成功后按设置页开关的同一流程启用歌词并加载当前歌曲歌词
+    private val enableLyricsTreeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+            if (treeUri != null) {
+                LyricsSaveManager.saveTreeUri(this, treeUri)
+                LyricsOptionsActivity.toggleLyricsEnabled(this, lifecycleScope, true)
+                showLyricsAfterEnable()
+            }
+        }
+
     // 普通行颜色与高亮行颜色，进入/退出全屏时切换
     private var normalRowColor: Int = 0
     private var highlightRowColor: Int = 0
@@ -248,7 +258,8 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // 初始化 LrcView
+        // 恢复歌词开关状态并初始化 LrcView
+        syncLyricsEnabled()
         initLrcView()
 
         // 初始化adapter（初始为空）
@@ -463,6 +474,24 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     )
 
     /**
+     * 从 DataStore 恢复"显示歌词"的运行时状态。
+     *
+     * LrcFetcher.lyricsEnabled 是进程内存值，只有歌词设置页会同步它；进程重启后必须读回
+     * 持久化状态，否则打开状态下歌词不会出现，关闭状态下"开启歌词"按钮也会消失。
+     */
+    private fun syncLyricsEnabled() {
+        LrcFetcher.lyricsEnabled = runBlocking {
+            try {
+                applicationContext.lyricsDataStore.data.first()[LyricsOptionsActivity.LYRICS_ENABLED]
+                    ?: LrcFetcher.lyricsEnabled
+            } catch (e: Exception) {
+                Log.e(TAG, "读取 lyrics_enabled 失败", e)
+                LrcFetcher.lyricsEnabled
+            }
+        }
+    }
+
+    /**
      * 从 DataStore 读取字体大小设置并应用到 LrcView。
      * 非全屏模式：拖动选中行保持普通行字号；全屏模式：拖动选中行独立字号。
      */
@@ -548,9 +577,6 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         binding.lrcView.lrcSetting.setTriangleWidth(DisplayUtil.dp2px(this, 10f))
         binding.lrcView.post { binding.lrcView.commitLrcSettings() }
 
-        // 隐藏"加载歌词中"提示
-        lrcView.setNoDataMessage("")
-
         // 滚动动画时长：库默认 400ms，调快为 250ms（seekbar 定位与切行滚动均生效）
         lrcView.setAutomaticMoveAnimationDuration(250)
 
@@ -583,8 +609,20 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             ).also { it.show() }
         }
 
+        // "开启歌词"按钮：歌词开关处于关闭时显示，点击与设置页打开"显示歌词"开关完全同流程
+        binding.btnEnableLyrics.setOnClickListener {
+            if (!LyricsOptionsActivity.toggleLyricsEnabled(this, lifecycleScope, true)) {
+                // 无 SAF 歌词目录权限：先引导授权，回调里再启用
+                enableLyricsTreeLauncher.launch(LyricsSaveManager.getInitialUri(this))
+                return@setOnClickListener
+            }
+            showLyricsAfterEnable()
+        }
+
         // 点击LrcView进入全屏显示
         lrcView.setOnClickListener {
+            // 歌词功能未开启、或正处于"新建歌词"（无歌词）状态时不进全屏
+            if (!LrcFetcher.lyricsEnabled || showNoLyricsButton) return@setOnClickListener
             showNoLyricsButton = false
             binding.btnCreateLyrics.visibility = View.GONE
             if (!isLrcFullscreen) {
@@ -1076,7 +1114,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             override fun onAnimationStart(animation: android.view.animation.Animation?) {}
             override fun onAnimationEnd(animation: android.view.animation.Animation?) {
                 // 退出全屏后，若无歌词则重新显示"新建歌词"按钮
-                updateCreateLyricsButtonVisibility()
+                updateLyricsButtonsVisibility()
                 // 退出全屏：隐藏居中收起箭头，恢复 topBar 向下箭头和分享按钮
                 binding.ivCollapse.visibility = View.GONE
                 binding.dropdown.visibility = View.VISIBLE
@@ -1191,15 +1229,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      */
     private fun disableLyrics() {
         showNoLyricsButton = false
-        binding.btnCreateLyrics.visibility = View.GONE
         binding.lrcView.setLrcData(emptyList())
         binding.lrcView.visibility = View.GONE
-        LrcFetcher.lyricsEnabled = false
-        lifecycleScope.launch {
-            applicationContext.lyricsDataStore.edit {
-                it[LyricsOptionsActivity.LYRICS_ENABLED] = false
-            }
-        }
+        LyricsOptionsActivity.toggleLyricsEnabled(this, lifecycleScope, false)
+        updateLyricsButtonsVisibility()
     }
 
     /**
@@ -1215,12 +1248,12 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         syncPosition: Long? = null
     ) {
         Log.d(TAG, "loadAndShowLrc: path=$audioPath")
-        // 歌词功能被关闭时，清空并隐藏 LrcView 和"新建歌词"按钮
+        // 歌词功能被关闭时，清空并隐藏 LrcView，在原位显示"开启歌词"按钮
         if (!LrcFetcher.lyricsEnabled) {
             showNoLyricsButton = false
-            binding.btnCreateLyrics.visibility = View.GONE
             binding.lrcView.setLrcData(emptyList())
             binding.lrcView.visibility = View.GONE
+            updateLyricsButtonsVisibility()
             return
         }
         // 切换到不同歌曲时，如果LrcView处于全屏状态，才退出全屏；
@@ -1273,14 +1306,26 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     }
 
     /**
-     * 根据当前状态更新"新建歌词"按钮可见性：仅当标记为无歌词、且 LrcView 未处于全屏时显示
+     * 更新歌词区两个互斥按钮的可见性：歌词功能关闭时在原位显示"开启歌词"；
+     * 开启后仅当标记为无歌词且 LrcView 未处于全屏时显示"新建歌词"
      */
-    private fun updateCreateLyricsButtonVisibility() {
-        if (showNoLyricsButton && !isLrcFullscreen) {
-            binding.btnCreateLyrics.visibility = View.VISIBLE
-        } else {
+    private fun updateLyricsButtonsVisibility() {
+        if (!LrcFetcher.lyricsEnabled) {
+            binding.btnEnableLyrics.visibility = View.VISIBLE
             binding.btnCreateLyrics.visibility = View.GONE
+            return
         }
+        binding.btnEnableLyrics.visibility = View.GONE
+        binding.btnCreateLyrics.visibility =
+            if (showNoLyricsButton && !isLrcFullscreen) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * 歌词刚被开启：刷新按钮可见性并立即加载当前歌曲歌词
+     */
+    private fun showLyricsAfterEnable() {
+        updateLyricsButtonsVisibility()
+        musicService?.currentSong?.value?.let { loadAndShowLrc(it.path) }
     }
 
     /**
@@ -1316,7 +1361,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                             Log.d(TAG, "网络歌词加载成功: ${lrcRows.size} 行")
                         } else {
                             showNoLyricsButton = true
-                            updateCreateLyricsButtonVisibility()
+                            updateLyricsButtonsVisibility()
                             binding.lrcView.visibility = View.GONE
                             Log.d(TAG, "下载的歌词文件解析为空")
                         }
@@ -1337,7 +1382,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     // 代数不匹配说明已有更新的歌词请求，不应影响新歌曲的状态
                     if (lrcLoadGeneration != generation) return@launch
                     showNoLyricsButton = true
-                    updateCreateLyricsButtonVisibility()
+                    updateLyricsButtonsVisibility()
                     binding.lrcView.visibility = View.GONE
                     Log.d(TAG, "未搜索到网络歌词，显示新建歌词按钮")
                 }
@@ -1347,7 +1392,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 lifecycleScope.launch {
                     if (lrcLoadGeneration != generation) return@launch
                     showNoLyricsButton = true
-                    updateCreateLyricsButtonVisibility()
+                    updateLyricsButtonsVisibility()
                     binding.lrcView.visibility = View.GONE
                     Log.e(TAG, "网络下载歌词失败: $message")
                 }

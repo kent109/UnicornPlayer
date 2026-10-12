@@ -86,6 +86,16 @@
             android:text="@string/create_new_lyrics"
             android:visibility="gone" />
 
+        <!-- 歌词开关关闭时显示在同一位置的"开启歌词"按钮 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEnableLyrics"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="@string/enable_lyrics"
+            android:visibility="gone" />
+
     </com.unicorn.player.widget.LrcViewContainer>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -42,7 +42,11 @@ class LrcViewContainer @JvmOverloads constructor(
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 intercepting = false
-                return super.dispatchTouchEvent(ev)
+                super.dispatchTouchEvent(ev)
+                // 必须消费 DOWN：LrcView 隐藏时（歌词关闭 / 显示"新建歌词"）没有子 View 接收事件，
+                // 父布局便不再把后续 MOVE/UP 派发给本容器，GestureDetector 收不到 UP，
+                // 待触发的长按定时器无法取消，轻点也会在超时后误入歌词搜索页
+                return true
             }
 
             MotionEvent.ACTION_MOVE -> {

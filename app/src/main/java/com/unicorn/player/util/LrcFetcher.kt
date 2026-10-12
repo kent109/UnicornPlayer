@@ -37,8 +37,9 @@ object LrcFetcher {
     private val gson = Gson()
 
     // 歌词功能总开关：为 true 时正常加载本地歌词/请求网络歌词；为 false 时 fetchLrc 直接跳过
+    // 默认关闭，与歌词设置页的开关默认值保持一致（实际状态由 DataStore 恢复）
     @Volatile
-    var lyricsEnabled: Boolean = true
+    var lyricsEnabled: Boolean = false
 
     // 正在请求中的音频路径集合，防止同一首歌重复发起网络请求
     private val inFlightRequests = Collections.synchronizedSet<String>(LinkedHashSet())

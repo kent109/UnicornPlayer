@@ -43,7 +43,7 @@ public class UnicornLrcView extends View implements ILrcView {
      */
     private static final float ROW_EDGE_PADDING_RATIO = 0.05f;
 
-    private String NoDataMessage = "加载歌词中";
+    private String NoDataMessage = "";
     private LrcViewContext lrcContext;
     private List<LrcRow> mRows;
     private Boolean TextSizeAutomaticMode = false;

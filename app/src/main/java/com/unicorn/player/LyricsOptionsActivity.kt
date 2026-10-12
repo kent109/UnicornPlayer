@@ -19,6 +19,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.unicorn.player.databinding.ActivityLyricsOptionsBinding
 import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LyricsSaveManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -67,10 +68,43 @@ class LyricsOptionsActivity : BaseActivity() {
         )
 
         // SWITCH 类型设置项的 key → 默认值 映射
+        // 歌词开关默认关闭：全新安装没有歌词目录的 SAF 权限，默认打开只是"假的"可用状态
         val switchDefaultMap = mapOf(
             "lyrics_enable" to false,
             "time_label" to false
         )
+
+        /**
+         * "显示歌词"开关的共用切换流程（设置页开关与播放页"开启歌词"按钮都走这里）。
+         *
+         * 打开时先校验歌词目录的 SAF 权限：无权限则不改动任何状态并返回 false，
+         * 由调用方发起目录授权；有权限则同步运行时状态（[LrcFetcher.lyricsEnabled]）
+         * 并持久化到 DataStore，返回 true。关闭时无权限限制。
+         *
+         * @return 是否已完成切换
+         */
+        fun toggleLyricsEnabled(
+            context: Context,
+            scope: CoroutineScope,
+            enabled: Boolean
+        ): Boolean {
+            val granted = LyricsSaveManager.hasSavedTreeUri(context) &&
+                    LyricsSaveManager.isTreePermissionValid(context)
+            if (enabled && !granted) {
+                return false
+            }
+            LrcFetcher.lyricsEnabled = enabled
+            scope.launch {
+                try {
+                    context.applicationContext.lyricsDataStore.edit {
+                        it[LYRICS_ENABLED] = enabled
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "写入歌词开关失败: $enabled", e)
+                }
+            }
+            return true
+        }
     }
 
     private lateinit var binding: ActivityLyricsOptionsBinding
@@ -269,21 +303,18 @@ class LyricsOptionsActivity : BaseActivity() {
             // 移除 pendingSwitchStates 中间层 —— 解决 runBlocking 在 onPause 中可被中断的问题。
             switchButton.setOnCheckedChangeListener { _, isChecked ->
                 if (item.key == "lyrics_enable") {
-                    if (isChecked) {
-                        // 打开前检查 SAF 权限——无权限则恢复开关并启动选择器
-                        if (!LyricsSaveManager.hasSavedTreeUri(this@LyricsOptionsActivity) ||
-                            !LyricsSaveManager.isTreePermissionValid(this@LyricsOptionsActivity)
-                        ) {
-                            if (!isRestoringSwitch) {
-                                isRestoringSwitch = true
-                                switchButton.isChecked = false
-                                isRestoringSwitch = false
-                                openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri(this@LyricsOptionsActivity))
-                            }
-                            return@setOnCheckedChangeListener
-                        }
+                    // 与播放页"开启歌词"按钮共用 toggleLyricsEnabled：
+                    // 无 SAF 权限时恢复开关为关闭并启动目录选择器
+                    if (!toggleLyricsEnabled(
+                            this@LyricsOptionsActivity, lifecycleScope, isChecked
+                        ) && !isRestoringSwitch
+                    ) {
+                        isRestoringSwitch = true
+                        switchButton.isChecked = false
+                        isRestoringSwitch = false
+                        openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri(this@LyricsOptionsActivity))
                     }
-                    LrcFetcher.lyricsEnabled = isChecked
+                    return@setOnCheckedChangeListener
                 }
                 lifecycleScope.launch {
                     try {
