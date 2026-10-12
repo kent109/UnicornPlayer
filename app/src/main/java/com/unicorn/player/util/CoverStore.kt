@@ -21,6 +21,9 @@ object CoverStore {
     const val MAX_SIZE = 512
     private const val JPEG_QUALITY = 90
 
+    /** 播放器"修改封面"的歌曲级副本类型（键为歌曲 id），2 已被歌单副本占用 */
+    const val TYPE_SONG = 3
+
     /**
      * 保存选中的图片副本，返回 (同键文件名前缀, 绝对路径)；失败返回 null。
      * 前缀用于删除同一 (type, key) 被替换的旧副本。
@@ -81,6 +84,7 @@ object CoverStore {
     private fun typePrefix(type: Int): String = when (type) {
         Cover.TYPE_ARTIST -> "artist"
         Cover.TYPE_ALBUM -> "album"
+        TYPE_SONG -> "song"
         else -> "playlist"
     }
 

@@ -44,6 +44,16 @@ class PlayerPagerAdapter(
         }
     }
 
+    /**
+     * 就地替换某个位置的歌曲记录（如封面被改写）并按 payload 重绑该页。
+     * updateSongs 只比较 id，同一首歌换记录不会触发重绑，故单独走这条路。
+     */
+    fun replaceSong(position: Int, song: Song) {
+        if (position !in _songs.indices) return
+        _songs = _songs.toMutableList().also { it[position] = song }
+        notifyItemChanged(position, "song_update")
+    }
+
     override fun getItemCount(): Int = _songs.size
 
     override fun createFragment(position: Int): Fragment {

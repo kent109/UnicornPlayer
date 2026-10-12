@@ -5,6 +5,7 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.unicorn.player.databinding.ViewBottomPlayerBinding
 import com.unicorn.player.model.Song
@@ -144,10 +145,10 @@ class BottomPlayerController(
             binding.songTitle.requestFocus()
         }
 
-        // 使用 Glide 加载专辑封面并添加圆角
+        // 使用 Glide 加载专辑封面并添加圆角（CenterCrop 先把图裁成控件尺寸，圆角才稳定）
         Glide.with(activity).load(song.albumArt).placeholder(R.drawable.ic_music_note)
             .error(R.drawable.ic_music_note)
-            .transform(RoundedCorners(20))
+            .transform(CenterCrop(), RoundedCorners(20))
             .into(binding.albumArt)
     }
 

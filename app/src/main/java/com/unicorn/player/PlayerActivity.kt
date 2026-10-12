@@ -15,6 +15,7 @@ import android.view.animation.AnimationUtils
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
@@ -32,6 +33,7 @@ import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.util.DisplayUtil
+import com.unicorn.player.util.ImagePicker
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
@@ -50,8 +52,28 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     private lateinit var binding: ActivityPlayerBinding
     private var musicService: MusicService? = null
     private lateinit var pagerAdapter: PlayerPagerAdapter
+    private lateinit var coverEditor: CoverEditorHelper
     private var isUserScrolling = false
     private val scrollDebounceHandler = Handler(Looper.getMainLooper())
+
+    // 最近一次已由 currentSong 观察者处理过的歌曲 id：
+    // 用于区分"切歌"与"同一首歌的记录刷新"（如改写封面后重新派发）
+    private var lastHandledSongId = -1L
+
+    // 修改封面：相册选图与分区存储写入授权
+    private val coverPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        coverEditor.onImagePicked(
+            if (result.resultCode == RESULT_OK) ImagePicker.extractUri(result.data) else null
+        )
+    }
+
+    private val coverWriteLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        coverEditor.onWritePermissionResult(result.resultCode == RESULT_OK)
+    }
 
     // ===== 歌词进度更新抑制 =====
     // true 时忽略 currentPosition 观察者的所有更新。
@@ -299,6 +321,23 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             val song = musicService?.currentSong?.value ?: return@setOnClickListener
             shareCurrentSong(song)
         }
+
+        // ivEditCover：修改当前播放歌曲的内嵌封面（直接改写音频文件标签）
+        coverEditor = CoverEditorHelper(
+            context = this,
+            startImagePicker = {
+                coverPickerLauncher.launch(ImagePicker.createIntent(this@PlayerActivity))
+            },
+            requestWritePermission = { intentSender ->
+                coverWriteLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+            },
+            onCoverChanged = { updated -> refreshPlayerCover(updated) }
+        )
+        binding.ivEditCover.setOnClickListener {
+            val song = musicService?.currentSong?.value ?: return@setOnClickListener
+            coverEditor.show(song)
+        }
+        ViewUtil.expandTouchTarget(binding.ivEditCover, expandPx)
 
         // 注册绘制前监听：非全屏时持续把容器顶部锚到当前页 playPauseButton 底部
         binding.root.viewTreeObserver.addOnPreDrawListener(preDrawListener)
@@ -1033,9 +1072,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         fullscreenSongPath = musicService?.currentSong?.value?.path
         // 进入全屏时隐藏"新建歌词"按钮
         binding.btnCreateLyrics.visibility = View.GONE
-        // 全屏：显示居中收起箭头，隐藏 topBar 向下箭头和分享按钮
+        // 全屏：显示居中收起箭头，隐藏 topBar 向下箭头、修改封面和分享按钮
         binding.ivCollapse.visibility = View.VISIBLE
         binding.dropdown.visibility = View.GONE
+        binding.ivEditCover.visibility = View.GONE
         binding.ivShare.visibility = View.GONE
 
         // 容器顶部位于 topBar 下方、底部撑满父布局（不使用百分比高度、不设 topMargin）
@@ -1115,9 +1155,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             override fun onAnimationEnd(animation: android.view.animation.Animation?) {
                 // 退出全屏后，若无歌词则重新显示"新建歌词"按钮
                 updateLyricsButtonsVisibility()
-                // 退出全屏：隐藏居中收起箭头，恢复 topBar 向下箭头和分享按钮
+                // 退出全屏：隐藏居中收起箭头，恢复 topBar 向下箭头、修改封面和分享按钮
                 binding.ivCollapse.visibility = View.GONE
                 binding.dropdown.visibility = View.VISIBLE
+                binding.ivEditCover.visibility = View.VISIBLE
                 binding.ivShare.visibility = View.VISIBLE
                 // 恢复容器非全屏布局：左右 16dp、底部 24dp；
                 // 顶部动态锚到当前页 playPauseButton 底部（不使用百分比高度）
@@ -1559,7 +1600,12 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         musicService?.let { service ->
             // 观察当前歌曲变化，同步ViewPager位置和歌词
             service.currentSong.observe(this) { song ->
+                // 同一首歌的记录刷新（如封面改写后重新派发）：页面位置与歌词都无需重做
+                val isSameSongRefresh = song?.id == lastHandledSongId
+                song?.let { lastHandledSongId = it.id }
+
                 if (isHandlingSongChange) return@observe
+                if (isSameSongRefresh) return@observe
 
                 song?.let {
                     // 如果是初始设置，不处理
@@ -1849,6 +1895,19 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             LogWriter.writeError(TAG, "分享文件失败: ${e.message}", e)
             Toast.makeText(this, "分享失败", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * 封面写入成功后刷新界面：媒体库重扫是异步的，等它生效会滞后，
+     * 因此直接换成回写后的记录——播放页当前页按 payload 重绑，
+     * 播放队列/底部播放栏/通知由 Service 同步
+     */
+    private fun refreshPlayerCover(updated: Song) {
+        val index = pagerAdapter.songs.indexOfFirst { it.id == updated.id }
+        if (index >= 0) {
+            pagerAdapter.replaceSong(index, updated)
+        }
+        musicService?.refreshSongRecord(updated)
     }
 
     /**

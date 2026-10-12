@@ -20,6 +20,8 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.resource.bitmap.CenterCrop
+import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.unicorn.player.adapter.PlayQueueAdapter
@@ -229,6 +231,12 @@ class PlayerFragment : Fragment() {
         service.currentSong.observe(viewLifecycleOwner) { playingSong ->
             // 检查当前Fragment的歌曲是否正在播放
             val isCurrentSongPlaying = currentSong?.id == playingSong?.id
+            // 正在播放的这首歌被就地刷新了记录（如改写封面）：本页同步展示新记录。
+            // 不能靠适配器的 payload 重绑——ViewPager2 的 holder.itemView 只是空容器，
+            // 拿不到 Fragment 实例
+            if (isCurrentSongPlaying && playingSong != null && playingSong != currentSong) {
+                updateSongInfo(playingSong)
+            }
             updatePlayPauseState(isCurrentSongPlaying)
         }
 
@@ -632,11 +640,12 @@ class PlayerFragment : Fragment() {
 
             Log.d("PlayerFragment", "Updating song info: ${it.title} - ${it.artist}")
 
+            // CenterCrop 先把图裁成控件像素尺寸，圆角半径才不会被 ImageView 的缩放同比改变
             Glide.with(this)
                 .load(it.albumArt)
                 .placeholder(R.drawable.ic_music_note)
                 .error(R.drawable.ic_music_note)
-                .transform(com.bumptech.glide.load.resource.bitmap.RoundedCorners(36))
+                .transform(CenterCrop(), RoundedCorners(36))
                 .into(binding.albumArt)
 
             // 设置进度条最大值（使用歌曲实际时长）

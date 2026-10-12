@@ -225,6 +225,20 @@ class MusicService : Service() {
         }
     }
 
+    /**
+     * 就地刷新已在队列中的歌曲记录（如封面标签被改写换了展示值）：
+     * 同步播放队列与当前歌曲，并刷新通知；不动 currentIndex、不重置进度
+     */
+    fun refreshSongRecord(song: Song) {
+        songList.indexOfFirst { it.id == song.id }.takeIf { it >= 0 }?.let {
+            songList[it] = song
+        }
+        if (_currentSong.value?.id == song.id) {
+            _currentSong.value = song
+            updateNotification(song)
+        }
+    }
+
     private val _isPlaying = MutableLiveData(false)
     val isPlaying: LiveData<Boolean> = _isPlaying
 
@@ -2440,6 +2454,11 @@ class MusicService : Service() {
                     return@launch
                 }
 
+                // DataStore 只存了 id/标题/歌手/路径，封面（含"修改封面"写入的本地副本）、
+                // 专辑、时长、音质等展示字段要按 id 从库里取，否则重启后底部播放条没封面
+                val dbSong = MusicDatabase.getDatabase(this@MusicService)
+                    .songDao().getSongByIdSync(songId)
+
                 // 恢复歌曲信息（在主线程更新）
                 withContext(Dispatchers.Main) {
                     // 再次检查：如果在加载期间外部歌曲已被设置，跳过恢复
@@ -2470,7 +2489,8 @@ class MusicService : Service() {
                         }
                         return@withContext
                     }
-                    val restoredSong = Song(
+                    // 路径沿用 DataStore 里校验过存在的那个，其余展示字段以库记录为准
+                    val restoredSong = dbSong?.copy(path = songPath) ?: Song(
                         id = songId,
                         title = songTitle,
                         artist = songArtist,
