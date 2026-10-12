@@ -26,7 +26,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import com.hw.lrcviewlib.LrcRow
-import com.hw.lrcviewlib.LrcShowRow
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.model.Song
@@ -853,77 +852,13 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      * StartMoveAnimation 在"目标行 == 当前高亮行"时直接 return。因此进入/退出全屏
      * 改变高度后，要等下一句歌词切换（甚至暂停时永远不会）才会重新居中。
      *
-     * 该库无公开 recenter API，这里在 doOnPreDraw（确保已按新高度完成测量）中
-     * 复用库自身的坐标公式直接修正偏移，即时生效，与播放/暂停状态无关：
-     *   delta = height/2 + hlTextSize/2 - 高亮行首显示行上次绘制的 Y
-     *   FirstRowPositionY = 当前偏移 + delta
-     * 若库版本变更导致反射失败，静默降级为原有行为。
+     * 在 doOnPreDraw（确保已按新高度完成测量）中调用 fork 开放的公共 API，
+     * 即时生效，与播放/暂停状态无关。
      */
     private fun snapLrcHighlightToCenter() {
         binding.lrcView.doOnPreDraw {
-            try {
-                val view = binding.lrcView
-                if (!view.hasData()) return@doOnPreDraw
-                val viewCls = view.javaClass
-
-                // 先取消可能在运行的滚动动画，避免其后续帧覆盖本次偏移
-                cancelLrcMoveAnimator()
-
-                val firstRowField = viewCls.getDeclaredField("FirstRowPositionY")
-                firstRowField.isAccessible = true
-                val currentOffset = firstRowField.getFloat(view)
-
-                val hlIndexField = viewCls.getDeclaredField("HeightLightRowPosition")
-                hlIndexField.isAccessible = true
-                val hlIndex = hlIndexField.getInt(view)
-
-                val mRowsField = viewCls.getDeclaredField("mRows")
-                mRowsField.isAccessible = true
-                @Suppress("UNCHECKED_CAST")
-                val rows = mRowsField.get(view) as List<LrcRow>
-                if (hlIndex !in rows.indices) return@doOnPreDraw
-
-                val showRows: List<LrcShowRow> = rows[hlIndex].showRows ?: return@doOnPreDraw
-                if (showRows.isEmpty()) return@doOnPreDraw
-
-                // 高亮行第一个显示行上次被绘制时的绝对 Y（FirstRowPositionY + 累积行高）
-                val yPosField = LrcShowRow::class.java.getDeclaredField("YPosition")
-                yPosField.isAccessible = true
-                val rowDrawnY = yPosField.getFloat(showRows[0])
-
-                val setting = view.lrcSetting
-                val hlSizeField = setting.javaClass.getDeclaredField("HeightLightRowTextSize")
-                hlSizeField.isAccessible = true
-                val hlTextSize = hlSizeField.getInt(setting)
-
-                val targetOffset =
-                    currentOffset + (view.height / 2f + hlTextSize / 2f - rowDrawnY)
-                firstRowField.setFloat(view, targetOffset)
-                view.invalidate()
-            } catch (e: Exception) {
-                Log.e(TAG, "snapLrcHighlightToCenter 失败: ${e.message}", e)
-            }
-        }
-    }
-
-    /**
-     * 取消 LrcView 内部正在运行的滚动 ValueAnimator，并复位 OnAnimation 标记。
-     * 库的 setLrcData/外部直接写偏移都不会停止该动画，运行中的动画会逐帧覆盖
-     * FirstRowPositionY，因此任何"即时定位"前都必须先调用本方法。
-     */
-    private fun cancelLrcMoveAnimator() {
-        try {
-            val view = binding.lrcView
-            val animatorField =
-                view.javaClass.getDeclaredField("valueAnimator")
-            animatorField.isAccessible = true
-            (animatorField.get(view) as? android.animation.ValueAnimator)?.cancel()
-            val onAnimationField =
-                view.javaClass.getDeclaredField("OnAnimation")
-            onAnimationField.isAccessible = true
-            onAnimationField.set(view, false)
-        } catch (e: Exception) {
-            Log.e(TAG, "cancelLrcMoveAnimator 失败: ${e.message}", e)
+            binding.lrcView.cancelMoveAnimation()
+            binding.lrcView.recenterHighlightImmediate()
         }
     }
 
@@ -931,120 +866,30 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      * 应用歌词数据并立即定位到 [position] 对应的歌词行：无动画、无首行闪烁。
      *
      * 灭屏再亮屏时走 onResume → loadAndShowLrc → setLrcData。而 setLrcData 会把
-     * HeightLightRowPosition、FirstRowPositionY 全部重置为 0，导致第一帧高亮第一行，
-     * 之后要等播放进度回调驱动 seekLrcToTime 才滚到当前播放行（暂停时更久）。
+     * 高亮下标、首行偏移全部重置为 0，导致第一帧高亮第一行，之后要等播放进度
+     * 回调驱动 seekLrcToTime 才滚到当前播放行（暂停时更久）。
      *
-     * 在 setLrcData 之后、首帧绘制之前，先反射触发库内部的行布局，再委托
-     * [positionLrcImmediate] 直接写好高亮行下标与偏移，使第一帧即为正确状态。
+     * fork 开放的 positionToTimeImmediate 在首帧绘制前完成行布局生成与
+     * "行盒居中 + 终点锁相位"定位，使第一帧即为正确状态。
      *
-     * @return true 表示已立即定位；false 表示反射失败或高度未就绪，调用方回退到原流程
+     * @return true 表示已立即定位；false 表示视图尺寸未就绪，调用方可下一帧重试
      */
     private fun applyLrcRowsImmediate(rows: List<LrcRow>, position: Long): Boolean {
         val view = binding.lrcView
-        if (view.height <= 0) return false
-        return try {
-            val viewCls = view.javaClass
-            // 1. 正常应用数据（内部会重置高亮/偏移并 postInvalidate）
-            view.setLrcData(rows)
-
-            // 2. 立即触发库内部的行布局，生成 ShowRows（首帧 onDraw 前通常尚未执行）。
-            // 注意 initLrcRowData 非幂等：对每行 getShowRows().add(...) 并累加
-            // ContentHeight。因此调用前必须先重置每行的 ShowRows 与 ContentHeight，
-            // 调用后把 InitLrcRowDada 置为 true，避免 onDraw 再执行一次导致
-            // 每行歌词重复显示。
-            rows.forEach { row ->
-                row.showRows = ArrayList()
-                // ContentHeight 为纯 public 字段（无 getter），用原名访问
-                row.ContentHeight = 0
-            }
-            val initMethod =
-                viewCls.getDeclaredMethod("initLrcRowData", List::class.java)
-            initMethod.isAccessible = true
-            initMethod.invoke(view, rows)
-            val initFlagField =
-                viewCls.getDeclaredField("InitLrcRowDada")
-            initFlagField.isAccessible = true
-            initFlagField.set(view, true)
-
-            // 3. 无动画定位到 position
-            positionLrcImmediate(position)
-        } catch (e: Exception) {
-            Log.e(TAG, "applyLrcRowsImmediate 失败: ${e.message}", e)
-            false
-        }
+        if (view.height <= 0 || view.width <= 0) return false
+        // setLrcData 内部重置高亮/偏移；positionToTimeImmediate 幂等触发布局并即时定位
+        view.setLrcData(rows)
+        return view.positionToTimeImmediate(position)
     }
 
     /**
-     * 立即（无动画）把歌词定位到 [position] 对应行并垂直居中。
-     * 要求歌词数据已设置、ShowRows 已生成（数据加载后或 applyLrcRowsImmediate 后）。
+     * 立即（无动画）把歌词定位到 [position] 对应行并垂直居中（含终点锁相位）。
+     * 要求歌词数据已通过 setLrcData 设置。
      *
-     * 坐标公式与库 StartMoveAnimation 完全一致：
-     *   目标行首显示行 Y = FirstRowPositionY + 之前所有显示行 (RowHeight+RowPadding) 之和
-     *   FirstRowPositionY = height/2 + hlTextSize/2 - 前行高度和
-     *
-     * @return true 成功；false 数据/高度未就绪，调用方应回退到 seekLrcToTime
+     * @return true 成功；false 数据/尺寸未就绪，调用方应回退到 seekLrcToTime
      */
-    private fun positionLrcImmediate(position: Long): Boolean {
-        val view = binding.lrcView
-        if (view.height <= 0 || !view.hasData()) return false
-        return try {
-            val viewCls = view.javaClass
-            // 先取消滚动动画，避免其后续帧覆盖即将写入的偏移
-            cancelLrcMoveAnimator()
-
-            val mRowsField = viewCls.getDeclaredField("mRows")
-            mRowsField.isAccessible = true
-            @Suppress("UNCHECKED_CAST")
-            val readyRows = mRowsField.get(view) as List<LrcRow>
-
-            // 与 seekLrcToTime 一致：最后一个时间 <= position 的行；
-            // position 早于首行时间时按默认首行居中处理
-            val foundIndex = readyRows.indexOfLast { it.currentRowTime <= position }
-            val targetIndex = if (foundIndex < 0) 0 else foundIndex
-
-            // 累加目标行之前所有显示行的高度（RowHeight+RowPadding）
-            var precedingHeight = 0f
-            for (i in 0 until targetIndex) {
-                val showRows = readyRows[i].showRows ?: return false
-                showRows.forEach { showRow ->
-                    precedingHeight += showRow.floatFieldOf("RowHeight") +
-                            showRow.floatFieldOf("RowPadding")
-                }
-            }
-
-            val setting = view.lrcSetting
-            val hlSizeField =
-                setting.javaClass.getDeclaredField("HeightLightRowTextSize")
-            hlSizeField.isAccessible = true
-            val hlTextSize = hlSizeField.getInt(setting)
-
-            var targetOffset = view.height / 2f + hlTextSize / 2f - precedingHeight
-            // 与库 makeFirstRowPositionSecure 一致：偏移不超过 height/2（首行边界保护）
-            val halfHeight = view.height / 2f
-            if (targetOffset > halfHeight) targetOffset = halfHeight
-
-            val firstRowField = viewCls.getDeclaredField("FirstRowPositionY")
-            firstRowField.isAccessible = true
-            firstRowField.setFloat(view, targetOffset)
-
-            val hlPosField = viewCls.getDeclaredField("HeightLightRowPosition")
-            hlPosField.isAccessible = true
-            hlPosField.setInt(view, targetIndex)
-
-            view.invalidate()
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "positionLrcImmediate 失败: ${e.message}", e)
-            false
-        }
-    }
-
-    /** 反射读取 LrcShowRow 的包级可见 float 字段（RowHeight / RowPadding） */
-    private fun LrcShowRow.floatFieldOf(name: String): Float {
-        val field = LrcShowRow::class.java.getDeclaredField(name)
-        field.isAccessible = true
-        return field.getFloat(this)
-    }
+    private fun positionLrcImmediate(position: Long): Boolean =
+        binding.lrcView.positionToTimeImmediate(position)
 
     /**
      * 即时应用歌词并定位到 [position]；若视图尚未完成测量（如服务在 onCreate 中
@@ -1484,7 +1329,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      */
     fun onUserSeeking() {
         beginPositionSuppress(SEEK_SUPPRESS_MS)
-        cancelLrcMoveAnimator()
+        binding.lrcView.cancelMoveAnimation()
     }
 
     /**
@@ -1836,7 +1681,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             // 必须在 super.onStart() 之前抑制：粘性派发发生在 super 调用内部
             beginPositionSuppress(RESUME_SUPPRESS_MS)
             // 取消残留的滚动动画
-            cancelLrcMoveAnimator()
+            binding.lrcView.cancelMoveAnimation()
         }
         super.onStart()
     }
