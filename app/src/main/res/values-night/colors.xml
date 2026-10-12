@@ -34,6 +34,8 @@
     <color name="list_item_bg">#383838</color>
     <!-- RecyclerView 列表项背景 -->
     <color name="recycler_item_bg">#262626</color>
+    <!-- 设置页 item 背景：分组卡片 + 行 bg_preference_* -->
+    <color name="settings_item_bg">#262626</color>
 
     <!-- 不支持播放格式的角标背景（夜间） -->
     <color name="songUnsupportedBg">#2E2E2E</color>

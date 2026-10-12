@@ -52,7 +52,7 @@ class IconSettingActivity : BaseActivity() {
             ).apply {
                 bottomMargin = dpToPx(8)
             }
-            setCardBackgroundColor(getColor(R.color.surface))
+            setCardBackgroundColor(getColor(R.color.settings_item_bg))
             radius = dpToPx(12).toFloat()
             cardElevation = dpToPx(2).toFloat()
             useCompatPadding = true
