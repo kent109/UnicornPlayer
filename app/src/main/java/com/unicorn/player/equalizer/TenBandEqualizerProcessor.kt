@@ -9,6 +9,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -61,6 +62,15 @@ class TenBandEqualizerProcessor : AudioProcessor {
 
         /** 限幅器释放时间常数（秒）：峰值回落后增益缓慢恢复，避免泵感 */
         private const val LIMITER_RELEASE_S = 0.25f
+
+        /**
+         * 余量增益估计的探测频点（Hz）：覆盖全部频段中心及低频 shelf 重叠区，
+         * 在这些点上评估 10 段 + 低音低架的级联幅频响应取峰值
+         */
+        private val HEADROOM_PROBE_FREQS = floatArrayOf(
+            25f, 31f, 40f, 50f, 62f, 80f, 100f, 125f, 160f, 250f, 350f,
+            500f, 700f, 1000f, 1400f, 2000f, 2800f, 4000f, 5600f, 8000f, 11000f, 16000f
+        )
 
         /**
          * 增益变更时的系数渐变帧数（44.1kHz 下约 46ms）。
@@ -134,11 +144,21 @@ class TenBandEqualizerProcessor : AudioProcessor {
     private var peakMagnitude = 0f
 
     // ===== 输出限幅器（全通道链接，瞬时攻击/指数释放） =====
-    // EQ 正增益叠加（频段 shelf + 低音低架可达 ~+12dB）会把满幅母带推过 ±1.0，
-    // 硬削波听感为"震颤/破音"。限幅器以连续增益压缩替代硬切顶，保响度去失真。
+    // 兜底的极端峰值保护。常态防削波由下方静态余量增益承担——限幅器若频繁触发，
+    // 其增益随节拍压放会产生"一高一低"的泵浦感（pumping）。
     private var limiterEnvelope = 0f
     private var limiterReleaseCoef = 0f
     private var limitedFrames = 0L
+
+    // ===== 静态余量增益（headroom，防削波主力） =====
+    // EQ 正增益会把满幅母带推过 ±1.0。按当前曲线级联频响的峰值增益对输出做等量
+    // 预衰减（精确按 biquad 系数在探测频点上评估，而非"最大频段+低音"粗放相加，
+    // 响度少降 2~4dB），使常态信号始终低于限幅阈值，限幅器只在极端峰值时偶尔
+    // 介入——音色不变，响度略降但稳定，无泵浦感。增益变更随系数走 46ms 渐变。
+    private var preGain = 1f
+    private var preGainTarget = 1f
+    private var preGainStep = 0f
+    private var preGainFramesLeft = 0
 
     // 单帧各通道样本暂存：先滤波求帧内峰值，再统一乘限幅增益后写出
     private var frameValues = FloatArray(2)
@@ -263,7 +283,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
             TAG,
             "Configured: sampleRate=$sampleRate, channels=$channelCount, encoding=$encoding" +
                 (if (sameFormat) " (same format, filter states preserved)" else " (new format, fresh states)") +
-                ", bands=${bandLevelsActive.contentToString()}, bass=$bassStrengthActive"
+                ", bands=${bandLevelsActive.contentToString()}, bass=$bassStrengthActive" +
+                ", preGain=$preGain"
         )
         return outputFormat
     }
@@ -290,12 +311,12 @@ class TenBandEqualizerProcessor : AudioProcessor {
             }
         }
         if (paramsChanged) {
+            recalculateCoefficients(initial = false)
             Log.i(
                 TAG,
                 "EQ params changed mid-stream: bands=${bandLevelsActive.contentToString()}, " +
-                    "bass=$bassStrengthActive, ramping coefficients"
+                    "bass=$bassStrengthActive, preGainTarget=$preGainTarget, ramping coefficients"
             )
-            recalculateCoefficients(initial = false)
         }
 
         // 消费起播淡入请求（若有）：本缓冲第一帧即包络起点
@@ -376,6 +397,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
         peakMagnitude = 0f
         limitedFrames = 0L
         limiterEnvelope = 0f
+        preGain = preGainTarget
+        preGainFramesLeft = 0
         fadeInRemaining = 0
         pendingStartupFadeMs = 0L
         startupFadeRemaining = 0
@@ -410,7 +433,7 @@ class TenBandEqualizerProcessor : AudioProcessor {
                     f = processBiquad(f, states[ch][band], coeffs[band])
                 }
                 f = processBiquad(f, bassShelfStates[ch], bassShelfCoeffs)
-                f *= frameGain
+                f *= frameGain * preGain
                 frameValues[ch] = f
                 val mag = if (f < 0f) -f else f
                 if (mag > framePeak) framePeak = mag
@@ -460,7 +483,7 @@ class TenBandEqualizerProcessor : AudioProcessor {
                     f = processBiquad(f, states[ch][band], coeffs[band])
                 }
                 f = processBiquad(f, bassShelfStates[ch], bassShelfCoeffs)
-                f *= frameGain
+                f *= frameGain * preGain
                 frameValues[ch] = f
                 val mag = if (f < 0f) -f else f
                 if (mag > framePeak) framePeak = mag
@@ -503,6 +526,11 @@ class TenBandEqualizerProcessor : AudioProcessor {
             coeffs[band].advanceRamp()
         }
         bassShelfCoeffs.advanceRamp()
+        if (preGainFramesLeft > 0) {
+            preGain += preGainStep
+            preGainFramesLeft--
+            if (preGainFramesLeft == 0) preGain = preGainTarget
+        }
     }
 
     /** 消费待处理的起播淡入请求（音频线程，本缓冲含有效数据时触发）。 */
@@ -572,6 +600,20 @@ class TenBandEqualizerProcessor : AudioProcessor {
         if (sampleRate <= 0) return
         val fs = sampleRate.toFloat()
 
+        // 目标系数暂存（索引 0..9 为频段，10 为低音低架），供级联频响峰值估计用
+        val tB0 = FloatArray(NUM_BANDS + 1) { 1f }
+        val tB1 = FloatArray(NUM_BANDS + 1)
+        val tB2 = FloatArray(NUM_BANDS + 1)
+        val tA1 = FloatArray(NUM_BANDS + 1)
+        val tA2 = FloatArray(NUM_BANDS + 1)
+        fun stash(idx: Int, b0v: Float, b1v: Float, b2v: Float, a1v: Float, a2v: Float) {
+            tB0[idx] = b0v
+            tB1[idx] = b1v
+            tB2[idx] = b2v
+            tA1[idx] = a1v
+            tA2[idx] = a2v
+        }
+
         for (i in 0 until NUM_BANDS) {
             val f0 = FREQUENCIES[i].toFloat()
             val gainDb = bandLevelsActive[i]
@@ -586,41 +628,38 @@ class TenBandEqualizerProcessor : AudioProcessor {
                     val alpha = sinw0 / (2f * SHELF_Q)
                     val sqrtA = sqrt(a)
                     val a0 = (a + 1f) + (a - 1f) * cosw0 + 2f * sqrtA * alpha
-                    applyToBand(
-                        i, initial,
-                        b0 = (a * ((a + 1f) - (a - 1f) * cosw0 + 2f * sqrtA * alpha)) / a0,
-                        b1 = (2f * a * ((a - 1f) - (a + 1f) * cosw0)) / a0,
-                        b2 = (a * ((a + 1f) - (a - 1f) * cosw0 - 2f * sqrtA * alpha)) / a0,
-                        a1 = (-2f * ((a - 1f) + (a + 1f) * cosw0)) / a0,
-                        a2 = ((a + 1f) + (a - 1f) * cosw0 - 2f * sqrtA * alpha) / a0
-                    )
+                    val b0v = (a * ((a + 1f) - (a - 1f) * cosw0 + 2f * sqrtA * alpha)) / a0
+                    val b1v = (2f * a * ((a - 1f) - (a + 1f) * cosw0)) / a0
+                    val b2v = (a * ((a + 1f) - (a - 1f) * cosw0 - 2f * sqrtA * alpha)) / a0
+                    val a1v = (-2f * ((a - 1f) + (a + 1f) * cosw0)) / a0
+                    val a2v = ((a + 1f) + (a - 1f) * cosw0 - 2f * sqrtA * alpha) / a0
+                    stash(i, b0v, b1v, b2v, a1v, a2v)
+                    applyToBand(i, initial, b0v, b1v, b2v, a1v, a2v)
                 }
                 NUM_BANDS - 1 -> {
                     // High Shelf（高频搁架）
                     val alpha = sinw0 / (2f * SHELF_Q)
                     val sqrtA = sqrt(a)
                     val a0 = (a + 1f) - (a - 1f) * cosw0 + 2f * sqrtA * alpha
-                    applyToBand(
-                        i, initial,
-                        b0 = (a * ((a + 1f) + (a - 1f) * cosw0 + 2f * sqrtA * alpha)) / a0,
-                        b1 = (-2f * a * ((a - 1f) + (a + 1f) * cosw0)) / a0,
-                        b2 = (a * ((a + 1f) + (a - 1f) * cosw0 - 2f * sqrtA * alpha)) / a0,
-                        a1 = (2f * ((a - 1f) - (a + 1f) * cosw0)) / a0,
-                        a2 = ((a + 1f) - (a - 1f) * cosw0 - 2f * sqrtA * alpha) / a0
-                    )
+                    val b0v = (a * ((a + 1f) + (a - 1f) * cosw0 + 2f * sqrtA * alpha)) / a0
+                    val b1v = (-2f * a * ((a - 1f) + (a + 1f) * cosw0)) / a0
+                    val b2v = (a * ((a + 1f) + (a - 1f) * cosw0 - 2f * sqrtA * alpha)) / a0
+                    val a1v = (2f * ((a - 1f) - (a + 1f) * cosw0)) / a0
+                    val a2v = ((a + 1f) - (a - 1f) * cosw0 - 2f * sqrtA * alpha) / a0
+                    stash(i, b0v, b1v, b2v, a1v, a2v)
+                    applyToBand(i, initial, b0v, b1v, b2v, a1v, a2v)
                 }
                 else -> {
                     // Peaking EQ（峰化均衡）
                     val alpha = sinw0 / (2f * PEAKING_Q)
                     val a0 = 1f + alpha / a
-                    applyToBand(
-                        i, initial,
-                        b0 = (1f + alpha * a) / a0,
-                        b1 = (-2f * cosw0) / a0,
-                        b2 = (1f - alpha * a) / a0,
-                        a1 = (-2f * cosw0) / a0,
-                        a2 = (1f - alpha / a) / a0
-                    )
+                    val b0v = (1f + alpha * a) / a0
+                    val b1v = (-2f * cosw0) / a0
+                    val b2v = (1f - alpha * a) / a0
+                    val a1v = (-2f * cosw0) / a0
+                    val a2v = (1f - alpha / a) / a0
+                    stash(i, b0v, b1v, b2v, a1v, a2v)
+                    applyToBand(i, initial, b0v, b1v, b2v, a1v, a2v)
                 }
             }
         }
@@ -639,11 +678,60 @@ class TenBandEqualizerProcessor : AudioProcessor {
         val sb2 = (ba * ((ba + 1f) - (ba - 1f) * bcosw0 - 2f * bsqrtA * balpha)) / ba0
         val sa1 = (-2f * ((ba - 1f) + (ba + 1f) * bcosw0)) / ba0
         val sa2 = ((ba + 1f) + (ba - 1f) * bcosw0 - 2f * bsqrtA * balpha) / ba0
+        stash(NUM_BANDS, sb0, sb1, sb2, sa1, sa2)
         if (initial) {
             bassShelfCoeffs.snapTo(sb0, sb1, sb2, sa1, sa2)
         } else {
             bassShelfCoeffs.rampTo(sb0, sb1, sb2, sa1, sa2, COEFF_RAMP_FRAMES)
         }
+
+        // 静态余量增益：在探测频点上评估 10 段 + 低音低架级联后的真实幅频响应，
+        // 取峰值（+1dB 探针间裕量，上限 20dB）作为整体预衰减量。shelf/peak 只是
+        // 部分重叠，比"最大正频段 + 低音"的粗放相加少降 2~4dB 响度；探针间遗漏的
+        // 轻微残余峰值由限幅器兜底
+        var peakDb = 0f
+        for (f in HEADROOM_PROBE_FREQS) {
+            val w = 2f * Math.PI.toFloat() * f / fs
+            var sumDb = 0f
+            for (k in 0..NUM_BANDS) {
+                sumDb += biquadMagnitudeDb(tB0[k], tB1[k], tB2[k], tA1[k], tA2[k], w)
+            }
+            if (sumDb > peakDb) peakDb = sumDb
+        }
+        val headroomDb = (peakDb + 1f).coerceIn(0f, 20f)
+        preGainTarget = 10f.pow(-headroomDb / 20f)
+        if (initial) {
+            preGain = preGainTarget
+            preGainFramesLeft = 0
+        } else {
+            preGainStep = (preGainTarget - preGain) / COEFF_RAMP_FRAMES
+            preGainFramesLeft = COEFF_RAMP_FRAMES
+        }
+    }
+
+    /**
+     * biquad 在角频率 w 处的幅频响应（dB）。
+     * H(z) = (b0 + b1·z⁻¹ + b2·z⁻²) / (1 + a1·z⁻¹ + a2·z⁻²)，z = e^jw
+     */
+    private fun biquadMagnitudeDb(
+        b0: Float,
+        b1: Float,
+        b2: Float,
+        a1: Float,
+        a2: Float,
+        w: Float
+    ): Float {
+        val cosw = cos(w)
+        val sinw = sin(w)
+        val cos2w = cos(2f * w)
+        val sin2w = sin(2f * w)
+        val numRe = b0 + b1 * cosw + b2 * cos2w
+        val numIm = -(b1 * sinw + b2 * sin2w)
+        val denRe = 1f + a1 * cosw + a2 * cos2w
+        val denIm = -(a1 * sinw + a2 * sin2w)
+        val numMag2 = numRe * numRe + numIm * numIm
+        val denMag2 = denRe * denRe + denIm * denIm
+        return 10f * log10(numMag2 / denMag2)
     }
 
     /**
