@@ -36,13 +36,21 @@ object LogWriter {
         }
 
         // 写入文件
-        writeToFile(tag, message, throwable)
+        writeToFile(tag, "ERROR", message, throwable)
+    }
+
+    /**
+     * 写入诊断日志：复现概率低、logcat 环形缓冲会被冲掉的问题用本方法留痕
+     */
+    fun writeDiag(tag: String, message: String) {
+        Log.i(tag, message)
+        writeToFile(tag, "DIAG", message, null)
     }
 
     /**
      * 写入文件
      */
-    private fun writeToFile(tag: String, message: String, throwable: Throwable?) {
+    private fun writeToFile(tag: String, level: String, message: String, throwable: Throwable?) {
         try {
             val logFile = getLogFile() ?: return
 
@@ -55,7 +63,7 @@ object LogWriter {
                 SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(Date())
             val logLine = buildString {
                 append("[$timestamp] ")
-                append("[ERROR] ")
+                append("[$level] ")
                 append("[$tag] ")
                 append(message)
                 if (throwable != null) {

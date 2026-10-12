@@ -382,6 +382,11 @@ class MusicService : Service() {
     private lateinit var audioFocusRequest: AudioFocusRequest
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        LogWriter.writeDiag(
+            TAG,
+            "audioFocusChanged: what=$focusChange, wasPlayingBeforeFocusLoss=$wasPlayingBeforeFocusLoss, " +
+                    "isPlaying=${player.isPlaying}, playWhenReady=${player.playWhenReady}, ${callerTrace()}"
+        )
         when (focusChange) {
             AudioManager.AUDIOFOCUS_GAIN -> {
                 // 重新获得焦点：仅在焦点丢失前正在播放时恢复播放
@@ -398,6 +403,16 @@ class MusicService : Service() {
             }
         }
     }
+
+    /**
+     * 诊断用：返回最近的调用帧，用于区分同一方法的多条触发链路（UI 点击 / 焦点回调 / MediaSession）
+     */
+    private fun callerTrace(): String =
+        Thread.currentThread().stackTrace
+            .drop(3)
+            .filter { it.className == this.javaClass.name || it.className.startsWith("com.unicorn.player") }
+            .take(4)
+            .joinToString(" < ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
 
     var currentIndex = 0
     var isChangingSong = false
@@ -697,6 +712,12 @@ class MusicService : Service() {
 
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
+                LogWriter.writeDiag(
+                    TAG,
+                    "onPlaybackStateChanged: state=$state, isPlaying=${player.isPlaying}, " +
+                            "playWhenReady=${player.playWhenReady}, position=${player.currentPosition}, " +
+                            "song=${_currentSong.value?.title}, ${callerTrace()}"
+                )
                 when (state) {
                     Player.STATE_IDLE -> {
                         // STATE_IDLE 可能来自 setMediaItem（正常）或 onPlayerError 后（错误）
@@ -817,6 +838,11 @@ class MusicService : Service() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                LogWriter.writeDiag(
+                    TAG,
+                    "onIsPlayingChanged: isPlaying=$isPlaying, playWhenReady=${player.playWhenReady}, " +
+                            "state=${player.playbackState}, position=${player.currentPosition}, song=${_currentSong.value?.title}"
+                )
                 // ExoPlayer 内部自动暂停/恢复（handleAudioBecomingNoisy / audio focus）
                 // 不会走 pause()/play()，必须在此同步 _isPlaying，否则 UI 和通知栏状态脱节。
                 // 注意：isPlaying=false 可能是切歌/seek 过渡期间的短暂状态，而非真实暂停。
@@ -1222,6 +1248,12 @@ class MusicService : Service() {
                     // ExoPlayer 不抛 IllegalStateException，duration 在未准备时返回 C.TIME_UNSET。
                     val isPlaybackAlive =
                         _currentSong.value != null && player.playbackState != Player.STATE_IDLE
+                    LogWriter.writeDiag(
+                        TAG,
+                        "onStartCommand(KEY_CREATE): alive=$isPlaybackAlive, songId=${_currentSong.value?.id}, " +
+                                "state=${player.playbackState}, isPlaying=${player.isPlaying}, " +
+                                "position=${player.currentPosition}, loaded=$isPlaybackStateLoaded, ${callerTrace()}"
+                    )
                     if (isPlaybackAlive) {
                         Log.d(
                             TAG,
@@ -1504,9 +1536,10 @@ class MusicService : Service() {
             return
         }
 
-        Log.d(
+        LogWriter.writeDiag(
             TAG,
-            "play: state=${player.playbackState}, isPlaying=${player.isPlaying}, duration=${player.duration}"
+            "play: state=${player.playbackState}, isPlaying=${player.isPlaying}, " +
+                    "duration=${player.duration}, position=${player.currentPosition}, ${callerTrace()}"
         )
 
         // 用户主动播放，重置错误标志，确保新的播放尝试能正确处理错误
@@ -1551,6 +1584,10 @@ class MusicService : Service() {
     }
 
     fun pause() {
+        LogWriter.writeDiag(
+            TAG,
+            "pause(): isPlaying=${player.isPlaying}, song=${_currentSong.value?.title}, ${callerTrace()}"
+        )
         if (player.isPlaying) {
             player.pause()
             // 立即更新播放状态为false，确保通知栏能正确显示
@@ -2297,9 +2334,10 @@ class MusicService : Service() {
         isServiceCreate: Boolean, restorePosition: Boolean = true,
         restoreFlag: Int = 0
     ) {
-        Log.d(
+        LogWriter.writeDiag(
             TAG,
-            "loadPlaybackState: enter, isServiceCreate=$isServiceCreate, restorePosition=$restorePosition, restoreFlag=$restoreFlag, isPlaybackStateLoaded=$isPlaybackStateLoaded"
+            "loadPlaybackState: enter, isServiceCreate=$isServiceCreate, restorePosition=$restorePosition, " +
+                    "restoreFlag=$restoreFlag, isPlaybackStateLoaded=$isPlaybackStateLoaded, ${callerTrace()}"
         )
         // 如果已经加载过播放状态，不需要重复加载
         if (isPlaybackStateLoaded) {
@@ -2416,7 +2454,7 @@ class MusicService : Service() {
                     val isSameSongAlive =
                         _currentSong.value?.id == songId && player.duration > 0
                     if (isSameSongAlive) {
-                        Log.d(
+                        LogWriter.writeDiag(
                             TAG,
                             "loadPlaybackState: same song alive (id=$songId), skip re-prepare"
                         )
@@ -2459,9 +2497,11 @@ class MusicService : Service() {
                     pendingAutoPlay = isPlaying == 1 && restoreFlag == MainActivity.RESTORE_CREATE
                     pendingSuppressNotification = isTaskRemoved && !pendingNotificationToShow
                     pendingRestoreSong = restoredSong
-                    Log.d(
+                    LogWriter.writeDiag(
                         TAG,
-                        "loadPlaybackState: setMediaItem+prepare, targetPos=$pendingRestorePosition, embedded=$restorePositionEmbedded, autoPlay=$pendingAutoPlay, suppressNotification=$pendingSuppressNotification"
+                        "loadPlaybackState: RE-PREPARE setMediaItem+prepare, song=$songTitle, targetPos=$pendingRestorePosition, " +
+                                "embedded=$restorePositionEmbedded, autoPlay=$pendingAutoPlay, " +
+                                "suppressNotification=$pendingSuppressNotification, actualPos=${player.currentPosition}"
                     )
                     // 冷启动恢复 EQ 设置（含低音强度）并同步进 App 内 AudioProcessor。
                     // 必须在 prepare 之前：处理器 configure（发生在 prepare 内）以
