@@ -366,7 +366,7 @@ public class UnicornLrcView extends View implements ILrcView {
                         r.getShowRows().add(showRow);
                     }
                 } else {
-                    int showRowHeight = (int) (this.getTextFontHeight(this.lrcContext.NormalRowPaint, "A") * 0.1);
+                    int showRowHeight = (int) (this.getTextFontHeight(this.lrcContext.NormalRowPaint, "A") * 1.1);
                     r.ContentHeight = r.ContentHeight + showRowHeight + this.getLrcSetting().LinePadding;
                     LrcShowRow showRow = new LrcShowRow(index++, " ", showRowHeight, this.getLrcSetting().LinePadding);
                     r.getShowRows().add(showRow);

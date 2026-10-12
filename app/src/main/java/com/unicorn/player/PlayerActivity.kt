@@ -170,7 +170,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         private set
 
     // 非全屏时歌词区顶部与 playPauseButton 底部之间额外留出的间距
-    private val lrcTopGap: Int by lazy { DisplayUtil.dp2px(this, 14f) }
+    private val lrcTopGap: Int by lazy { DisplayUtil.dp2px(this, 11f) }
 
     // 进入全屏时正在播放的歌曲路径，用于判断切歌时是否退出全屏
     private var fullscreenSongPath: String? = null
@@ -539,8 +539,8 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             .setShowTimeText(false)
             .setShowTriangle(false)
             .setShowSelectLine(false)
-            // 行间距：库默认 LinePadding=40px（约 13dp 额外间隔），视觉上偏大，收紧为 10dp
-            .setLinePadding(DisplayUtil.dp2px(this, 10f))
+            // 行间距：库默认 LinePadding=40px（约 13dp 额外间隔），视觉上偏大，收紧为 11dp
+            .setLinePadding(DisplayUtil.dp2px(this, 11f))
         // 应用设置（确保 ShowTimeText/ShowTriangle 生效）
         lrcView.commitLrcSettings()
         // 三角形宽度默认 0，库只在 viewWidth>0 且 TriangleWidth==0 时按 viewWidth/50 赋默认值；
