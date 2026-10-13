@@ -64,6 +64,11 @@ class CoverEditorHelper(
         Thread {
             val saved = CoverStore.saveSongCover(context, uri, song.path)
             mainHandler.post {
+                // 选图期间弹窗可能已因切歌关闭：此时副本没有归属，直接丢弃
+                if (dialog == null || targetSong?.path != song.path) {
+                    saved?.let { runCatching { File(it).delete() } }
+                    return@post
+                }
                 if (saved == null) {
                     toast("图片读取失败，请重试")
                     return@post
@@ -75,6 +80,11 @@ class CoverEditorHelper(
                 dialog?.getButton(DialogInterface.BUTTON_POSITIVE)?.text = "确定更换"
             }
         }.start()
+    }
+
+    /** 播放的歌曲发生变化时收起弹窗：本次编辑只针对打开弹窗时那一首歌 */
+    fun dismissForSongChange() {
+        dialog?.dismiss()
     }
 
     private fun buildDialog(song: Song, hasCustomCover: Boolean) {

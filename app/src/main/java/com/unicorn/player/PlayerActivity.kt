@@ -1439,6 +1439,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 val isSameSongRefresh = song?.id == lastHandledSongId
                 song?.let { lastHandledSongId = it.id }
 
+                // 换歌就收起修改封面弹窗：弹窗编辑的是打开时那一首，留着会让用户
+                // 以为点"确定更换"是给当前播放的歌设封面
+                if (!isSameSongRefresh) coverEditor.dismissForSongChange()
+
                 if (isHandlingSongChange) return@observe
                 if (isSameSongRefresh) return@observe
 
