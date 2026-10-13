@@ -2,6 +2,7 @@ package com.unicorn.player.util
 
 import android.content.Context
 import android.util.Log
+import com.unicorn.player.BuildConfig
 import com.unicorn.player.UnicornPlayerApplication
 import java.io.File
 import java.io.FileWriter
@@ -40,9 +41,11 @@ object LogWriter {
     }
 
     /**
-     * 写入诊断日志：复现概率低、logcat 环形缓冲会被冲掉的问题用本方法留痕
+     * 写入诊断日志：复现概率低、logcat 环形缓冲会被冲掉的问题用本方法留痕。
+     * 仅 debug 构建生效，release 不产生任何输出与文件写入
      */
     fun writeDiag(tag: String, message: String) {
+        if (!BuildConfig.DEBUG) return
         Log.i(tag, message)
         writeToFile(tag, "DIAG", message, null)
     }

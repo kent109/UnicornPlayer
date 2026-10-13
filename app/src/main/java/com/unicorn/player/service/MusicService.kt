@@ -50,6 +50,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.bullhead.equalizer.AudioEffectManager
 import com.bullhead.equalizer.EqualizerModel
 import com.bullhead.equalizer.Settings
+import com.unicorn.player.BuildConfig
 import com.unicorn.player.MainActivity
 import com.unicorn.player.R
 import com.unicorn.player.ScanFilterActivity
@@ -421,12 +422,14 @@ class MusicService : Service() {
     /**
      * 诊断用：返回最近的调用帧，用于区分同一方法的多条触发链路（UI 点击 / 焦点回调 / MediaSession）
      */
-    private fun callerTrace(): String =
-        Thread.currentThread().stackTrace
+    private fun callerTrace(): String {
+        if (!BuildConfig.DEBUG) return ""
+        return Thread.currentThread().stackTrace
             .drop(3)
             .filter { it.className == this.javaClass.name || it.className.startsWith("com.unicorn.player") }
             .take(4)
             .joinToString(" < ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
+    }
 
     var currentIndex = 0
     var isChangingSong = false
