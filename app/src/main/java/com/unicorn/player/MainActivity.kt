@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
@@ -40,6 +41,7 @@ import com.unicorn.player.util.AudioTagEditor
 import com.unicorn.player.util.DirectoryMigrationManager
 import com.unicorn.player.util.LyricsSaveManager
 import com.unicorn.player.util.PlaylistFileManager
+import com.unicorn.player.util.ShortcutUtil
 import com.unicorn.player.util.UpdateHelper
 import com.unicorn.player.util.ViewUtil
 import com.unicorn.player.viewmodel.MusicViewModel
@@ -406,7 +408,116 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     private var lastSearchTapTime = 0L
     private val clickViewRect = android.graphics.Rect()
 
+    /** 本次搜索栏手势已被长按快捷功能消费，随后的 up 不再计入双击滚顶 */
+    private var searchLongPressFired = false
+
+    /** 是否正在跟踪搜索栏长按（按下点落在搜索栏内才跟踪） */
+    private var searchLongPressTracking = false
+
+    /** 搜索栏长按的按下事件副本：长按触发后据此合成 CANCEL 交给 SearchView */
+    private var searchBarDownEvent: android.view.MotionEvent? = null
+
+    /**
+     * 搜索栏长按快捷手势。SearchView 内部子视图会消费并按自身逻辑处理长按，
+     * 监听器挂不上，故在 Activity 的 dispatchTouchEvent 里用 GestureDetector 判定。
+     */
+    private val searchBarGestureDetector by lazy {
+        android.view.GestureDetector(
+            this,
+            object : android.view.GestureDetector.SimpleOnGestureListener() {
+                override fun onDown(e: android.view.MotionEvent): Boolean = true
+
+                override fun onLongPress(e: android.view.MotionEvent) {
+                    toggleEqualizerShortcut()
+                }
+            }
+        )
+    }
+
+    /** 按下点是否落在收起状态（非编辑）的搜索栏内 */
+    private fun isDownOnCollapsedSearchBar(ev: android.view.MotionEvent): Boolean {
+        if (multiChoiceFragment != null) {
+            return false
+        }
+        // 搜索编辑状态下长按属于输入框自身（选中/粘贴），不响应快捷功能
+        if (!binding.searchView.isIconified) {
+            return false
+        }
+        if (!isTouchInView(ev, binding.searchView)) {
+            return false
+        }
+        // 操作按钮区叠在搜索栏右端，长按图标不该走快捷手势
+        val onActionButtons = binding.actionButtonsLayout.isVisible
+                && isTouchInView(ev, binding.actionButtonsLayout)
+        return !onActionButtons
+    }
+
+    /** 触点（屏幕坐标）是否落在 view 的可见区域内 */
+    private fun isTouchInView(ev: android.view.MotionEvent, view: View): Boolean {
+        if (view.width == 0 || view.height == 0) {
+            return false
+        }
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        return ev.rawX >= location[0] && ev.rawX < location[0] + view.width &&
+                ev.rawY >= location[1] && ev.rawY < location[1] + view.height
+    }
+
+    /** 长按搜索栏：切换均衡器开关，并吞掉本次手势避免松手时展开搜索模式 */
+    private fun toggleEqualizerShortcut() {
+        searchLongPressFired = true
+        val down = searchBarDownEvent
+        if (down != null) {
+            val cancel = android.view.MotionEvent.obtain(down)
+            cancel.action = android.view.MotionEvent.ACTION_CANCEL
+            binding.searchView.dispatchTouchEvent(cancel)
+            cancel.recycle()
+        }
+        val enabled = ShortcutUtil.toggleEqualizer(this, musicService)
+        Toast.makeText(
+            this,
+            if (enabled) "已打开均衡器" else "已关闭均衡器",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    private fun trackSearchBarLongPress(ev: android.view.MotionEvent?) {
+        if (ev == null) {
+            return
+        }
+        when (ev.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> {
+                searchLongPressFired = false
+                searchLongPressTracking = isDownOnCollapsedSearchBar(ev)
+                searchBarDownEvent?.recycle()
+                searchBarDownEvent = if (searchLongPressTracking) {
+                    android.view.MotionEvent.obtain(ev)
+                } else {
+                    null
+                }
+                if (searchLongPressTracking) {
+                    searchBarGestureDetector.onTouchEvent(ev)
+                }
+            }
+
+            else -> {
+                if (!searchLongPressTracking) {
+                    return
+                }
+                searchBarGestureDetector.onTouchEvent(ev)
+                if (ev.actionMasked == android.view.MotionEvent.ACTION_UP ||
+                    ev.actionMasked == android.view.MotionEvent.ACTION_CANCEL
+                ) {
+                    searchLongPressTracking = false
+                    searchBarDownEvent?.recycle()
+                    searchBarDownEvent = null
+                }
+            }
+        }
+    }
+
     override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        trackSearchBarLongPress(ev)
         if (ev?.action == android.view.MotionEvent.ACTION_UP) {
             if (multiChoiceFragment == null) {
                 scrollToTop(binding.searchView, ev) { scrollCurrentTabToTop() }
@@ -433,7 +544,8 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         ) {
             // 点击在clickView范围内
             val canTrigger =
-                (clickView is SearchView && clickView.isIconified) || clickView !is SearchView
+                ((clickView is SearchView && clickView.isIconified) || clickView !is SearchView)
+                        && !searchLongPressFired
             if (canTrigger) {
                 val currentTime = System.currentTimeMillis()
                 val doubleTapTimeout = android.view.ViewConfiguration.getDoubleTapTimeout()
