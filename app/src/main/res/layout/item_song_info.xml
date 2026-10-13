@@ -67,7 +67,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="2dp"
                 android:text="*"
-                android:textColor="@android:color/holo_red_light"
+                android:textColor="?attr/colorPrimary"
                 android:textSize="13sp"
                 android:textStyle="bold"
                 android:visibility="gone" />

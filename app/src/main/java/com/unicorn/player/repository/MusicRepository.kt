@@ -52,6 +52,10 @@ class MusicRepository(private val context: Context) {
                 " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/allsaintsMusic/%'" +
                 " AND " + MediaStore.Audio.Media.DATA + " NOT LIKE '%/msc/%'"
 
+        // 用户设置过的封面按路径登记在私有目录里（文件名带路径摘要），
+        // 删掉文件重新拷入、"清空并重新扫描"换了 _ID 也能按路径找回
+        val songCovers = CoverStore.songCoverIndex(context)
+
         // 1. 扫描 MediaStore 获取最新歌曲列表
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -110,6 +114,9 @@ class MusicRepository(private val context: Context) {
 
                 val quality = classifyQuality(mime, file)
 
+                // 有本地副本时以它作为展示封面，媒体库 URI 留作"默认封面"
+                val customCover = songCovers[CoverStore.songCoverPrefix(path)]
+
                 val song = Song(
                     id = id,
                     title = title,
@@ -117,7 +124,7 @@ class MusicRepository(private val context: Context) {
                     album = album,
                     duration = duration,
                     path = path,
-                    albumArt = albumArtUri,
+                    albumArt = customCover ?: albumArtUri,
                     lastModified = lastModified,
                     quality = quality
                 )
@@ -155,7 +162,19 @@ class MusicRepository(private val context: Context) {
             songDao.insertSongsIgnoreExisting(songsToInsert)
         }
         if (songsToRefresh.isNotEmpty()) {
-            songDao.updateSongs(songsToRefresh)
+            // 改名/移动：整行会被扫描结果覆盖，自定义封面要跟着迁到新路径的分组，
+            // 否则下次重新索引按新路径找不回它
+            val existingById = existingSongs.associateBy { it.id }
+            val refreshed = songsToRefresh.map { newSong ->
+                val customCover = existingById[newSong.id]?.albumArt
+                    ?.takeIf { CoverStore.isCustomSongCover(context, it) }
+                if (customCover != null) {
+                    newSong.copy(
+                        albumArt = CoverStore.migrateSongCover(context, customCover, newSong.path)
+                    )
+                } else newSong
+            }
+            songDao.updateSongs(refreshed)
         }
 
         newSongs
@@ -490,6 +509,40 @@ class MusicRepository(private val context: Context) {
                 runCatching { File(coverPath).delete() }
             }
         }
+
+    /**
+     * 应用"修改封面"的结果：把私有目录中的方形副本路径写入 albumArt；
+     * coverPath 为 null 表示恢复默认，此时取回媒体库记录的专辑封面 URI。
+     * 图片只保存在应用数据里，不改动音频文件本身。
+     */
+    suspend fun applySongCover(song: Song, coverPath: String?): Song =
+        withContext(Dispatchers.IO) {
+            // 外部文件以临时方式播放时手上的 id 未必是库里那一行，按路径找回再写
+            val row = songDao.getSongByPathSync(song.path) ?: song
+            val albumArt = coverPath ?: systemAlbumArt(row.id)
+            songDao.updateSong(row.copy(albumArt = albumArt))
+            // 交给界面用记录时保持手上的 id，播放队列是按 id 认歌的
+            song.copy(albumArt = albumArt)
+        }
+
+    /** 媒体库记录的该歌曲所属专辑的封面 URI；歌曲已不在媒体库时返回 null */
+    private fun systemAlbumArt(songId: Long): String? {
+        val cursor = context.contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Audio.Media.ALBUM_ID),
+            "${MediaStore.Audio.Media._ID} = ?",
+            arrayOf(songId.toString()),
+            null
+        ) ?: return null
+        return cursor.use {
+            if (!it.moveToFirst()) return null
+            val albumId = it.getLong(it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID))
+            ContentUris.withAppendedId(
+                "content://media/external/audio/albumart".toUri(),
+                albumId
+            ).toString()
+        }
+    }
 
     /**
      * 清理悬空封面记录：数据库记录的图片文件已不存在时，删除记录并尝试清理残留文件。

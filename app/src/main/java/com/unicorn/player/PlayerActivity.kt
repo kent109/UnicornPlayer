@@ -15,7 +15,6 @@ import android.view.animation.AnimationUtils
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
@@ -59,19 +58,13 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     // 用于区分"切歌"与"同一首歌的记录刷新"（如改写封面后重新派发）
     private var lastHandledSongId = -1L
 
-    // 修改封面：相册选图与分区存储写入授权
+    // 修改封面：相册选图
     private val coverPickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         coverEditor.onImagePicked(
             if (result.resultCode == RESULT_OK) ImagePicker.extractUri(result.data) else null
         )
-    }
-
-    private val coverWriteLauncher = registerForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        coverEditor.onWritePermissionResult(result.resultCode == RESULT_OK)
     }
 
     // ===== 歌词进度更新抑制 =====
@@ -321,16 +314,13 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             shareCurrentSong(song)
         }
 
-        // ivEditCover：修改当前播放歌曲的内嵌封面（直接改写音频文件标签）
+        // ivEditCover：为当前播放歌曲设置本地封面副本（不改动音频文件）
         coverEditor = CoverEditorHelper(
             context = this,
             startImagePicker = {
                 coverPickerLauncher.launch(ImagePicker.createIntent(this@PlayerActivity))
             },
-            requestWritePermission = { intentSender ->
-                coverWriteLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
-            },
-            onCoverChanged = { updated -> refreshPlayerCover(updated) }
+            onCoverConfirmed = { song, coverPath -> saveSongCover(song, coverPath) }
         )
         binding.ivEditCover.setOnClickListener {
             val song = musicService?.currentSong?.value ?: return@setOnClickListener
@@ -1743,8 +1733,17 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     }
 
     /**
-     * 封面写入成功后刷新界面：媒体库重扫是异步的，等它生效会滞后，
-     * 因此直接换成回写后的记录——播放页当前页按 payload 重绑，
+     * 修改封面确认后落库：coverPath 为 null 表示恢复默认（回到媒体库记录的系统封面）。
+     * 图片只在应用私有目录里，不涉及音频文件写入，因此无需分区存储授权。
+     */
+    private fun saveSongCover(song: Song, coverPath: String?) {
+        lifecycleScope.launch {
+            refreshPlayerCover(repository.applySongCover(song, coverPath))
+        }
+    }
+
+    /**
+     * 封面记录变化后刷新界面：播放页当前页由 PlayerFragment 自行观察 service 派发，
      * 播放队列/底部播放栏/通知由 Service 同步
      */
     private fun refreshPlayerCover(updated: Song) {

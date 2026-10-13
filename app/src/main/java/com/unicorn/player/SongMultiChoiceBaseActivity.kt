@@ -72,7 +72,7 @@ open class SongMultiChoiceBaseActivity : BaseActivity(),
         val title = "删除歌曲"
         val message = "确定要从列表中删除所选的歌曲吗？\n\n注意：这不会删除本地文件。"
 
-        val errorColor = this.getColor(R.color.error)
+        val dangerColor = this.getColor(R.color.danger_text)
         val secondaryColor = this.getColor(R.color.secondary)
         val dialog = MaterialAlertDialogBuilder(this).setTitle(title).setMessage(message)
             .setPositiveButton("删除") { _, _ ->
@@ -80,8 +80,8 @@ open class SongMultiChoiceBaseActivity : BaseActivity(),
                 handleDeleteSelected(playlistId, selectedSongIds)
                 Toast.makeText(this, "已从列表中删除", Toast.LENGTH_SHORT).show()
             }.setNegativeButton("取消", null).show()
-        // 设置删除按钮文字颜色为红色（error 色），取消按钮为 secondary 色
-        dialog.getButton(DialogInterface.BUTTON_POSITIVE).setTextColor(errorColor)
+        // 设置删除按钮文字颜色为危险操作红（danger_text），取消按钮为 secondary 色
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE).setTextColor(dangerColor)
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
     }
 

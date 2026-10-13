@@ -683,7 +683,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         playlist: PlaylistViewModel.PlaylistInfo,
         position: Int
     ) {
-        val errorColor = requireContext().getColor(R.color.error)
+        val dangerColor = requireContext().getColor(R.color.danger_text)
         val secondaryColor = requireContext().getColor(R.color.secondary)
         val dialog = MaterialAlertDialogBuilder(requireContext())
             .setTitle("删除歌单")
@@ -696,7 +696,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
                 }
             }
             .show()
-        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(errorColor)
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(dangerColor)
         dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
     }
 

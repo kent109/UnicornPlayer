@@ -582,7 +582,7 @@ class SongInfoHelper(private val context: Context) {
      * 显示删除确认对话框
      */
     private fun showDeleteConfirmDialog(song: Song) {
-        val errorColor = context.getColor(R.color.error)
+        val dangerColor = context.getColor(R.color.danger_text)
         val secondaryColor = context.getColor(R.color.secondary)
         val dialog = MaterialAlertDialogBuilder(context)
             .setTitle("删除歌曲")
@@ -594,8 +594,8 @@ class SongInfoHelper(private val context: Context) {
             }
             .setNegativeButton("取消", null)
             .show()
-        // 设置删除按钮文字颜色为红色（error 色），取消按钮为 secondary 色
-        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(errorColor)
+        // 设置删除按钮文字颜色为危险操作红（danger_text），取消按钮为 secondary 色
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(dangerColor)
         dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
     }
 

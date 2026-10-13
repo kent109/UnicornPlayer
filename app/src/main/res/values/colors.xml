@@ -21,6 +21,10 @@
     <color name="errorContainer">#FFDAD6</color>
     <color name="onErrorContainer">#410002</color>
 
+    <!-- 弹窗中删除/恢复默认这类危险操作的按钮文字颜色，
+         与均衡器导出弹窗"覆盖同名配置"保持一致；未在 values-night 里另配，夜间同款亮红 -->
+    <color name="danger_text">@android:color/holo_red_light</color>
+
     <color name="background">#FFFBFE</color>
     <color name="onBackground">#1C1B1F</color>
 

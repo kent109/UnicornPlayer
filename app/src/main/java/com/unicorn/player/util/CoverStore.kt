@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.net.Uri
 import com.unicorn.player.model.Cover
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * 封面图片存储：把系统选图器返回的 URI 压缩成方形缩略图副本，写入应用私有目录
@@ -21,18 +22,20 @@ object CoverStore {
     const val MAX_SIZE = 512
     private const val JPEG_QUALITY = 90
 
-    /** 播放器"修改封面"的歌曲级副本类型（键为歌曲 id），2 已被歌单副本占用 */
-    const val TYPE_SONG = 3
+    /** 歌曲封面副本的文件名前缀，组内按路径摘要区分（详见 [songCoverPrefix]） */
+    private const val SONG_GROUP = "song"
 
     /**
      * 保存选中的图片副本，返回 (同键文件名前缀, 绝对路径)；失败返回 null。
      * 前缀用于删除同一 (type, key) 被替换的旧副本。
      */
-    fun saveCover(context: Context, uri: Uri, type: Int, key: String): Pair<String, String>? {
+    fun saveCover(context: Context, uri: Uri, type: Int, key: String): Pair<String, String>? =
+        saveWithPrefix(context, uri, "${typePrefix(type)}_${sanitizeKey(key)}_")
+
+    private fun saveWithPrefix(context: Context, uri: Uri, prefix: String): Pair<String, String>? {
         return try {
             val dir = File(context.filesDir, "covers")
             if (!dir.exists() && !dir.mkdirs()) return null
-            val prefix = "${typePrefix(type)}_${sanitizeKey(key)}_"
             val dest = File(dir, "$prefix${System.currentTimeMillis()}.jpg")
             if (decodeAndSave(context, uri, dest)) prefix to dest.absolutePath else null
         } catch (e: Exception) {
@@ -46,6 +49,71 @@ object CoverStore {
      * 供列表端用 "前缀 + lowercase 分组键" 查找路径。
      */
     fun coverKeyPrefix(type: Int): String = typePrefix(type) + "_"
+
+    // ==================== 歌曲封面副本 ====================
+    //
+    // 歌曲没有应用自有的稳定 id（Room 主键就是 MediaStore 的 _ID），删掉文件重新拷入、
+    // 或"清空并重新扫描"都会换一个新行；而路径不会变，所以副本按路径摘要分组，
+    // 文件本身就是登记表，扫描时能按路径找回用户设置过的封面。
+
+    /** 歌曲封面副本的文件组前缀（"song_<路径摘要>_"），摘要避免路径截断撞车 */
+    fun songCoverPrefix(path: String): String = "${SONG_GROUP}_${pathDigest(path)}_"
+
+    /** 为歌曲保存封面副本，返回副本绝对路径；失败返回 null */
+    fun saveSongCover(context: Context, uri: Uri, path: String): String? =
+        saveWithPrefix(context, uri, songCoverPrefix(path))?.second
+
+    /** 一次目录遍历得到"组前缀 -> 组内最新副本"，供扫描时按路径找回自定义封面 */
+    fun songCoverIndex(context: Context): Map<String, String> {
+        val files = runCatching {
+            File(context.filesDir, "covers")
+                .listFiles { f -> f.name.startsWith("${SONG_GROUP}_") }
+        }.getOrNull() ?: return emptyMap()
+        return files
+            .groupBy({ it.name.substringBeforeLast('_') + "_" }, { it.absolutePath })
+            .mapValues { (_, paths) -> paths.max() }
+    }
+
+    /** 让该歌曲只保留 [keepPath] 这一张副本，其余同组副本删除；keepPath 传空串即全部清除 */
+    fun retainSongCover(context: Context, path: String, keepPath: String) {
+        deletePrevious(context, songCoverPrefix(path), keepPath = keepPath)
+    }
+
+    /**
+     * 文件被改名/移动后把封面副本迁到新路径的分组，否则下次重新索引按新路径找不回它。
+     * 返回迁移后的路径，迁移不做或失败时原样返回 [coverPath]。
+     */
+    fun migrateSongCover(context: Context, coverPath: String, newPath: String): String {
+        if (!isCustomSongCover(context, coverPath)) return coverPath
+        val src = File(coverPath)
+        if (!src.exists()) return coverPath
+        return try {
+            val dest = File(src.parentFile, "${songCoverPrefix(newPath)}${System.currentTimeMillis()}.jpg")
+            if (src.renameTo(dest)) {
+                deletePrevious(context, songCoverPrefix(newPath), keepPath = dest.absolutePath)
+                dest.absolutePath
+            } else coverPath
+        } catch (e: Exception) {
+            LogWriter.writeError("CoverStore", "迁移歌曲封面失败: $coverPath -> $newPath", e)
+            coverPath
+        }
+    }
+
+    /** albumArt 是否指向本应用私有目录里的歌曲封面副本（不校验文件是否存在） */
+    fun isCustomSongCover(context: Context, albumArt: String?): Boolean {
+        if (albumArt.isNullOrEmpty()) return false
+        val dir = File(context.filesDir, "covers").absolutePath
+        return albumArt.startsWith("$dir/${SONG_GROUP}_")
+    }
+
+    private fun pathDigest(path: String): String = try {
+        val bytes = MessageDigest.getInstance("MD5").digest(path.toByteArray())
+        buildString(bytes.size * 2) {
+            bytes.forEach { b -> append(b.toInt().and(0xFF).toString(16).padStart(2, '0')) }
+        }.take(16)
+    } catch (e: Exception) {
+        sanitizeKey(path)
+    }
 
     /**
      * 删除同一 (type, key) 组内的旧副本，保留 [keepPath]（即刚写入的新副本）。
@@ -84,7 +152,6 @@ object CoverStore {
     private fun typePrefix(type: Int): String = when (type) {
         Cover.TYPE_ARTIST -> "artist"
         Cover.TYPE_ALBUM -> "album"
-        TYPE_SONG -> "song"
         else -> "playlist"
     }
 
