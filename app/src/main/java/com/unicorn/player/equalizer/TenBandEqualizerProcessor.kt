@@ -154,10 +154,14 @@ class TenBandEqualizerProcessor : AudioProcessor {
     // EQ 正增益会把满幅母带推过 ±1.0。按当前曲线级联频响的峰值增益对输出做等量
     // 预衰减（精确按 biquad 系数在探测频点上评估，而非"最大频段+低音"粗放相加，
     // 响度少降 2~4dB），使常态信号始终低于限幅阈值，限幅器只在极端峰值时偶尔
-    // 介入——音色不变，响度略降但稳定，无泵浦感。增益变更随系数走 46ms 渐变。
+    // 介入——音色不变，响度略降但稳定，无泵浦感。
+    // 余量跳变（开关均衡器/切换预设可致 ~10dB 响度差）复用冷启动淡入的 smoothstep
+    // 包络思路做 500ms 长渐变，消除开关时的响度断层；小幅变化（拖动滑条微调）
+    // 仍走 46ms 短渐变保持即时感。
     private var preGain = 1f
     private var preGainTarget = 1f
-    private var preGainStep = 0f
+    private var preGainFrom = 1f
+    private var preGainFramesTotal = 0
     private var preGainFramesLeft = 0
 
     // 单帧各通道样本暂存：先滤波求帧内峰值，再统一乘限幅增益后写出
@@ -527,8 +531,11 @@ class TenBandEqualizerProcessor : AudioProcessor {
         }
         bassShelfCoeffs.advanceRamp()
         if (preGainFramesLeft > 0) {
-            preGain += preGainStep
             preGainFramesLeft--
+            // smoothstep：两端斜率为 0，起止无顿挫（与冷启动淡入/开关渐变同一包络）
+            val t = 1f - preGainFramesLeft.toFloat() / preGainFramesTotal.toFloat()
+            val fraction = t * t * (3f - 2f * t)
+            preGain = preGainFrom + (preGainTarget - preGainFrom) * fraction
             if (preGainFramesLeft == 0) preGain = preGainTarget
         }
     }
@@ -702,10 +709,18 @@ class TenBandEqualizerProcessor : AudioProcessor {
         preGainTarget = 10f.pow(-headroomDb / 20f)
         if (initial) {
             preGain = preGainTarget
+            preGainFrom = preGainTarget
+            preGainFramesTotal = 0
             preGainFramesLeft = 0
         } else {
-            preGainStep = (preGainTarget - preGain) / COEFF_RAMP_FRAMES
-            preGainFramesLeft = COEFF_RAMP_FRAMES
+            // 响度变化超过 3dB（开关均衡器、切换预设）走 800ms smoothstep 长渐变；
+            // 小幅微调走 46ms 短渐变保持即时感
+            val hi = maxOf(preGain, preGainTarget)
+            val lo = minOf(preGain, preGainTarget)
+            val deltaDb = if (lo > 0f) 20f * log10(hi / lo) else 20f
+            preGainFrom = preGain
+            preGainFramesTotal = if (deltaDb > 3f) sampleRate * 4 / 5 else COEFF_RAMP_FRAMES
+            preGainFramesLeft = preGainFramesTotal
         }
     }
 

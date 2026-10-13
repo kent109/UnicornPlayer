@@ -376,13 +376,27 @@ class MusicService : Service() {
     private fun applyEqProcessorLevels() {
         if (Settings.isEqualizerEnabled) {
             eqProcessor.setBandLevels(Settings.seekbarpos)
-            eqProcessor.setBassStrength(
-                Settings.equalizerModel?.bassStrength?.toInt() ?: 0
-            )
+            // equalizerModel 尚未创建时（未进过均衡器页）回退到持久化的 Settings.bassStrength
+            val rawBass = Settings.equalizerModel?.bassStrength?.toInt()
+                ?: Settings.bassStrength.toInt()
+            eqProcessor.setBassStrength(if (rawBass in 0..1000) rawBass else 0)
         } else {
             eqProcessor.setBandLevels(IntArray(10))
             eqProcessor.setBassStrength(0)
         }
+    }
+
+    /**
+     * 统一应用均衡器开关状态：供均衡器快捷开关（ShortcutUtil）等外部入口调用，
+     * 与冷启动恢复路径（loadPlaybackState）共用同一套下发逻辑，避免多处重复实现
+     * 导致行为漂移（如处理器电平清零、系统音效对齐、落盘时机不一致）。
+     * 调用方需先写入 Settings.isEqualizerEnabled；音量调节等快捷开关专属行为不在此处理。
+     */
+    fun applyEqualizerEnabledState() {
+        applyEqProcessorLevels()
+        initializeAudioEffects()
+        syncSystemEffectsEnableState()
+        savePlaybackState()
     }
 
     // 音频管理器（保留用于蓝牙/音量控制等）

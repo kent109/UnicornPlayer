@@ -473,7 +473,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             binding.searchView.dispatchTouchEvent(cancel)
             cancel.recycle()
         }
-        val enabled = ShortcutUtil.toggleEqualizer(this, musicService)
+        val enabled = ShortcutUtil.toggleEqualizer(musicService)
         Toast.makeText(
             this,
             if (enabled) "已打开均衡器" else "已关闭均衡器",
