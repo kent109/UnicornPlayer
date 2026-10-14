@@ -224,17 +224,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
             updateSongCount(songs.size)
             // 数据加载完成后，才根据列表是否为空切换 emptyView，避免启动时闪现
             if (!hasLoaded) return@observe
-            if (songs.isNullOrEmpty()) {
-                binding.emptyView.visibility = View.VISIBLE
-                binding.recyclerView.visibility = View.GONE
-                binding.smartRefreshLayout.setEnableRefresh(false)
-                binding.btnScrollToCurrent.visibility = View.GONE
-                binding.tvSongCount.visibility = View.GONE
-            } else {
-                binding.emptyView.visibility = View.GONE
-                binding.recyclerView.visibility = View.VISIBLE
-                binding.smartRefreshLayout.setEnableRefresh(true)
-            }
+            applySongsVisibility(songs)
         }
 
         viewModel.isLoading.observe(viewLifecycleOwner) { isLoading ->
@@ -283,17 +273,44 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
             if (count == 0 && awaitingScanEmptyCheck) {
                 awaitingScanEmptyCheck = false
                 host?.onScanCompleted(empty = true)
-                // 数据库本来就是空时 Room Flow 不会重发，需手动恢复 emptyView
-                binding.emptyView.visibility = View.VISIBLE
-                binding.recyclerView.visibility = View.GONE
-                binding.smartRefreshLayout.setEnableRefresh(false)
-                binding.btnScrollToCurrent.visibility = View.GONE
             }
+            restoreUiAfterScan(count)
+        }
+    }
+
+    /**
+     * 按当前列表切换空数据提示与列表的可见性。
+     */
+    private fun applySongsVisibility(songs: List<Song>?) {
+        val binding = _binding ?: return
+        if (songs.isNullOrEmpty()) {
+            binding.emptyView.visibility = View.VISIBLE
+            binding.recyclerView.visibility = View.GONE
+            binding.smartRefreshLayout.setEnableRefresh(false)
+            binding.btnScrollToCurrent.visibility = View.GONE
+            binding.tvSongCount.visibility = View.GONE
+        } else {
+            binding.emptyView.visibility = View.GONE
+            binding.recyclerView.visibility = View.VISIBLE
+            binding.smartRefreshLayout.setEnableRefresh(true)
         }
     }
 
     private fun updateSongCount(count: Int) {
         binding.tvSongCount.text = "共 $count 首歌曲"
+    }
+
+    /**
+     * 扫描收尾恢复 UI 可见性。
+     * 扫描未改动数据库（如搜索无结果状态下点击"立即扫描"）时 Room Flow 不会重发，
+     * allSongs 观察者收不到回调，emptyView 与列表会同时不可见导致空白；
+     * 但空曲库扫出新歌时 Flow 马上会重发完整列表，此时不应按"空"状态提前显示 emptyView 造成闪现。
+     */
+    private fun restoreUiAfterScan(scannedCount: Int) {
+        val shown = viewModel.allSongs.value.orEmpty()
+        val full = viewModel.fullSongs.value.orEmpty()
+        if (shown.isEmpty() && full.isEmpty() && scannedCount > 0) return
+        applySongsVisibility(shown)
     }
 
     private fun setupSmartRefreshLayout() {
