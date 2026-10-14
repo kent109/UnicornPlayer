@@ -6,6 +6,7 @@ import android.view.View
 import android.view.Window
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.unicorn.player.R
+import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.DialogSongInfoBinding
 import com.unicorn.player.databinding.ItemSongInfoBinding
 import com.unicorn.player.model.Artist
@@ -71,7 +72,7 @@ class ArtistInfoDialog(
             }
 
             addClickableItem(
-                infoContainer, "添加到歌单", R.color.quality_std
+                infoContainer, "添加到歌单", R.color.disc_playing_color_4
             ) {
                 bottomSheetDialog.dismiss()
                 onAddToPlaylist()
@@ -117,7 +118,7 @@ class ArtistInfoDialog(
                 )
             val drawable = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                setColor(designBottomSheet.context.getColor(R.color.surface_panel))
+                setColor(ThemeSettingActivity.resolveDialogPanelColor(context))
                 cornerRadii = floatArrayOf(
                     cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f, 0f, 0f
                 )

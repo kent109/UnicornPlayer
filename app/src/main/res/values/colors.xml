@@ -22,7 +22,7 @@
     <color name="onErrorContainer">#410002</color>
 
     <!-- 弹窗中删除/恢复默认这类危险操作的按钮文字颜色，
-         与均衡器导出弹窗"覆盖同名配置"保持一致；未在 values-night 里另配，夜间同款亮红 -->
+         与均衡器导出弹窗"覆盖同名配置"保持一致 -->
     <color name="danger_text">@android:color/holo_red_light</color>
 
     <color name="background">#FFFBFE</color>
@@ -98,4 +98,22 @@
     <color name="disc_playing_color_5">#FF07F8F8</color>
     <color name="disc_playing_color_6">#FF164DF0</color>
     <color name="disc_playing_color_7">#FFB400FF</color>
+    <!-- 弹窗面板底色：取自原生 MaterialAlertDialog 白天实测采样，勿再公式合成 -->
+    <color name="dialog_panel_color_default">#FFEEE8F4</color>
+    <color name="dialog_panel_color_1">#FFFEE5E7</color>
+    <color name="dialog_panel_color_2">#FFFFEDE3</color>
+    <color name="dialog_panel_color_3">#FFFFF8EB</color>
+    <color name="dialog_panel_color_4">#FFE6F8E5</color>
+    <color name="dialog_panel_color_5">#FFE4FAFD</color>
+    <color name="dialog_panel_color_6">#FFE6E8FC</color>
+    <color name="dialog_panel_color_7">#FFF7E0FE</color>
+    <!-- 弹窗列表条目底色：面板色(dialog_panel_color_*)朝白提亮 30% -->
+    <color name="dialog_item_color_default">#FFF3EFF7</color>
+    <color name="dialog_item_color_1">#FFFEEDEE</color>
+    <color name="dialog_item_color_2">#FFFFF2EB</color>
+    <color name="dialog_item_color_3">#FFFFFAF1</color>
+    <color name="dialog_item_color_4">#FFEEFAED</color>
+    <color name="dialog_item_color_5">#FFECFCFE</color>
+    <color name="dialog_item_color_6">#FFEEEFFD</color>
+    <color name="dialog_item_color_7">#FFF9E9FE</color>
 </resources>

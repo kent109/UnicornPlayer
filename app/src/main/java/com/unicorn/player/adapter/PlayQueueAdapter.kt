@@ -83,6 +83,10 @@ class PlayQueueAdapter(
         val binding = ItemSongBinding.inflate(
             LayoutInflater.from(parent.context), parent, false
         )
+        // 队列行与主歌曲列表共用 item_song，弹窗内改用跟随主题的 dialogItemColor
+        binding.contentLayout.setBackgroundColor(
+            ThemeSettingActivity.resolveDialogItemColor(parent.context)
+        )
         return QueueViewHolder(binding)
     }
 

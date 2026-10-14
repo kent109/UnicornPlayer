@@ -268,7 +268,7 @@ class SongInfoHelper(private val context: Context) {
             addClickableItem(
                 dialogBinding.infoContainer,
                 "添加到歌单",
-                R.color.quality_std
+                R.color.disc_playing_color_4
             ) {
                 bottomSheetDialog.dismiss()
                 onAddToPlaylistListener?.onAddToPlaylist(song)
@@ -290,7 +290,7 @@ class SongInfoHelper(private val context: Context) {
             addClickableItem(
                 dialogBinding.infoContainer,
                 "删除",
-                android.R.color.holo_red_light
+                R.color.danger_text
             ) {
                 bottomSheetDialog.dismiss()
                 showDeleteConfirmDialog(song)
@@ -316,7 +316,7 @@ class SongInfoHelper(private val context: Context) {
                 )
             val drawable = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setColor(designBottomSheet.context.getColor(R.color.surface_panel))
+                setColor(ThemeSettingActivity.resolveDialogPanelColor(context))
                 cornerRadii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f, 0f, 0f)
             }
             designBottomSheet.background = drawable

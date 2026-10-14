@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.Log
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -104,6 +105,28 @@ class ThemeSettingActivity : BaseActivity() {
             } else {
                 ContextCompat.getColor(context, R.color.highlight_color)
             }
+        }
+
+        /**
+         * 解析当前主题（Color1..7）对应的弹窗面板底色 ?attr/dialogPanelColor。
+         * 需传入宿主 Activity 的 context（弹窗内部 context 可能不带这些主题属性）。
+         */
+        fun resolveDialogPanelColor(context: Context): Int =
+            resolveThemeColor(context, R.attr.dialogPanelColor, R.color.surface_panel)
+
+        /**
+         * 弹窗内列表条目底色 ?attr/dialogItemColor（比面板亮一档）。
+         */
+        fun resolveDialogItemColor(context: Context): Int =
+            resolveThemeColor(context, R.attr.dialogItemColor, R.color.recycler_item_bg)
+
+        private fun resolveThemeColor(context: Context, attrRes: Int, fallbackColorRes: Int): Int {
+            val tv = TypedValue()
+            val resolved = context.theme.resolveAttribute(attrRes, tv, true)
+            val isColor = tv.type >= TypedValue.TYPE_FIRST_COLOR_INT &&
+                    tv.type <= TypedValue.TYPE_LAST_COLOR_INT
+            return if (resolved && isColor) tv.data
+            else ContextCompat.getColor(context, fallbackColorRes)
         }
 
         fun resolveHighlightColorIndex(context: Context): Int {

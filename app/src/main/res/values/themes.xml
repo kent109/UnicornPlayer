@@ -35,6 +35,8 @@
         <item name="colorOnSurface">@color/onSurface</item>
         <item name="colorSurfaceVariant">@color/surfaceVariant</item>
         <item name="colorOnSurfaceVariant">@color/onSurfaceVariant</item>
+        <item name="dialogPanelColor">@color/dialog_panel_color_default</item>
+        <item name="dialogItemColor">@color/dialog_item_color_default</item>
 
         <!-- Outline colors -->
         <item name="colorOutline">@color/outline</item>
@@ -82,6 +84,8 @@
         <item name="colorPrimary">@color/disc_playing_color_1</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#ED6E98</item>
+        <item name="dialogPanelColor">@color/dialog_panel_color_1</item>
+        <item name="dialogItemColor">@color/dialog_item_color_1</item>
         <item name="colorOnPrimaryContainer">#4a004a</item>
     </style>
 
@@ -90,6 +94,8 @@
         <item name="colorPrimary">@color/disc_playing_color_2</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#F8B14C</item>
+        <item name="dialogPanelColor">@color/dialog_panel_color_2</item>
+        <item name="dialogItemColor">@color/dialog_item_color_2</item>
         <item name="colorOnPrimaryContainer">#5a0030</item>
     </style>
 
@@ -98,6 +104,8 @@
         <item name="colorPrimary">@color/disc_playing_color_3</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#F6E661</item>
+        <item name="dialogPanelColor">@color/dialog_panel_color_3</item>
+        <item name="dialogItemColor">@color/dialog_item_color_3</item>
         <item name="colorOnPrimaryContainer">#5a4a0f</item>
     </style>
 
@@ -106,6 +114,8 @@
         <item name="colorPrimary">@color/disc_playing_color_4</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#93F483</item>
+        <item name="dialogPanelColor">@color/dialog_panel_color_4</item>
+        <item name="dialogItemColor">@color/dialog_item_color_4</item>
         <item name="colorOnPrimaryContainer">#1a4a2a</item>
     </style>
 
@@ -114,6 +124,8 @@
         <item name="colorPrimary">@color/disc_playing_color_5</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#A6F2F6</item>
+        <item name="dialogPanelColor">@color/dialog_panel_color_5</item>
+        <item name="dialogItemColor">@color/dialog_item_color_5</item>
         <item name="colorOnPrimaryContainer">#0f2d5a</item>
     </style>
 
@@ -122,6 +134,8 @@
         <item name="colorPrimary">@color/disc_playing_color_6</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#5B78ED</item>
+        <item name="dialogPanelColor">@color/dialog_panel_color_6</item>
+        <item name="dialogItemColor">@color/dialog_item_color_6</item>
         <item name="colorOnPrimaryContainer">#0f5a5a</item>
     </style>
 
@@ -130,6 +144,8 @@
         <item name="colorPrimary">@color/disc_playing_color_7</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorPrimaryContainer">#E37CF4</item>
+        <item name="dialogPanelColor">@color/dialog_panel_color_7</item>
+        <item name="dialogItemColor">@color/dialog_item_color_7</item>
         <item name="colorOnPrimaryContainer">#2d0f5a</item>
     </style>
 </resources>

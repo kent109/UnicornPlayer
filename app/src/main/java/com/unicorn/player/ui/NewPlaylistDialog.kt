@@ -7,6 +7,7 @@ import android.view.View
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.unicorn.player.R
+import com.unicorn.player.ThemeSettingActivity
 import com.unicorn.player.databinding.DialogNewPlaylistBinding
 import com.unicorn.player.util.CoverImage
 import com.unicorn.player.util.ScreenCornerUtil
@@ -80,7 +81,7 @@ class NewPlaylistDialog(
                     )
                 val drawable = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    setColor(designBottomSheet.context.getColor(R.color.surface_panel))
+                    setColor(ThemeSettingActivity.resolveDialogPanelColor(context))
                     cornerRadii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f, 0f, 0f)
                 }
                 designBottomSheet.background = drawable

@@ -317,6 +317,19 @@ class LrcSearchActivity : BaseActivity(),
         }
         val dimmed = if (searching) (color and 0x00FFFFFF) or (0xCC shl 24) else color
         binding.btnSearch.backgroundTintList = ColorStateList.valueOf(dimmed)
+
+        // 文字跟随底色做半透明"变灰"，仍保持 onPrimary 色相，不用 Material 的禁用态色
+        val onPrimaryValue = TypedValue()
+        theme.resolveAttribute(
+            com.google.android.material.R.attr.colorOnPrimary, onPrimaryValue, true
+        )
+        val onPrimary = if (onPrimaryValue.resourceId != 0) {
+            ContextCompat.getColor(this, onPrimaryValue.resourceId)
+        } else {
+            onPrimaryValue.data
+        }
+        val textAlpha = if (searching) 0x99 shl 24 else 0xFF shl 24
+        binding.btnSearch.setTextColor((onPrimary and 0x00FFFFFF) or textAlpha)
     }
 
     /**

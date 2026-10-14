@@ -17,4 +17,8 @@
         <!-- 边框和文字颜色 -->
         <attr name="aq_color" format="color" />
     </declare-styleable>
+
+    <!-- 弹窗面板底色（surface+主题色稀释预合成，按主题 ColorN 覆盖） -->
+    <attr name="dialogPanelColor" format="color" />
+    <attr name="dialogItemColor" format="color" />
 </resources>
