@@ -38,7 +38,7 @@
         android:layout_marginTop="12dp"
         android:ellipsize="end"
         android:gravity="center"
-        android:maxLines="2"
+        android:maxLines="1"
         android:text="歌曲标题"
         android:textColor="@color/onBackground"
         android:textSize="24sp"
