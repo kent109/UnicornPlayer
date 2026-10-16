@@ -73,6 +73,13 @@ class TenBandEqualizerProcessor : AudioProcessor {
         )
 
         /**
+         * 节目余量（dB）：级联频响峰值是按"最坏情况满幅信号在峰值频点"计算的，
+         * 真实母带真峰值通常在 -6 ~ -9dBFS 且能量不集中于单一频点，全额衰减会过度
+         * 压低响度。从峰值中扣除本值作为静态衰减量，残余瞬态由限幅器偶尔兜底。
+         */
+        private const val PROGRAM_HEADROOM_DB = 4f
+
+        /**
          * 增益变更时的系数渐变帧数（44.1kHz 下约 46ms）。
          * 人耳对 <20ms 的突变感知为"咔哒"爆音，40~50ms 的线性渐变可完全消除 zipper noise，
          * 同时短到不会让人察觉音色在"拖动"。
@@ -693,9 +700,10 @@ class TenBandEqualizerProcessor : AudioProcessor {
         }
 
         // 静态余量增益：在探测频点上评估 10 段 + 低音低架级联后的真实幅频响应，
-        // 取峰值（+1dB 探针间裕量，上限 20dB）作为整体预衰减量。shelf/peak 只是
-        // 部分重叠，比"最大正频段 + 低音"的粗放相加少降 2~4dB 响度；探针间遗漏的
-        // 轻微残余峰值由限幅器兜底
+        // 取峰值扣除节目余量（+1dB 探针间裕量，上限 20dB）作为整体预衰减量。
+        // shelf/peak 只是部分重叠，比"最大正频段 + 低音"的粗放相加少降 2~4dB 响度；
+        // 真实母带达不到满幅最坏情况，再扣 PROGRAM_HEADROOM_DB 回升响度，
+        // 残余瞬态峰值由限幅器偶尔介入兜底
         var peakDb = 0f
         for (f in HEADROOM_PROBE_FREQS) {
             val w = 2f * Math.PI.toFloat() * f / fs
@@ -705,7 +713,7 @@ class TenBandEqualizerProcessor : AudioProcessor {
             }
             if (sumDb > peakDb) peakDb = sumDb
         }
-        val headroomDb = (peakDb + 1f).coerceIn(0f, 20f)
+        val headroomDb = (peakDb - PROGRAM_HEADROOM_DB + 1f).coerceIn(0f, 20f)
         preGainTarget = 10f.pow(-headroomDb / 20f)
         if (initial) {
             preGain = preGainTarget
