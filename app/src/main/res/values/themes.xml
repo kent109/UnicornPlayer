@@ -61,6 +61,8 @@
         <item name="materialButtonOutlinedStyle">@style/Widget.UnicornPlayer.Button.TextButton.Secondary</item>
         <item name="buttonBarNegativeButtonStyle">@style/Widget.UnicornPlayer.Button.TextButton.Secondary</item>
         <item name="buttonBarNeutralButtonStyle">@style/Widget.UnicornPlayer.Button.TextButton.Secondary</item>
+        <!-- AlertDialog 窗口底色统一使用弹窗面板底色 -->
+        <item name="alertDialogTheme">@style/ThemeOverlay.Unicorn.Dialog.Alert</item>
 
         <!-- ProgressBar 使用主题色 -->
         <item name="android:progressBarStyle">@style/Widget.UnicornPlayer.ProgressBar</item>

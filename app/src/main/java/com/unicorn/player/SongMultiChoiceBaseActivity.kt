@@ -6,8 +6,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.model.Song
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.ui.SongMultiChoiceFragment
@@ -74,7 +74,7 @@ open class SongMultiChoiceBaseActivity : BaseActivity(),
 
         val dangerColor = this.getColor(R.color.danger_text)
         val secondaryColor = this.getColor(R.color.secondary)
-        val dialog = MaterialAlertDialogBuilder(this).setTitle(title).setMessage(message)
+        val dialog = AlertDialog.Builder(this).setTitle(title).setMessage(message)
             .setPositiveButton("删除") { _, _ ->
                 // 通过回调通知外部处理删除
                 handleDeleteSelected(playlistId, selectedSongIds)

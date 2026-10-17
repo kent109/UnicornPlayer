@@ -56,6 +56,9 @@
 
         <!-- 黑夜模式下isLightTheme为false -->
         <item name="isLightTheme">false</item>
+
+        <!-- AlertDialog 窗口底色统一使用弹窗面板底色 -->
+        <item name="alertDialogTheme">@style/ThemeOverlay.Unicorn.Dialog.Alert</item>
     </style>
 
     <!-- 主题色1: 红（色值取 disc_playing_color_1） -->

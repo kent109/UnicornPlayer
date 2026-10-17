@@ -12,12 +12,12 @@ import android.widget.SearchView
 import android.widget.Toast
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayoutMediator
 import com.unicorn.player.databinding.ActivityMainBinding
 import com.unicorn.player.manager.MusicManager
@@ -1018,7 +1018,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
 
         val dangerColor = this.getColor(R.color.danger_text)
         val secondaryColor = this.getColor(R.color.secondary)
-        val dialog = MaterialAlertDialogBuilder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton("删除") { _, _ ->

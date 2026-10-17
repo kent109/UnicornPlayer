@@ -8,10 +8,10 @@ import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.adapter.LrcSearchResultAdapter
 import com.unicorn.player.databinding.ActivityLrcSearchBinding
 import com.unicorn.player.model.LrcSearchResult
@@ -175,7 +175,7 @@ class LrcSearchActivity : BaseActivity(),
      */
     override fun onResultClick(result: LrcSearchResult) {
         val secondaryColor = this.getColor(R.color.secondary)
-        val dialog = MaterialAlertDialogBuilder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("使用歌词")
             .setMessage("确定要使用「${result.trackName} - ${result.artistName}」的歌词吗？")
             .setPositiveButton("确定") { _, _ ->

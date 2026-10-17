@@ -25,15 +25,19 @@ abstract class BaseActivity : AppCompatActivity() {
     private var currentThemeRes = 0
     private var currentHighlightColor = 0
     private var currentBottomPanelMode = ThemeSettingActivity.BOTTOM_PANEL_MODE_CARD
+    private var currentDialogBgMode = ThemeSettingActivity.DIALOG_BG_MODE_SYSTEM
 
     override fun onCreate(savedInstanceState: Bundle?) {
         currentThemeRes = resolveColorTheme()
         if (currentThemeRes != 0) {
             setTheme(currentThemeRes)
         }
+        currentDialogBgMode = ThemeSettingActivity.resolveDialogBgMode(this)
         currentHighlightColor = ThemeSettingActivity.resolveHighlightColor(this)
         currentBottomPanelMode = ThemeSettingActivity.resolveBottomPanelMode(this)
         super.onCreate(savedInstanceState)
+        // 必须在 super.onCreate 之后叠加，否则会被 AppCompat 的主题初始化覆盖
+        ThemeSettingActivity.applyDialogBackgroundTheme(this, theme)
     }
 
     /**
@@ -122,6 +126,12 @@ abstract class BaseActivity : AppCompatActivity() {
         }
         val newHighlightColor = ThemeSettingActivity.resolveHighlightColor(this)
         if (newHighlightColor != currentHighlightColor) {
+            recreate()
+            return
+        }
+        val newDialogBgMode = ThemeSettingActivity.resolveDialogBgMode(this)
+        if (newDialogBgMode != currentDialogBgMode) {
+            // 弹窗底色由主题属性提供，必须重建才能重放 ThemeOverlay
             recreate()
         }
         val newBottomPanelMode = ThemeSettingActivity.resolveBottomPanelMode(this)

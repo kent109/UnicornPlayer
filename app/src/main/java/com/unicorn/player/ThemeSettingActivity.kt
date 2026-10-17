@@ -1,6 +1,7 @@
 package com.unicorn.player
 
 import android.content.Context
+import android.content.res.Resources
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.Log
@@ -60,6 +61,10 @@ class ThemeSettingActivity : BaseActivity() {
         val BOTTOM_PANEL_MODE = intPreferencesKey("bottom_panel_mode")
         const val BOTTOM_PANEL_MODE_CARD = 0
         const val BOTTOM_PANEL_MODE_BANNER = 1
+
+        val DIALOG_BG_MODE = intPreferencesKey("dialog_bg_mode")
+        const val DIALOG_BG_MODE_SYSTEM = 0
+        const val DIALOG_BG_MODE_THEME = 1
 
         private val COLOR_THEME_RES = intArrayOf(
             R.style.Theme_UnicornPlayer_Color1,
@@ -180,6 +185,35 @@ class ThemeSettingActivity : BaseActivity() {
             }
         }
 
+        fun resolveDialogBgMode(context: Context): Int {
+            val prefs = runBlocking {
+                try {
+                    context.applicationContext.themeDataStore.data.first()
+                } catch (e: Exception) {
+                    null
+                }
+            } ?: return DIALOG_BG_MODE_SYSTEM
+            return prefs[DIALOG_BG_MODE] ?: DIALOG_BG_MODE_SYSTEM
+        }
+
+        /**
+         * "弹窗背景"设置：跟随主题时 ?attr/dialogPanelColor 取当前主题色采样值，
+         * 系统默认时由 ThemeOverlay.DialogBackgroundSystem 把它覆盖回平面色。
+         */
+        fun applyDialogBackgroundTheme(context: Context, theme: Resources.Theme) {
+            if (resolveDialogBgMode(context) == DIALOG_BG_MODE_SYSTEM) {
+                theme.applyStyle(R.style.ThemeOverlay_DialogBackgroundSystem, true)
+            }
+        }
+
+        fun getDialogBgSummary(context: Context): String {
+            val mode = resolveDialogBgMode(context)
+            return when (mode) {
+                DIALOG_BG_MODE_THEME -> "跟随主题"
+                else -> "系统默认"
+            }
+        }
+
         /**
          * 应用底部面板（播放条、多选操作栏）样式：横幅模式去掉圆角并把左右 8dp 间距填满屏幕宽度，
          * 同时把这 8dp 补进内容区的左右内边距，使封面与各按钮的屏幕位置和卡片模式保持一致，
@@ -269,6 +303,7 @@ class ThemeSettingActivity : BaseActivity() {
     private lateinit var binding: ActivityThemeSettingBinding
     private var themePopup: PopupWindow? = null
     private var bottomPanelPopup: PopupWindow? = null
+    private var dialogBgPopup: PopupWindow? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -370,9 +405,19 @@ class ThemeSettingActivity : BaseActivity() {
                     summary = getBottomPanelSummary(this),
                     hasChevron = true,
                     isFirst = false,
-                    isLast = true,
+                    isLast = false,
                     type = SettingItemType.SELECT,
                     onClick = { anchor -> showBottomPanelMenu(anchor) }
+                ),
+                SettingItem(
+                    key = "dialog_bg",
+                    title = "弹窗背景",
+                    summary = getDialogBgSummary(this),
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = true,
+                    type = SettingItemType.SELECT,
+                    onClick = { anchor -> showDialogBgMenu(anchor) }
                 )
             )
         )
@@ -604,6 +649,65 @@ class ThemeSettingActivity : BaseActivity() {
             ?.text = if (mode == BOTTOM_PANEL_MODE_BANNER) "横幅" else "卡片"
         bottomPanelPopup?.dismiss()
         bottomPanelPopup = null
+    }
+
+    private fun showDialogBgMenu(anchorView: View) {
+        dialogBgPopup?.let {
+            if (it.isShowing) {
+                it.dismiss()
+                return
+            }
+        }
+
+        val popupView = LayoutInflater.from(this).inflate(R.layout.popup_dialog_background, null)
+        val tvSystem = popupView.findViewById<android.widget.TextView>(R.id.tvDialogBgSystem)
+        val tvTheme = popupView.findViewById<android.widget.TextView>(R.id.tvDialogBgTheme)
+
+        val currentMode = resolveDialogBgMode(this)
+        val checkColor = resolveHighlightColor(this)
+        val normalColor = ContextCompat.getColor(this, R.color.text_primary)
+
+        setupThemeModeItem(tvSystem, currentMode == DIALOG_BG_MODE_SYSTEM, checkColor, normalColor)
+        setupThemeModeItem(tvTheme, currentMode == DIALOG_BG_MODE_THEME, checkColor, normalColor)
+
+        tvSystem.setOnClickListener { onDialogBgModeSelected(DIALOG_BG_MODE_SYSTEM) }
+        tvTheme.setOnClickListener { onDialogBgModeSelected(DIALOG_BG_MODE_THEME) }
+
+        val popupWidthPx = (180 * resources.displayMetrics.density).toInt()
+
+        dialogBgPopup = PopupWindow(
+            popupView, popupWidthPx, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, true
+        ).apply {
+            elevation = 8f
+            isOutsideTouchable = true
+            animationStyle = R.style.PopupAnimation
+            setOnDismissListener { dialogBgPopup = null }
+        }
+
+        val anchorLoc = IntArray(2)
+        anchorView.getLocationOnScreen(anchorLoc)
+        val screenWidth = resources.displayMetrics.widthPixels
+        val xOff = anchorView.width - popupWidthPx
+        val clampedXOff = xOff.coerceIn(
+            -anchorLoc[0],
+            screenWidth - anchorLoc[0] - popupWidthPx
+        )
+        dialogBgPopup?.showAsDropDown(anchorView, clampedXOff, -50)
+    }
+
+    private fun onDialogBgModeSelected(mode: Int) {
+        lifecycleScope.launch {
+            try {
+                applicationContext.themeDataStore.edit { it[DIALOG_BG_MODE] = mode }
+            } catch (e: Exception) {
+                Log.e(TAG, "写入 dialog_bg_mode 失败", e)
+            }
+        }
+        binding.settingsContainer
+            .findViewWithTag<android.widget.TextView>("dialog_bg_summary")
+            ?.text = if (mode == DIALOG_BG_MODE_THEME) "跟随主题" else "系统默认"
+        dialogBgPopup?.dismiss()
+        dialogBgPopup = null
     }
 
     private fun setupThemeModeItem(

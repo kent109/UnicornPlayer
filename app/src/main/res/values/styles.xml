@@ -29,6 +29,18 @@
         <item name="android:windowExitAnimation">@anim/popup_dismiss</item>
     </style>
 
+    <!-- 「标题+消息」型 AlertDialog 的主题覆盖：窗口底色对齐弹窗面板底色，
+         与带自定义内容的弹窗保持同一套底色（?attr/dialogPanelColor 由主题/开关决定） -->
+    <style name="ThemeOverlay.Unicorn.Dialog.Alert" parent="ThemeOverlay.Material3.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/bg_dialog_panel</item>
+    </style>
+
+    <!-- 弹窗背景=系统默认时叠加的主题覆盖：弹窗底色回到不跟随主题色的平面色 -->
+    <style name="ThemeOverlay.DialogBackgroundSystem" parent="">
+        <item name="dialogPanelColor">@color/surface_panel</item>
+        <item name="dialogItemColor">@color/recycler_item_bg</item>
+    </style>
+
     <!-- TabLayout 标签文字样式 -->
     <style name="TabLayoutText" parent="TextAppearance.Design.Tab">
         <item name="android:textSize">16sp</item>

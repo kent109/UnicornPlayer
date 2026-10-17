@@ -10,9 +10,9 @@ import android.view.View
 import android.view.Window
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import com.google.android.material.bottomsheet.BottomSheetDialog
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.databinding.DialogSongInfo2Binding
 import com.unicorn.player.databinding.ItemSongInfoBinding
 import com.unicorn.player.model.Song
@@ -584,7 +584,7 @@ class SongInfoHelper(private val context: Context) {
     private fun showDeleteConfirmDialog(song: Song) {
         val dangerColor = context.getColor(R.color.danger_text)
         val secondaryColor = context.getColor(R.color.secondary)
-        val dialog = MaterialAlertDialogBuilder(context)
+        val dialog = AlertDialog.Builder(context)
             .setTitle("删除歌曲")
             .setMessage("确定要从列表中删除「${song.title}」吗？\n\n注意：这不会删除本地文件。")
             .setPositiveButton("删除") { _, _ ->

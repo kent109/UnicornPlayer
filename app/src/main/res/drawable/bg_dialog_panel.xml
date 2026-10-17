@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「标题+消息」型 AlertDialog 的窗口底色：与自定义内容弹窗的面板底色保持一致 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?attr/dialogPanelColor" />
+    <corners android:radius="16dp" />
+</shape>

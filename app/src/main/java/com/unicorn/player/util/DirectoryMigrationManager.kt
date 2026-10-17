@@ -13,10 +13,10 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -415,7 +415,7 @@ object DirectoryMigrationManager {
         // 显示迁移说明对话框
         val secondaryColor = activity.getColor(R.color.secondary)
         val primaryColor = activity.getColor(R.color.primary)
-        val dialog = MaterialAlertDialogBuilder(activity)
+        val dialog = AlertDialog.Builder(activity)
             .setTitle("存储目录升级")
             .setMessage("为提供更好的体验，文件的保存位置已从 Documents/Unicorn 升级到 Download/Unicorn。\n\n点击\"开始迁移\"后，请在文件管理器中选择 Download/Unicorn 文件夹以完成授权，我们将自动迁移您的文件。\n\n后续使用需要您重新授权之前已授权的目录文件。")
             .setNegativeButton("稍后提醒", null)
@@ -454,7 +454,7 @@ object DirectoryMigrationManager {
         loadingView.findViewById<TextView>(R.id.tvLoadingMessage)?.text = "正在迁移目录，请稍候..."
 
         // 显示不可取消的 loading 对话框
-        val loadingDialog = MaterialAlertDialogBuilder(activity)
+        val loadingDialog = AlertDialog.Builder(activity)
             .setView(loadingView)
             .create()
         loadingDialog.setCancelable(false)

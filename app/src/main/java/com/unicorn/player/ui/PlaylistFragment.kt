@@ -17,7 +17,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unicorn.player.MainActivity
 import com.unicorn.player.PlaylistSongsActivity
 import com.unicorn.player.R
@@ -685,7 +684,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
     ) {
         val dangerColor = requireContext().getColor(R.color.danger_text)
         val secondaryColor = requireContext().getColor(R.color.secondary)
-        val dialog = MaterialAlertDialogBuilder(requireContext())
+        val dialog = AlertDialog.Builder(requireContext())
             .setTitle("删除歌单")
             .setMessage("确定要删除歌单「${playlist.name}」吗？此操作不可恢复。")
             .setNegativeButton("取消", null)
