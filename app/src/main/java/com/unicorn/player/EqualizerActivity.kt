@@ -25,6 +25,7 @@ import com.unicorn.player.databinding.DialogEqExportFilenameBinding
 import com.unicorn.player.databinding.DialogEqImportConfigBinding
 import com.unicorn.player.databinding.EqualizerOptionsBinding
 import com.unicorn.player.equalizer.EqualizerConfig
+import com.unicorn.player.equalizer.TenBandEqualizerProcessor
 import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.util.EqualizerConfigManager
@@ -97,7 +98,6 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     override fun onStart() {
         super.onStart()
-
         if (musicService != null) {
             // 即使当前没有 audioSession（从未播放），也创建 Fragment：
             // Fragment 自身从持久化渲染上次的开关/模式/频段/旋钮状态，
@@ -137,6 +137,9 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         } else {
             AudioEffectManager.disableEffects()
         }
+        // 库内部 applyBassAndReverb 会把系统 PresetReverb enable；
+        // App 内 FDN 软件环绕取代之，这里统一压回禁用，防双份尾音
+        service.forceDisableSystemReverb()
         notifyFragmentEffectsReady()
     }
 
@@ -319,10 +322,16 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     /** 执行导出：读取当前 Settings -> 序列化为 JSON -> 写入文件。 */
     private fun performExport(fileName: String) {
+        // surroundLevel：旋钮原始刻度 0..19（可选扩展字段，精确还原连续强度）；
+        // 从未存过刻度时按派生预设的区间中心锚点补齐
+        val rawProgress = Settings.loadReverbProgress(this)
+        val surroundLevel = if (rawProgress in 0..19) rawProgress
+        else TenBandEqualizerProcessor.surroundAnchorLevel(Settings.reverbPreset.toInt())
         val config = EqualizerConfig(
             bandLevels = Settings.seekbarpos.toList(),
             bassStrength = Settings.bassStrength.toInt(),
-            reverbPreset = Settings.reverbPreset.toInt()
+            reverbPreset = Settings.reverbPreset.toInt(),
+            surroundLevel = surroundLevel
         )
         val json = try {
             Gson().toJson(config)
@@ -467,7 +476,14 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             }
             val bandArr = IntArray(10) { i -> config.bandLevels[i] }
             val bass = config.bassStrength.toShort()
-            val reverb = config.reverbPreset.toShort()
+            // 虚拟音效连续强度：优先取 v2 可选字段 surroundLevel（0..19）精确还原；
+            // 缺失/越界（旧文件）时回退 reverbPreset（0..6）的区间中心锚点刻度
+            val fileLevel = config.surroundLevel?.takeIf { it in 0..19 }
+            val surroundLevel = fileLevel
+                ?: TenBandEqualizerProcessor.surroundAnchorLevel(config.reverbPreset)
+            // 文件带精确刻度时预设由刻度派生，保证库模型与实际生效强度一致
+            val reverb = (fileLevel?.let { it * 6 / 19 } ?: config.reverbPreset)
+                .coerceIn(0, 6).toShort()
             withContext(Dispatchers.Main) {
                 val fragment =
                     supportFragmentManager.findFragmentByTag("f_eq") as? EqualizerFragment
@@ -475,7 +491,15 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     Toast.makeText(this@EqualizerActivity, "均衡器未就绪", Toast.LENGTH_SHORT).show()
                     return@withContext
                 }
-                val applied = fragment.applyImportedConfig(bandArr, bass, reverb)
+                // 库 1.0.1 四参重载：内部按文件精确刻度落盘 saveReverbProgress、
+                // 用区间中心公式刷旋钮视觉位置，并经 TenBandEqBridge.SurroundApplier
+                // 回调下发 App 内 FDN 连续插值强度，无需 App 侧再覆盖
+                val applied = fragment.applyImportedConfig(bandArr, bass, reverb, surroundLevel)
+                Log.d(
+                    TAG,
+                    "imported surround: preset=$reverb level=$surroundLevel " +
+                        "(${surroundLevel * 100 / 19}%)"
+                )
                 Toast.makeText(
                     this@EqualizerActivity,
                     if (applied) "已导入并应用到当前音效"

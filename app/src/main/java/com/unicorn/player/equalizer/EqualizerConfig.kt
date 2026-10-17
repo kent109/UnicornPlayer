@@ -14,12 +14,17 @@ package com.unicorn.player.equalizer
  * - [reverbPreset]：虚拟音效预设（0 ~ 6，0=NONE, 1=SMALLROOM, 2=MEDIUMROOM,
  *                     3=LARGEROOM, 4=MEDIUMHALL, 5=LARGEHALL, 6=PLATE），
  *                     对应 [com.bullhead.equalizer.Settings.reverbPreset]
+ * - [surroundLevel]：虚拟音效旋钮原始刻度（0 ~ 19），v2 的**可选**扩展字段：
+ *                     旧文件缺失时按 [reverbPreset] 的区间中心锚点回退；
+ *                     旧版本 App 读新文件时忽略此字段、仍用 [reverbPreset]。
+ *                     存在时精确还原连续插值强度（reverbPreset 仍保留保持兼容）。
  */
 data class EqualizerConfig(
     val version: Int = CURRENT_VERSION,
     val bandLevels: List<Int>,
     val bassStrength: Int,
-    val reverbPreset: Int
+    val reverbPreset: Int,
+    val surroundLevel: Int? = null
 ) {
     companion object {
         const val CURRENT_VERSION: Int = 2

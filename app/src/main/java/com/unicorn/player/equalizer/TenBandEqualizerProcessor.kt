@@ -79,6 +79,44 @@ class TenBandEqualizerProcessor : AudioProcessor {
          */
         private const val PROGRAM_HEADROOM_DB = 4f
 
+        // ===== 软件环绕（虚拟音效）：FDN 人工混响，锚点与系统 PresetReverb 0-6 对齐 =====
+        // NONE / SMALLROOM / MEDIUMROOM / LARGEROOM / MEDIUMHALL / LARGEHALL / PLATE
+        /** 旋钮原始刻度上限（0=关闭，19=最大）；刻度经 vp = level*6/19 映射到锚点间连续插值 */
+        const val SURROUND_MAX_LEVEL = 19
+
+        /** 混响衰减时间 RT60（秒）：梳状反馈增益由它换算 */
+        private val SURROUND_RT60_S = floatArrayOf(0f, 0.35f, 0.55f, 0.8f, 1.2f, 1.8f, 1.4f)
+
+        /** 预延迟（毫秒）：直达声与第一反射的间隔，决定空间尺度感 */
+        private val SURROUND_PRE_DELAY_MS = floatArrayOf(0f, 5f, 10f, 15f, 22f, 30f, 4f)
+
+        /** 湿声混合电平 */
+        private val SURROUND_WET_LEVEL = floatArrayOf(0f, 0.14f, 0.18f, 0.22f, 0.26f, 0.30f, 0.26f)
+
+        /** 梳状环路高频阻尼（0=明亮如板式，越大越暗） */
+        private val SURROUND_DAMP_COEF = floatArrayOf(0f, 0.30f, 0.30f, 0.35f, 0.50f, 0.55f, 0.08f)
+
+        /** FDN 梳状延迟线长度（ms）：非公倍数长度抑制模式着色 */
+        private val SURROUND_COMB_MS = floatArrayOf(23.7f, 28.1f, 35.3f, 43.1f)
+
+        /** 串联全通扩散器长度（ms） */
+        private val SURROUND_ALLPASS_MS = floatArrayOf(5.0f, 1.7f)
+        private const val SURROUND_ALLPASS_A = 0.5f
+
+        /**
+         * 预设（0..6）→ 该档刻度区间的中心刻度（0..19）。库的派生公式为
+         * `preset = level * 6 / 19`（整数除法），各预设的刻度区间是
+         * {0..3}/{4..6}/{7..9}/{10..12}/{13..15}/{16..18}/{19}；取区间中心
+         * 才能保证中心刻度经该公式原样映射回同一预设（NONE 特判为 0=关闭）。
+         * 用于导入配置/无历史刻度时把连续强度落到与 reverbPreset 一致的锚点。
+         */
+        @JvmStatic
+        fun surroundAnchorLevel(preset: Int): Int {
+            val p = preset.coerceIn(0, 6)
+            if (p == 0) return 0
+            return (((p * 2 + 1) * SURROUND_MAX_LEVEL + 6) / 12).coerceAtMost(SURROUND_MAX_LEVEL)
+        }
+
         /**
          * 增益变更时的系数渐变帧数（44.1kHz 下约 46ms）。
          * 人耳对 <20ms 的突变感知为"咔哒"爆音，40~50ms 的线性渐变可完全消除 zipper noise，
@@ -137,6 +175,30 @@ class TenBandEqualizerProcessor : AudioProcessor {
     private var bassStrengthActive = 0
     private var bassStrengthChanged = false
     private val bassShelfCoeffs = BiquadCoeffs() // 默认恒等直通
+
+    // ===== 软件环绕（虚拟音效；取代被部分机型旁路的系统 PresetReverb） =====
+    // UI/服务线程写 pending（原始刻度 0..19），音频线程在 queueInput 同步 active
+    // 并在锚点（0..6 预设）间连续插值重算网络参数
+    private var surroundLevelPending = 0
+    private var surroundLevelActive = 0
+    private var surroundLevelChanged = false
+
+    // FDN 网络状态（仅音频线程访问；缓冲在 configure 分配，立体声且预设>0 时参与处理）
+    private var surroundEngaged = false
+    private var preDelayBuf: FloatArray? = null
+    private var preDelayIdx = 0
+    private var preDelayFrames = 0
+    private val combBuf = arrayOfNulls<FloatArray>(4)
+    private val combIdx = IntArray(4)
+    private val combDampState = FloatArray(4)
+    private val combG = Array(4) { ParamRamp(0f) }
+    private val apBuf = arrayOfNulls<FloatArray>(2)
+    private val apIdx = IntArray(2)
+    private val wetRamp = ParamRamp(0f)
+    private val dampRamp = ParamRamp(0f)
+    private val combOutScratch = FloatArray(4)
+    private var surroundWetL = 0f
+    private var surroundWetR = 0f
 
     // ===== 每通道每频段的滤波器状态（Direct Form II Transposed） =====
     private var states: Array<Array<BiquadState>> = emptyArray()
@@ -237,6 +299,22 @@ class TenBandEqualizerProcessor : AudioProcessor {
         }
     }
 
+    /**
+     * 设置虚拟音效强度（旋钮原始刻度 0..19）。刻度经 `vp = level*6/19` 映射到
+     * 系统 PresetReverb 锚点（NONE/SMALLROOM/.../PLATE，0..6）之间连续插值
+     * RT60/预延迟/湿电平/阻尼，同档内微调也能听到空间渐变。App 内 FDN 人工混响
+     * 实现，不依赖平台音效，全设备生效。可在任意线程调用；中途变更走 46ms 参数渐变。
+     */
+    fun setSurroundLevel(level: Int) {
+        val l = level.coerceIn(0, SURROUND_MAX_LEVEL)
+        synchronized(lock) {
+            if (l != surroundLevelPending) {
+                surroundLevelPending = l
+                surroundLevelChanged = true
+            }
+        }
+    }
+
     override fun configure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat == EMPTY_FORMAT) {
             // 管线重置：按 Media3 契约停用处理器并清空格式，返回 NOT_SPECIFIED
@@ -271,6 +349,7 @@ class TenBandEqualizerProcessor : AudioProcessor {
             bassShelfStates = Array(channelCount) { BiquadState() }
             limiterEnvelope = 0f
             limiterReleaseCoef = exp(-1f / (LIMITER_RELEASE_S * newSampleRate))
+            initSurroundBuffers(newSampleRate)
         }
 
         // 同步 pending → active 并计算初始系数
@@ -281,6 +360,8 @@ class TenBandEqualizerProcessor : AudioProcessor {
             bandLevelsChanged = false
             bassStrengthActive = bassStrengthPending
             bassStrengthChanged = false
+            surroundLevelActive = surroundLevelPending
+            surroundLevelChanged = false
         }
         // 全新格式：信号尚未开始，系数直接落定；同格式重配：保留现有系数与状态，不重算
         if (!sameFormat) {
@@ -295,7 +376,7 @@ class TenBandEqualizerProcessor : AudioProcessor {
             "Configured: sampleRate=$sampleRate, channels=$channelCount, encoding=$encoding" +
                 (if (sameFormat) " (same format, filter states preserved)" else " (new format, fresh states)") +
                 ", bands=${bandLevelsActive.contentToString()}, bass=$bassStrengthActive" +
-                ", preGain=$preGain"
+                ", surround=$surroundLevelActive/$SURROUND_MAX_LEVEL, preGain=$preGain"
         )
         return outputFormat
     }
@@ -320,13 +401,19 @@ class TenBandEqualizerProcessor : AudioProcessor {
                 bassStrengthChanged = false
                 paramsChanged = true
             }
+            if (surroundLevelChanged) {
+                surroundLevelActive = surroundLevelPending
+                surroundLevelChanged = false
+                paramsChanged = true
+            }
         }
         if (paramsChanged) {
             recalculateCoefficients(initial = false)
             Log.i(
                 TAG,
                 "EQ params changed mid-stream: bands=${bandLevelsActive.contentToString()}, " +
-                    "bass=$bassStrengthActive, preGainTarget=$preGainTarget, ramping coefficients"
+                    "bass=$bassStrengthActive, surround=$surroundLevelActive/$SURROUND_MAX_LEVEL, " +
+                    "preGainTarget=$preGainTarget, ramping coefficients"
             )
         }
 
@@ -383,7 +470,10 @@ class TenBandEqualizerProcessor : AudioProcessor {
         fadeInRemaining = FADE_IN_FRAMES
         // 进行中的起播淡入一并终止：seek 是新的信号不连续点，交给上面的短防爆淡入
         startupFadeRemaining = 0
-        Log.i(TAG, "flush() called, filter states preserved, fade-in rearmed")
+        // FDN 缓冲必须清空：混响尾音长达 1~2s，若保留会"渗"进 seek 点之后的新内容，
+        // 与 EQ 滤波器的"保留状态防咔哒"策略不同，长延迟线的跨内容残留听感是脏音
+        clearSurroundState()
+        Log.i(TAG, "flush() called, filter states preserved, surround cleared, fade-in rearmed")
     }
 
     override fun reset() {
@@ -403,6 +493,26 @@ class TenBandEqualizerProcessor : AudioProcessor {
         sampleRate = 0
         states = emptyArray()
         bassShelfStates = emptyArray()
+        preDelayBuf = null
+        preDelayFrames = 0
+        preDelayIdx = 0
+        for (k in 0 until 4) {
+            combBuf[k] = null
+        }
+        combIdx.fill(0)
+        combDampState.fill(0f)
+        for (k in 0 until 2) {
+            apBuf[k] = null
+        }
+        apIdx.fill(0)
+        wetRamp.set(0f, 0)
+        dampRamp.set(0f, 0)
+        for (g in combG) {
+            g.set(0f, 0)
+        }
+        surroundWetL = 0f
+        surroundWetR = 0f
+        surroundEngaged = false
         framesSinceStats = 0L
         clippedSamples = 0L
         peakMagnitude = 0f
@@ -436,18 +546,38 @@ class TenBandEqualizerProcessor : AudioProcessor {
             // 第一遍：级联 10 个 biquad + 低音低架（低音在 App 内实现，替代系统
             // BassBoost）+ 淡入，记录各通道样本并统计帧内峰值
             var framePeak = 0f
-            for (ch in 0 until channelCount) {
-                val sample = input.getShort().toInt()
-                // 16-bit signed → float [-1, 1)
-                var f = sample / 32768f
+            if (surroundEngaged) {
+                // 立体声专属分支（surroundEngaged 蕴含 channelCount==2）：两通道
+                // 滤波后取 mid 送 FDN 网络，去相关湿尾叠加回 L/R
+                var l = input.getShort().toInt() / 32768f
+                var r = input.getShort().toInt() / 32768f
                 for (band in 0 until NUM_BANDS) {
-                    f = processBiquad(f, states[ch][band], coeffs[band])
+                    l = processBiquad(l, states[0][band], coeffs[band])
+                    r = processBiquad(r, states[1][band], coeffs[band])
                 }
-                f = processBiquad(f, bassShelfStates[ch], bassShelfCoeffs)
-                f *= frameGain * preGain
-                frameValues[ch] = f
-                val mag = if (f < 0f) -f else f
-                if (mag > framePeak) framePeak = mag
+                l = processBiquad(l, bassShelfStates[0], bassShelfCoeffs)
+                r = processBiquad(r, bassShelfStates[1], bassShelfCoeffs)
+                processSurround((l + r) * 0.5f)
+                val g = frameGain * preGain
+                frameValues[0] = (l + surroundWetL) * g
+                frameValues[1] = (r + surroundWetR) * g
+                val magL = if (frameValues[0] < 0f) -frameValues[0] else frameValues[0]
+                val magR = if (frameValues[1] < 0f) -frameValues[1] else frameValues[1]
+                framePeak = if (magL > magR) magL else magR
+            } else {
+                for (ch in 0 until channelCount) {
+                    val sample = input.getShort().toInt()
+                    // 16-bit signed → float [-1, 1)
+                    var f = sample / 32768f
+                    for (band in 0 until NUM_BANDS) {
+                        f = processBiquad(f, states[ch][band], coeffs[band])
+                    }
+                    f = processBiquad(f, bassShelfStates[ch], bassShelfCoeffs)
+                    f *= frameGain * preGain
+                    frameValues[ch] = f
+                    val mag = if (f < 0f) -f else f
+                    if (mag > framePeak) framePeak = mag
+                }
             }
             // 第二遍：限幅 + 写出（16-bit 下游无法表示 >1 的样本，越界即硬削波）
             val limiterGain = advanceLimiter(framePeak)
@@ -488,16 +618,35 @@ class TenBandEqualizerProcessor : AudioProcessor {
             val frameGain = nextFadeInGain()
             // 第一遍：滤波 + 淡入，记录各通道样本并统计帧内峰值
             var framePeak = 0f
-            for (ch in 0 until channelCount) {
-                var f = input.getFloat()
+            if (surroundEngaged) {
+                // 立体声专属分支：两通道滤波后取 mid 送 FDN 网络，湿尾去相关叠加
+                var l = input.getFloat()
+                var r = input.getFloat()
                 for (band in 0 until NUM_BANDS) {
-                    f = processBiquad(f, states[ch][band], coeffs[band])
+                    l = processBiquad(l, states[0][band], coeffs[band])
+                    r = processBiquad(r, states[1][band], coeffs[band])
                 }
-                f = processBiquad(f, bassShelfStates[ch], bassShelfCoeffs)
-                f *= frameGain * preGain
-                frameValues[ch] = f
-                val mag = if (f < 0f) -f else f
-                if (mag > framePeak) framePeak = mag
+                l = processBiquad(l, bassShelfStates[0], bassShelfCoeffs)
+                r = processBiquad(r, bassShelfStates[1], bassShelfCoeffs)
+                processSurround((l + r) * 0.5f)
+                val g = frameGain * preGain
+                frameValues[0] = (l + surroundWetL) * g
+                frameValues[1] = (r + surroundWetR) * g
+                val magL = if (frameValues[0] < 0f) -frameValues[0] else frameValues[0]
+                val magR = if (frameValues[1] < 0f) -frameValues[1] else frameValues[1]
+                framePeak = if (magL > magR) magL else magR
+            } else {
+                for (ch in 0 until channelCount) {
+                    var f = input.getFloat()
+                    for (band in 0 until NUM_BANDS) {
+                        f = processBiquad(f, states[ch][band], coeffs[band])
+                    }
+                    f = processBiquad(f, bassShelfStates[ch], bassShelfCoeffs)
+                    f *= frameGain * preGain
+                    frameValues[ch] = f
+                    val mag = if (f < 0f) -f else f
+                    if (mag > framePeak) framePeak = mag
+                }
             }
             // 第二遍：限幅 + 写出（下游 AudioTrack 转定点时 >1 的样本会被硬削波）
             val limiterGain = advanceLimiter(framePeak)
@@ -531,12 +680,17 @@ class TenBandEqualizerProcessor : AudioProcessor {
         }
     }
 
-    /** 每帧推进所有频段与低音低架的系数渐变；无渐变时开销极小。 */
+    /** 每帧推进所有频段、低音低架与 FDN 网络参数的渐变；无渐变时开销极小。 */
     private fun advanceAllRamps() {
         for (band in 0 until NUM_BANDS) {
             coeffs[band].advanceRamp()
         }
         bassShelfCoeffs.advanceRamp()
+        wetRamp.advance()
+        dampRamp.advance()
+        for (g in combG) {
+            g.advance()
+        }
         if (preGainFramesLeft > 0) {
             preGainFramesLeft--
             // smoothstep：两端斜率为 0，起止无顿挫（与冷启动淡入/开关渐变同一包络）
@@ -699,6 +853,33 @@ class TenBandEqualizerProcessor : AudioProcessor {
             bassShelfCoeffs.rampTo(sb0, sb1, sb2, sa1, sa2, COEFF_RAMP_FRAMES)
         }
 
+        // ===== 虚拟音效：FDN 人工混响网络参数（刻度 0..19 在 0..6 锚点间连续插值） =====
+        val vp = surroundLevelActive.coerceIn(0, SURROUND_MAX_LEVEL) * 6f / SURROUND_MAX_LEVEL
+        val wetTarget = interpAnchor(SURROUND_WET_LEVEL, vp)
+        val surroundRampF = if (initial) 0 else COEFF_RAMP_FRAMES
+        wetRamp.set(wetTarget, surroundRampF)
+        dampRamp.set(interpAnchor(SURROUND_DAMP_COEF, vp), surroundRampF)
+        val rt60 = interpAnchor(SURROUND_RT60_S, vp)
+        for (k in 0 until 4) {
+            // RT60 → 梳状反馈增益：g = 10^(-3·delay/RT60)（尾音在 RT60 秒内衰减 60dB）
+            val g = if (rt60 > 0f) {
+                10f.pow(-3f * (SURROUND_COMB_MS[k] / 1000f) / rt60)
+            } else {
+                0f
+            }
+            combG[k].set(g, surroundRampF)
+        }
+        // 预延迟长度随刻度变化（整数样点无法插值）：直接重建缓冲，旧尾音由
+        // wet 渐变压制，听感被新空间的建立过程掩盖
+        val newPreFrames = msToFrames(interpAnchor(SURROUND_PRE_DELAY_MS, vp), sampleRate)
+        if (newPreFrames != preDelayFrames) {
+            preDelayBuf = FloatArray(newPreFrames)
+            preDelayIdx = 0
+            preDelayFrames = newPreFrames
+        }
+        // 仅立体声启用（FDN 的 L/R 去相关湿尾依赖双通道）
+        surroundEngaged = inputFormat.channelCount == 2 && combBuf[0] != null
+
         // 静态余量增益：在探测频点上评估 10 段 + 低音低架级联后的真实幅频响应，
         // 取峰值扣除节目余量（+1dB 探针间裕量，上限 20dB）作为整体预衰减量。
         // shelf/peak 只是部分重叠，比"最大正频段 + 低音"的粗放相加少降 2~4dB 响度；
@@ -712,6 +893,10 @@ class TenBandEqualizerProcessor : AudioProcessor {
                 sumDb += biquadMagnitudeDb(tB0[k], tB1[k], tB2[k], tA1[k], tA2[k], w)
             }
             if (sumDb > peakDb) peakDb = sumDb
+        }
+        // 湿信号叠加的最坏能量上界：dry + wet·(≈dry) → 1+wet 倍
+        if (wetTarget > 0f) {
+            peakDb += 20f * log10(1f + wetTarget)
         }
         val headroomDb = (peakDb - PROGRAM_HEADROOM_DB + 1f).coerceIn(0f, 20f)
         preGainTarget = 10f.pow(-headroomDb / 20f)
@@ -779,7 +964,131 @@ class TenBandEqualizerProcessor : AudioProcessor {
         }
     }
 
+    // ===== 软件环绕（FDN 人工混响）网络 =====
+
+    /** 毫秒 → 样点数（至少 1） */
+    private fun msToFrames(ms: Float, fs: Int): Int =
+        (ms * fs / 1000f).toInt().coerceAtLeast(1)
+
+    /** 在 0..6 预设锚点表上对虚拟预设位置 vp（可带小数）做线性插值 */
+    private fun interpAnchor(values: FloatArray, vp: Float): Float {
+        val idx = vp.toInt().coerceIn(0, values.size - 2)
+        val frac = (vp - idx).coerceIn(0f, 1f)
+        return values[idx] + (values[idx + 1] - values[idx]) * frac
+    }
+
+    /** 全新管线时分配 FDN 延迟线缓冲（长度只依赖采样率；预延迟由 recalculate 按预设重建） */
+    private fun initSurroundBuffers(fs: Int) {
+        for (k in 0 until 4) {
+            combBuf[k] = FloatArray(msToFrames(SURROUND_COMB_MS[k], fs))
+        }
+        combIdx.fill(0)
+        combDampState.fill(0f)
+        for (k in 0 until 2) {
+            apBuf[k] = FloatArray(msToFrames(SURROUND_ALLPASS_MS[k], fs))
+        }
+        apIdx.fill(0)
+        val vp = surroundLevelActive.coerceIn(0, SURROUND_MAX_LEVEL) * 6f / SURROUND_MAX_LEVEL
+        preDelayBuf = FloatArray(msToFrames(interpAnchor(SURROUND_PRE_DELAY_MS, vp), fs))
+        preDelayIdx = 0
+        preDelayFrames = preDelayBuf!!.size
+    }
+
+    /** 清空 FDN 全部延迟线状态（flush 用：防旧内容混响尾音渗进 seek 点后的新内容） */
+    private fun clearSurroundState() {
+        preDelayBuf?.fill(0f)
+        preDelayIdx = 0
+        for (b in combBuf) {
+            b?.fill(0f)
+        }
+        combIdx.fill(0)
+        combDampState.fill(0f)
+        for (b in apBuf) {
+            b?.fill(0f)
+        }
+        apIdx.fill(0)
+        surroundWetL = 0f
+        surroundWetR = 0f
+    }
+
+    /**
+     * FDN 网络推进一帧：输入 mid，去相关湿尾写入 surroundWetL/R。
+     * 信号流：mid → 预延迟 → 两级串联全通扩散 → 4 条带阻尼梳状延迟线 → ± 混合
+     * （不同符号组合使 L/R 湿信号互相关系数低，产生"包裹感"而非单声道混响）。
+     */
+    private fun processSurround(mid: Float) {
+        val pre = preDelayBuf ?: return
+        var d = pre[preDelayIdx]
+        pre[preDelayIdx] = mid
+        preDelayIdx = if (preDelayIdx + 1 >= pre.size) 0 else preDelayIdx + 1
+        d = runAllpass(d, 0)
+        d = runAllpass(d, 1)
+        val damp = dampRamp.value
+        for (k in 0 until 4) {
+            val buf = combBuf[k] ?: continue
+            val i = combIdx[k]
+            val y = buf[i]
+            // 环路内一阶低通：高频先衰减，模拟真实空间空气/材质吸收
+            val s = combDampState[k] + damp * (y - combDampState[k])
+            combDampState[k] = s
+            buf[i] = d + combG[k].value * s
+            combIdx[k] = if (i + 1 >= buf.size) 0 else i + 1
+            combOutScratch[k] = y
+        }
+        val w = wetRamp.value * 0.25f
+        surroundWetL = (combOutScratch[0] + combOutScratch[1] - combOutScratch[2] - combOutScratch[3]) * w
+        surroundWetR = (combOutScratch[0] - combOutScratch[1] + combOutScratch[2] - combOutScratch[3]) * w
+    }
+
+    /** 第 k 级全通扩散器：out = -a·x + buf[i]，buf[i] = x + a·旧值 */
+    private fun runAllpass(x: Float, k: Int): Float {
+        val buf = apBuf[k] ?: return x
+        val i = apIdx[k]
+        val tmp = buf[i]
+        buf[i] = x + SURROUND_ALLPASS_A * tmp
+        apIdx[k] = if (i + 1 >= buf.size) 0 else i + 1
+        return -SURROUND_ALLPASS_A * x + tmp
+    }
+
     // ===== 内部数据类 =====
+
+    /**
+     * 单参数线性渐变器（FDN 网络的湿电平/梳状反馈增益/阻尼系数共用）。
+     * 反馈增益与阻尼若阶跃变化，延迟线内已存储的能量会突然改变衰减率/音色，
+     * 听感为"尾巴被掐"，46ms 渐变可完全平滑。
+     */
+    private class ParamRamp(initial: Float) {
+        var value = initial
+            private set
+        private var from = initial
+        private var to = initial
+        private var left = 0
+        private var total = 1
+
+        fun set(target: Float, rampFrames: Int) {
+            to = target
+            if (rampFrames <= 0) {
+                value = target
+                from = target
+                left = 0
+            } else {
+                from = value
+                total = rampFrames
+                left = rampFrames
+            }
+        }
+
+        fun advance() {
+            if (left > 0) {
+                val t = 1f - left.toFloat() / total
+                value = from + (to - from) * t
+                left--
+                if (left == 0) {
+                    value = to
+                }
+            }
+        }
+    }
 
     private class BiquadCoeffs {
         // 当前实际生效的系数（每帧由 from→to 渐变更新；无渐变时恒等于 to）

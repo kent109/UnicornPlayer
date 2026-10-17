@@ -380,10 +380,26 @@ class MusicService : Service() {
             val rawBass = Settings.equalizerModel?.bassStrength?.toInt()
                 ?: Settings.bassStrength.toInt()
             eqProcessor.setBassStrength(if (rawBass in 0..1000) rawBass else 0)
+            // 虚拟音效：App 内 FDN 软件混响，按旋钮原始刻度 0..19 连续插值
+            eqProcessor.setSurroundLevel(currentSurroundLevel())
         } else {
             eqProcessor.setBandLevels(IntArray(10))
             eqProcessor.setBassStrength(0)
+            eqProcessor.setSurroundLevel(0)
         }
+    }
+
+    /**
+     * 读取虚拟音效旋钮的原始刻度（0..19，库在拖动时持久化）。
+     * 从未存过刻度（返回负值，如旧版本升级）时，按派生值 reverbPreset（0..6）
+     * 的区间中心锚点回退，保证与系统 PresetReverb 语义对齐。
+     */
+    private fun currentSurroundLevel(): Int {
+        val progress = Settings.loadReverbProgress(applicationContext)
+        if (progress in 0..19) return progress
+        val preset = Settings.equalizerModel?.reverbPreset?.toInt()
+            ?: Settings.reverbPreset.toInt()
+        return TenBandEqualizerProcessor.surroundAnchorLevel(preset)
     }
 
     /**
@@ -397,6 +413,37 @@ class MusicService : Service() {
         initializeAudioEffects()
         syncSystemEffectsEnableState()
         savePlaybackState()
+    }
+
+    /**
+     * 库 TenBandEqBridge.SurroundApplier 回调入口：虚拟音效旋钮刻度（0..19）即时
+     * 下发到 App 内 FDN 混响网络，处理器在 0..6 预设锚点间连续插值。
+     * 库在旋钮拖动 / 配置导入 / 开关恢复时直发原始刻度，无轮询延迟。
+     * 不在此落盘：刻度与派生预设由库自身 SharedPreferences 持久化，
+     * 且拖动逐帧触发、DataStore 写入交由常规时机（切歌/停止等）统一收敛。
+     */
+    fun applySurroundLevel(level: Int) {
+        val l = if (Settings.isEqualizerEnabled && level in 0..19) level else 0
+        eqProcessor.setSurroundLevel(l)
+        forceDisableSystemReverb()
+    }
+
+    /**
+     * 强制禁用系统 PresetReverb：虚拟音效已改为 App 内 FDN 软件混响（全设备生效，
+     * 不再依赖被 OPPO 等机型旁路的平台音效）。系统混响若同时启用，在能生效的
+     * 机型上会与软件混响叠成双份尾音。库 UI 旋钮交互会重新 enable 它，
+     * App 侧在每次音效初始化/对齐/下发后统一压回（幂等，公开供页面轮询器调用）。
+     */
+    fun forceDisableSystemReverb() {
+        try {
+            val reverb = AudioEffectManager.getPresetReverb()
+            if (reverb != null && reverb.enabled) {
+                reverb.setEnabled(false)
+                Log.d(TAG, "System PresetReverb force-disabled (software surround takes over)")
+            }
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "forceDisableSystemReverb failed", e)
+        }
     }
 
     // 音频管理器（保留用于蓝牙/音量控制等）
@@ -672,6 +719,9 @@ class MusicService : Service() {
         }
         com.bullhead.equalizer.TenBandEqBridge.setBassApplier { strength ->
             eqProcessor.setBassStrength(strength)
+        }
+        com.bullhead.equalizer.TenBandEqBridge.setSurroundApplier { level ->
+            applySurroundLevel(level)
         }
         val renderersFactory = object : DefaultRenderersFactory(this@MusicService) {
             override fun buildAudioSink(
@@ -2322,6 +2372,8 @@ class MusicService : Service() {
 
       fun initializeAudioEffects() {
           if (AudioEffectManager.areEffectsEnabled()) {
+              // 对象已存在（可能在均衡器页面被库 UI 创建并 enable 了混响）：仍需压回软件环绕接管状态
+              forceDisableSystemReverb()
               return
           }
 
@@ -2345,6 +2397,7 @@ class MusicService : Service() {
           }
 
           tryInitialize()
+          forceDisableSystemReverb()
       }
 
     /**
@@ -2359,6 +2412,8 @@ class MusicService : Service() {
         } else {
             AudioEffectManager.disableEffects()
         }
+        // enableEffects 内部会按需 enable PresetReverb；软件环绕已接管虚拟音效，统一压回
+        forceDisableSystemReverb()
     }
 
     fun loadPlaybackState(
