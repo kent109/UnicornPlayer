@@ -10,6 +10,7 @@ import java.nio.ByteOrder
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.log10
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -783,7 +784,11 @@ class TenBandEqualizerProcessor : AudioProcessor {
         }
 
         for (i in 0 until NUM_BANDS) {
-            val f0 = FREQUENCIES[i].toFloat()
+            // 设计频率钳制到 0.45·fs（奈奎斯特以下）：fs=32kHz 时 16kHz 搁架恰好落在
+            // Nyquist，sin(w0)≈0 使 shelf 系数退化为 z=-1 双极点（单位圆上临界稳定），
+            // 状态随时间线性发散 → 输出 16kHz 交替噪声、限幅器常闭。fs≥44.1kHz 时
+            // 0.45·fs > 16kHz，本钳制不生效。
+            val f0 = min(FREQUENCIES[i].toFloat(), fs * 0.45f)
             val gainDb = bandLevelsActive[i]
             val a = 10f.pow(gainDb / 40f) // 振幅增益 A = 10^(dB/40)
             val w0 = 2f * Math.PI.toFloat() * f0 / fs
