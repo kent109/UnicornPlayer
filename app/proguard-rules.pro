@@ -102,10 +102,10 @@
 -dontwarn androidx.documentfile.provider.**
 
 # ============================================================
-# opencc4j（简繁转换）
+# openccjava（简繁转换）
 # ============================================================
--keep class com.github.houbb.opencc4j.** { *; }
--dontwarn com.github.houbb.opencc4j.**
+-keep class openccjava.** { *; }
+-dontwarn openccjava.**
 
 # ============================================================
 # pinyin4j（拼音转换）

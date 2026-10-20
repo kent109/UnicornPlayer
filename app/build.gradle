@@ -138,7 +138,8 @@ dependencies {
 
     implementation 'com.github.zcweng:switch-button:0.0.3@aar'
 
-    implementation 'com.github.houbb:opencc4j:1.14.0'
+    // 繁简转换
+    implementation 'io.github.laisuk:openccjava:1.5.0'
 
     // 拼音转换：中文专辑名按拼音首字母分组（啊→A）
     implementation 'com.belerweb:pinyin4j:2.5.1'
