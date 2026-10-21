@@ -492,6 +492,16 @@ class MusicService : Service() {
             .joinToString(" < ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
     }
 
+    private fun stopSelfDiag(site: String) {
+        // 只读 LiveData，不访问 ExoPlayer：调用点可能在 IO 线程（action STOP 的延迟保存）
+        LogWriter.writeDiag(
+            TAG,
+            "stopSelf from: $site, song=${_currentSong.value?.title}, " +
+                    "isPlaying=${_isPlaying.value}, ${callerTrace()}"
+        )
+        stopSelf()
+    }
+
     var currentIndex = 0
     var isChangingSong = false
 
@@ -502,8 +512,9 @@ class MusicService : Service() {
     private val notificationButtonReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
-            Log.d(
-                TAG, "Notification button clicked: $action, current isPlaying: ${_isPlaying.value}"
+            LogWriter.writeDiag(
+                TAG,
+                "notificationButton: action=$action, isPlaying=${_isPlaying.value}, song=${_currentSong.value?.title}"
             )
 
             when (action) {
@@ -702,6 +713,7 @@ class MusicService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate")
+        LogWriter.writeDiag(TAG, "onCreate: instance=${hashCode()}, ${callerTrace()}")
 
         serviceCreate = true
 
@@ -1077,7 +1089,7 @@ class MusicService : Service() {
             }
 
             override fun onStop() {
-                stopSelf()
+                stopSelfDiag("mediaSession.onStop")
             }
 
             override fun onSeekTo(pos: Long) {
@@ -1128,6 +1140,12 @@ class MusicService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "onDestroy")
+        LogWriter.writeDiag(
+            TAG,
+            "onDestroy: instance=${hashCode()}, song=${_currentSong.value?.title}, " +
+                    "position=${player.currentPosition}, isPlaying=${player.isPlaying}, " +
+                    "playWhenReady=${player.playWhenReady}, state=${player.playbackState}"
+        )
 
         // 取消注册广播接收器
         unregisterReceiver(notificationButtonReceiver)
@@ -1299,7 +1317,7 @@ class MusicService : Service() {
                 savePlaybackState()
                 CoroutineScope(Dispatchers.IO).launch {
                     kotlinx.coroutines.delay(100.milliseconds) // 短暂延迟确保保存完成
-                    stopSelf()
+                    stopSelfDiag("action STOP")
                 }
             }
 
@@ -1580,7 +1598,7 @@ class MusicService : Service() {
                     _isPlaying.value = false
                     _currentSong.value = null
                     stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                    stopSelfDiag("resumeLastSavedSong: no saved song")
                 }
                 return@launch
             }
@@ -1592,7 +1610,7 @@ class MusicService : Service() {
                     _isPlaying.value = false
                     _currentSong.value = null
                     stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                    stopSelfDiag("resumeLastSavedSong: file not found")
                 }
                 return@launch
             }
@@ -2750,6 +2768,11 @@ class MusicService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         Log.d(TAG, "onTaskRemoved")
+        LogWriter.writeDiag(
+            TAG,
+            "onTaskRemoved: song=${_currentSong.value?.title}, isPlaying=${player.isPlaying}, " +
+                    "position=${player.currentPosition}"
+        )
         // 修复：先停止 playStateFuture，防止 stopSelf 后到 onDestroy 真正执行前，
         // playStateFuture 每 5 秒触发的 savePlaybackState 用当前进度/IS_PLAYING=1
         // 覆盖 onTaskRemoved 保存的快照（导致重新打开应用时状态偏离 onTaskRemoved 时刻）
@@ -2805,7 +2828,7 @@ class MusicService : Service() {
         }
         // 立即取消通知，防止进程被杀死后通知残留
         stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        stopSelfDiag("onTaskRemoved")
     }
 }
 

@@ -9,6 +9,7 @@ import androidx.cardview.widget.CardView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.datastore.preferences.core.edit
+import com.unicorn.player.util.LogWriter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.text.SimpleDateFormat
@@ -121,11 +122,17 @@ abstract class BaseActivity : AppCompatActivity() {
         super.onResume()
         val newThemeRes = resolveColorTheme()
         if (newThemeRes != currentThemeRes) {
+            LogWriter.writeDiag(
+                TAG, "onResume: theme changed ($currentThemeRes -> $newThemeRes) -> recreate()"
+            )
             recreate()
             return
         }
         val newHighlightColor = ThemeSettingActivity.resolveHighlightColor(this)
         if (newHighlightColor != currentHighlightColor) {
+            LogWriter.writeDiag(
+                TAG, "onResume: highlight color changed -> recreate()"
+            )
             recreate()
             return
         }

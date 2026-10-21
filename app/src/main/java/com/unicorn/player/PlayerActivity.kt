@@ -1802,6 +1802,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         MusicManager.unregisterConnectionCallback(this)
         // 外部文件播放且服务之前未运行：停止服务，避免残留
         if (isExternalPlayback && serviceWasNotRunning) {
+            LogWriter.writeDiag(
+                TAG,
+                "onDestroy: stopSelf (isExternalPlayback=true, serviceWasNotRunning=true)"
+            )
             musicService?.stopSelf()
         }
         MusicManager.unbind(this)

@@ -4,8 +4,11 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import com.unicorn.player.service.MusicService
+import com.unicorn.player.util.LogWriter
 import java.lang.ref.WeakReference
 
 /**
@@ -21,7 +24,7 @@ import java.lang.ref.WeakReference
  *
  * 关键设计：
  * - 使用真正的 WeakReference 存储 Activity 引用，避免内存泄漏
- * - 引用计数：所有 Activity 都 unbind 后才真正解绑服务
+ * - 引用计数：所有 Activity 都 unbind 后（延后 REAL_UNBIND_DELAY_MS）才真正解绑服务
  * - onServiceConnected 回调通知所有活跃的 Activity
  */
 object MusicManager {
@@ -31,6 +34,17 @@ object MusicManager {
     private var musicService: MusicService? = null
     private var isBound = false
     private var isServiceStarted = false
+
+    /**
+     * Activity recreate（切主题色、系统深色模式、配置变更）时空窗期 binding 归零。
+     * 此时若服务不处于 started 态，AMS 会直接销毁正在出声的服务实例，
+     * 新实例只能 setMediaItem+prepare 冷恢复，表现为可闻断裂 + 从保存点续播。
+     * 真解绑延后到空窗期结束，期间任何 bind() 会取消它。
+     */
+    private const val REAL_UNBIND_DELAY_MS = 1000L
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingUnbindContext: Context? = null
 
     /** 活跃的 Activity 引用集合（弱引用，避免内存泄漏） */
     private val activityReferences = mutableSetOf<WeakReference<Any>>()
@@ -53,19 +67,52 @@ object MusicManager {
         }
     }
 
+    /** binding 归零后延迟执行的真正解绑；期间若有 bind() 会被取消 */
+    private val deferredUnbind = Runnable {
+        val context = pendingUnbindContext
+        pendingUnbindContext = null
+        if (context == null) return@Runnable
+        cleanupInvalidReferences()
+        if (activityReferences.isNotEmpty()) return@Runnable
+        realUnbind(context)
+    }
+
+    private fun realUnbind(context: Context) {
+        if (isBound) {
+            try {
+                context.unbindService(serviceConnection)
+            } catch (e: IllegalArgumentException) {
+                // 服务未绑定或已解绑，忽略
+            }
+            isBound = false
+        }
+        musicService = null
+        isServiceStarted = false
+        LogWriter.writeDiag(TAG, "realUnbind: 服务 binding 已释放")
+    }
+
     /**
      * 绑定 MusicService
      * @param context 用于 startService/bindService 的 Context（通常是 Activity）
      * @return 是否立即获取到已连接的 MusicService 实例（如果服务之前已绑定则返回 true）
      */
     fun bind(context: Context): Boolean {
-        activityReferences.add(WeakReference(context))
+        // 取消上一次 unbind 延后的真解绑：recreate 的新实例接着绑上，服务实例得以存活
+        mainHandler.removeCallbacks(deferredUnbind)
+        pendingUnbindContext = null
 
-        if (!isServiceStarted) {
-            val intent = Intent(context, MusicService::class.java)
-            context.startService(intent)
-            isServiceStarted = true
-        }
+        activityReferences.add(WeakReference(context))
+        LogWriter.writeDiag(
+            TAG,
+            "bind: ${context.javaClass.simpleName}, started=$isServiceStarted, " +
+                    "bound=$isBound, refs=${activityReferences.size}"
+        )
+
+        // 每次绑定都显式 startService：只有处于 started 态的服务才能在 binding
+        // 暂时归零时存活，否则 AMS 会销毁正在播放的实例（isServiceStarted 只是本进程记账，
+        // 不能代表 AMS 侧的 started 状态，故不再作为跳过条件）
+        context.startService(Intent(context, MusicService::class.java))
+        isServiceStarted = true
 
         if (!isBound && musicService == null) {
             val intent = Intent(context, MusicService::class.java)
@@ -87,18 +134,18 @@ object MusicManager {
         activityReferences.removeIf { it.get() == null }
         connectionCallbacks.removeIf { it.get() == null }
 
-        // 如果没有活跃的 Activity 引用，真正解绑服务
+        LogWriter.writeDiag(
+            TAG,
+            "unbind: ${context.javaClass.simpleName}, remainingRefs=${activityReferences.size}, " +
+                    "willUnbindFromService=${activityReferences.isEmpty() && isBound}"
+        )
+
+        // 引用归零不立即解绑：recreate 场景下新 Activity 几十毫秒后就会 bind 回来，
+        // 立即 unbindService 会让 AMS 销毁正在播放的服务实例。延后到空窗期结束再判一次。
         if (activityReferences.isEmpty()) {
-            if (isBound) {
-                try {
-                    context.unbindService(serviceConnection)
-                } catch (e: IllegalArgumentException) {
-                    // 服务未绑定或已解绑，忽略
-                }
-                isBound = false
-            }
-            musicService = null
-            isServiceStarted = false
+            pendingUnbindContext = context
+            mainHandler.removeCallbacks(deferredUnbind)
+            mainHandler.postDelayed(deferredUnbind, REAL_UNBIND_DELAY_MS)
         }
     }
 
@@ -131,6 +178,8 @@ object MusicManager {
      * 强制清理所有状态（用于进程恢复场景）
      */
     fun forceCleanup() {
+        mainHandler.removeCallbacks(deferredUnbind)
+        pendingUnbindContext = null
         activityReferences.clear()
         connectionCallbacks.clear()
         isBound = false
