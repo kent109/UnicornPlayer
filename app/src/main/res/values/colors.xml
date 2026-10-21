@@ -41,6 +41,10 @@
     <!-- 设置页 item 背景：分组卡片 + 行 bg_preference_* -->
     <color name="settings_item_bg">#FFFBFE</color>
 
+    <!-- 通知栏/锁屏封面占位图（日间）：底色 + 中间音符图标 -->
+    <color name="art_placeholder_bg">#EAEAEA</color>
+    <color name="art_placeholder_icon">#F6F6F6</color>
+
     <!-- 不支持播放格式的角标背景（日间） -->
     <color name="songUnsupportedBg">#E0E0E0</color>
     <!-- 不支持播放格式的角标文字（日间） -->

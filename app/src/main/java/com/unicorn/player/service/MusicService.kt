@@ -9,9 +9,16 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
+import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -22,6 +29,8 @@ import android.os.SystemClock
 import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -56,6 +65,7 @@ import com.unicorn.player.R
 import com.unicorn.player.ScanFilterActivity
 import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.equalizer.TenBandEqualizerProcessor
+import com.unicorn.player.model.Cover
 import com.unicorn.player.model.Song
 import com.unicorn.player.playback.SongPlayableRegistry
 import com.unicorn.player.scanFiltersDataStore
@@ -153,6 +163,10 @@ class MusicService : Service() {
     private lateinit var player: ExoPlayer
     private lateinit var eqProcessor: TenBandEqualizerProcessor
     private lateinit var mediaSession: MediaSessionCompat
+
+    /** 通知栏/MediaSession 共用封面：albumArtKey 为当前解码来源键，键未变则复用位图 */
+    private var albumArtKey: String? = null
+    private var albumArtBitmap: Bitmap? = null
 
     /** 起播 PCM 级淡入时长：系统增益效果已全部禁用（EQ/低音在 App 内、系数先于
      * 信号落定），无需音量包络遮盖，置 0 关闭；仅保留处理器内 23ms 防爆淡入。
@@ -696,6 +710,9 @@ class MusicService : Service() {
 
         const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "music_player_channel"
+
+        /** 通知栏/锁屏封面边的最大像素：400×400×4 ≈ 0.64MB，留足余量避开 1MB 上限 */
+        const val NOTIFICATION_ART_MAX_SIZE = 400
 
         const val ACTION_PLAY = "com.unicorn.player.action.PLAY"
         const val ACTION_PAUSE = "com.unicorn.player.action.PAUSE"
@@ -2201,22 +2218,38 @@ class MusicService : Service() {
 
     private fun updateMediaSessionMetadata() {
         val currentSong = _currentSong.value ?: return
-        val metadata = android.support.v4.media.MediaMetadataCompat.Builder().putString(
-            android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE, currentSong.title
-        ).putString(
-            android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST, currentSong.artist
-        ).putString(
-            android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM, currentSong.album
-        ).putLong(
-            android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DURATION,
-            player.duration
-        ).build()
-        mediaSession.setMetadata(metadata)
+        val builder =
+            android.support.v4.media.MediaMetadataCompat.Builder().putString(
+                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE, currentSong.title
+            ).putString(
+                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST, currentSong.artist
+            ).putString(
+                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM, currentSong.album
+            ).putLong(
+                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_DURATION,
+                player.duration
+            )
+        // 系统锁屏/通知栏媒体控件优先取会话里的封面 Bitmap，没有它只显示应用图标
+        val art = albumArtBitmap
+        LogWriter.writeDiag(
+            TAG,
+            "发送元数据: ${currentSong.title} 封面=" +
+                    if (art == null) "无" else "${art.width}x${art.height}/${art.byteCount}B"
+        )
+        art?.let {
+            builder.putBitmap(
+                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ART, it
+            ).putBitmap(
+                android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it
+            )
+        }
+        mediaSession.setMetadata(builder.build())
     }
 
     fun updateNotification(currentSong: Song? = _currentSong.value) {
         // Only update notification if we have a current song
         if (currentSong != null) {
+            loadAlbumArt(currentSong)
             // 检查是否具有通知权限
             if (NotificationManagerCompat.from(this@MusicService).areNotificationsEnabled()) {
                 // 创建通知并更新
@@ -2225,6 +2258,156 @@ class MusicService : Service() {
             }
         }
     }
+
+    /** 日夜配色变了（应用内切换或系统夜间）：丢封面缓存，重解码并刷新通知与元数据 */
+    fun invalidateAlbumArt() {
+        albumArtKey = null
+        updateNotification(_currentSong.value)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        invalidateAlbumArt()
+    }
+
+    /** 按 albumArt 复用已解码的封面，来源变化（切歌/换封面）时才后台重新解码 */
+    private fun loadAlbumArt(song: Song) {
+        val key = "${song.path}#${song.albumArt}"
+        if (key == albumArtKey) return
+        albumArtKey = key
+        albumArtBitmap = null
+        CoroutineScope(Dispatchers.IO).launch {
+            val bitmap = decodeAlbumArt(song)
+            withContext(Dispatchers.Main) {
+                // 解码期间可能已切歌，过期结果直接丢弃
+                if (key == albumArtKey) {
+                    albumArtBitmap = bitmap
+                    LogWriter.writeDiag(
+                        TAG,
+                        "封面就绪: ${if (bitmap == null) "无" else "${bitmap.width}x${bitmap.height}/${bitmap.byteCount}B"} <- ${song.albumArt}"
+                    )
+                    updateMediaSessionMetadata()
+                    updateNotification(_currentSong.value)
+                }
+            }
+        }
+    }
+
+    /** 取序：歌曲封面记录 → 音频内嵌图 → 应用内该专辑/该歌手封面 → 中性占位图 */
+    private fun decodeAlbumArt(song: Song): Bitmap? {
+        val source = song.albumArt
+        val fromSource =
+            if (source.isNullOrEmpty()) null else runCatching { decodeArtStream(source) }.getOrNull()
+        return fromSource ?: decodeEmbeddedArt(song.path) ?: decodeGroupCover(song)
+            ?: placeholderArt()
+    }
+
+    /** 专辑/歌手分组封面（covers 表，键为分组名 lowercase） */
+    private fun decodeGroupCover(song: Song): Bitmap? {
+        val dao = MusicDatabase.getDatabase(this).coverDao()
+        val path = dao.getCoverSync(Cover.TYPE_ALBUM, song.album.lowercase())?.coverPath
+            ?: dao.getCoverSync(Cover.TYPE_ARTIST, song.artist.lowercase())?.coverPath
+            ?: return null
+        return runCatching { decodeArtStream(path) }.getOrNull()
+    }
+
+    /**
+     * 一路都取不到图时也要给一张：锁屏媒体卡片对"这次没有封面"的处理是保留上一张，
+     * 不清空就会让无封面的歌一直显示前一首的图。
+     */
+    private fun placeholderArt(): Bitmap? {
+        // 服务自身的资源配置未必跟着应用的日夜切换走，按当前生效的日夜标志另取上下文
+        val drawable = AppCompatResources.getDrawable(nightContext(), R.drawable.art_placeholder)
+            ?: return null
+        val size = NOTIFICATION_ART_MAX_SIZE
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(Canvas(bitmap))
+        return bitmap
+    }
+
+    /** 当前真正生效的日夜标志：应用内指定优先，跟随系统时读系统全局配置 */
+    private fun currentNightMode(): Int = when (AppCompatDelegate.getDefaultNightMode()) {
+        AppCompatDelegate.MODE_NIGHT_YES -> Configuration.UI_MODE_NIGHT_YES
+        AppCompatDelegate.MODE_NIGHT_NO -> Configuration.UI_MODE_NIGHT_NO
+        else -> Resources.getSystem().configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+    }
+
+    private fun nightContext(): Context {
+        val configuration = Configuration(resources.configuration)
+        configuration.uiMode =
+            (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or currentNightMode()
+        return createConfigurationContext(configuration)
+    }
+
+    private fun decodeArtStream(source: String): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        openAlbumArtStream(source)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            ?: return null
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val decoded = openAlbumArtStream(source)?.use {
+            BitmapFactory.decodeStream(
+                it, null,
+                BitmapFactory.Options().apply { inSampleSize = sampleSizeFor(bounds) })
+        } ?: return null
+        return fitArtSize(decoded)
+    }
+
+    /**
+     * 音频文件内嵌封面：媒体库的 content://media/external/audio/albumart/<albumId> 行未必存在
+     * （无封面图或 album_id 为 UNKNOWN），打开会抛 No album art found，此时只能从文件标签里取。
+     */
+    private fun decodeEmbeddedArt(path: String): Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        var bitmap: Bitmap? = null
+        try {
+            retriever.setDataSource(path)
+            val bytes = retriever.embeddedPicture
+            if (bytes != null && bytes.isNotEmpty()) {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+                    bitmap = BitmapFactory.decodeByteArray(
+                        bytes, 0, bytes.size,
+                        BitmapFactory.Options().apply { inSampleSize = sampleSizeFor(bounds) })
+                        ?.let { fitArtSize(it) }
+                }
+            }
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "读取内嵌封面失败: $path", e)
+        } finally {
+            runCatching { retriever.release() }
+        }
+        return bitmap
+    }
+
+    private fun sampleSizeFor(bounds: BitmapFactory.Options): Int {
+        var sampleSize = 1
+        val half = maxOf(bounds.outWidth, bounds.outHeight) / 2
+        while (half / sampleSize > NOTIFICATION_ART_MAX_SIZE) sampleSize *= 2
+        return sampleSize
+    }
+
+    /**
+     * inSampleSize 只能按 2 的幂降采样，解码结果长边仍可能接近 2×NOTIFICATION_ART_MAX_SIZE；
+     * 等比缩放到边长上限以内，否则字节数超出系统对会话封面位图的 1MB 限制会被静默丢弃，
+     * 通知栏（图标会自动缩放）仍有封面、锁屏卡片却收不到新封面。
+     */
+    private fun fitArtSize(source: Bitmap): Bitmap {
+        val maxEdge = maxOf(source.width, source.height)
+        if (maxEdge <= NOTIFICATION_ART_MAX_SIZE) return source
+        val scaled = Bitmap.createScaledBitmap(
+            source,
+            (source.width * NOTIFICATION_ART_MAX_SIZE / maxEdge).coerceAtLeast(1),
+            (source.height * NOTIFICATION_ART_MAX_SIZE / maxEdge).coerceAtLeast(1), true
+        )
+        if (scaled !== source) source.recycle()
+        return scaled
+    }
+
+    private fun openAlbumArtStream(source: String): java.io.InputStream? =
+        if (source.startsWith("content://")) contentResolver.openInputStream(Uri.parse(source))
+        else java.io.File(source).inputStream()
 
     private fun createNotification(song: Song): android.app.Notification {
         val intent = Intent(this, MainActivity::class.java)
@@ -2249,6 +2432,7 @@ class MusicService : Service() {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle(song.title)
             .setContentText("${song.artist} - ${song.album}").setSmallIcon(R.drawable.ic_music_note)
             .setContentIntent(pendingIntent)
+        albumArtBitmap?.let { builder.setLargeIcon(it) }
 
         builder.addAction(
             NotificationCompat.Action(

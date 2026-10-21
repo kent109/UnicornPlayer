@@ -20,6 +20,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
 import com.unicorn.player.databinding.ActivityThemeSettingBinding
+import com.unicorn.player.manager.MusicManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -734,6 +735,8 @@ class ThemeSettingActivity : BaseActivity() {
             }
         }
         applyTheme(mode)
+        // 封面占位图配色分日夜，立刻丢缓存重画，否则要等到下次切歌才换色
+        MusicManager.getService()?.invalidateAlbumArt()
         updateThemeModeSummary(mode)
         themePopup?.dismiss()
         themePopup = null

@@ -16,6 +16,9 @@ interface CoverDao {
     @Query("SELECT * FROM covers WHERE type = :type")
     fun getCoversByType(type: Int): Flow<List<Cover>>
 
+    @Query("SELECT * FROM covers WHERE type = :type AND name = :name LIMIT 1")
+    fun getCoverSync(type: Int, name: String): Cover?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun upsertCover(cover: Cover)
 
