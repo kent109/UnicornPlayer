@@ -1,5 +1,6 @@
 package com.unicorn.player
 
+import aman.taglib.TagLib
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
@@ -39,9 +40,11 @@ class SongInfoHelper(private val context: Context) {
     private var pendingDialogBinding: DialogSongInfo2Binding? = null
     private var pendingArtistItemBinding: ItemSongInfoBinding? = null
     private var pendingAlbumItemBinding: ItemSongInfoBinding? = null
+    private var pendingGenreItemBinding: ItemSongInfoBinding? = null
     private var pendingNewTitle: String? = null
     private var pendingNewArtist: String? = null
     private var pendingNewAlbum: String? = null
+    private var pendingNewGenre: String? = null
 
     /**
      * 设置写入权限回调，委托给 AudioTagEditor
@@ -105,8 +108,17 @@ class SongInfoHelper(private val context: Context) {
             root.background = null
             setIconForLabel(ivIcon, "专辑")
         }
+        // 流派：初始值以曲库记录为准，缺失时回退到直接读取音频文件的 GENRE 标签
+        val initialGenre = resolveInitialGenre(song)
+        val genreItemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context)).apply {
+            tvLabel.text = "流派"
+            tvValue.text = initialGenre
+            root.background = null
+            setIconForLabel(ivIcon, "流派")
+        }
         dialogBinding.infoContainer.addView(artistItemBinding.root)
         dialogBinding.infoContainer.addView(albumItemBinding.root)
+        dialogBinding.infoContainer.addView(genreItemBinding.root)
 
         // 其余不可编辑的信息项
         val infoItems = listOf(
@@ -129,12 +141,17 @@ class SongInfoHelper(private val context: Context) {
         var originalTitle = song.title
         var originalArtist = song.artist
         var originalAlbum = song.album
+        var originalGenre = initialGenre
+        // 当前选择的流派（点流派值跳转 GenreSelectActivity 后实时刷新，未点完成不落库）
+        var currentGenre = initialGenre
 
         // 编辑按钮：进入编辑状态
         dialogBinding.btnEdit.setOnClickListener {
             originalTitle = dialogBinding.tvSongTitle.text.toString()
             originalArtist = artistItemBinding.tvValue.text.toString()
             originalAlbum = albumItemBinding.tvValue.text.toString()
+            originalGenre = genreItemBinding.tvValue.text.toString()
+            currentGenre = originalGenre
 
             dialogBinding.btnEdit.visibility = View.GONE
             dialogBinding.btnDone.visibility = View.VISIBLE
@@ -150,6 +167,9 @@ class SongInfoHelper(private val context: Context) {
             albumItemBinding.etValue.visibility = View.VISIBLE
             albumItemBinding.tvAsterisk.visibility = View.VISIBLE
             albumItemBinding.etValue.setText(originalAlbum)
+
+            // 流派不就地输入：保留 tvValue 展示，编辑态显示星号并允许点击跳转选择页
+            genreItemBinding.tvAsterisk.visibility = View.VISIBLE
         }
 
         // 完成按钮：比较修改并执行
@@ -157,34 +177,42 @@ class SongInfoHelper(private val context: Context) {
             val rawTitle = dialogBinding.etSongTitle.text.toString().trim()
             val rawArtist = artistItemBinding.etValue.text.toString().trim()
             val rawAlbum = albumItemBinding.etValue.text.toString().trim()
+            // 流派："<unknown>" 等价于空标签（写文件时删除 GENRE）
+            val rawGenre = if (currentGenre == "<unknown>") "" else currentGenre
 
             // 空字符串和 "<unknown>" 视为等价，避免无意义的修改
-            fun normalize(v: String) = if (v.isEmpty()) "<unknown>" else v
+            fun normalize(v: String) = if (v.isEmpty() || v == "<unknown>") "<unknown>" else v
             val normOrigTitle = normalize(originalTitle)
             val normOrigArtist = normalize(originalArtist)
             val normOrigAlbum = normalize(originalAlbum)
             val normNewTitle = normalize(rawTitle)
             val normNewArtist = normalize(rawArtist)
             val normNewAlbum = normalize(rawAlbum)
+            val normOrigGenre = normalize(originalGenre)
+            val normNewGenre = normalize(currentGenre)
 
-            // 三个值均未修改（忽略空/<unknown>差异），退出编辑状态
+            // 四个值均未修改（忽略空/<unknown>差异），退出编辑状态且不做任何操作
             if (normNewTitle == normOrigTitle &&
                 normNewArtist == normOrigArtist &&
-                normNewAlbum == normOrigAlbum
+                normNewAlbum == normOrigAlbum &&
+                normNewGenre == normOrigGenre
             ) {
-                exitEditMode(dialogBinding, artistItemBinding, albumItemBinding)
+                exitEditMode(dialogBinding, artistItemBinding, albumItemBinding, genreItemBinding)
                 return@setOnClickListener
             }
 
-            // 展示值：标题为空取文件名（去后缀），歌手/专辑为空取 "<unknown>"
+            // 展示值：标题为空取文件名（去后缀），歌手/专辑/流派为空取 "<unknown>"
             val fileName = song.path.substringAfterLast('/').substringBeforeLast('.')
             val displayTitle = rawTitle.ifEmpty { fileName }
             val displayArtist = normNewArtist
             val displayAlbum = normNewAlbum
+            val displayGenre = normNewGenre
 
             // 有修改，在后台线程执行标签修改（传原始值，空值由 AudioTagEditor 删除标签）
             Thread {
-                val result = audioTagEditor.modifyAudioTags(song, rawTitle, rawArtist, rawAlbum)
+                val result = audioTagEditor.modifyAudioTags(
+                    song, rawTitle, rawArtist, rawAlbum, rawGenre
+                )
                 Handler(Looper.getMainLooper()).post {
                     when (result) {
                         AudioTagEditor.TagEditResult.SUCCESS -> {
@@ -192,7 +220,13 @@ class SongInfoHelper(private val context: Context) {
                             dialogBinding.tvSongTitle.text = displayTitle
                             artistItemBinding.tvValue.text = displayArtist
                             albumItemBinding.tvValue.text = displayAlbum
-                            exitEditMode(dialogBinding, artistItemBinding, albumItemBinding)
+                            genreItemBinding.tvValue.text = displayGenre
+                            exitEditMode(
+                                dialogBinding,
+                                artistItemBinding,
+                                albumItemBinding,
+                                genreItemBinding
+                            )
                             Toast.makeText(
                                 context,
                                 R.string.tag_edit_success,
@@ -205,9 +239,11 @@ class SongInfoHelper(private val context: Context) {
                             pendingDialogBinding = dialogBinding
                             pendingArtistItemBinding = artistItemBinding
                             pendingAlbumItemBinding = albumItemBinding
+                            pendingGenreItemBinding = genreItemBinding
                             pendingNewTitle = displayTitle
                             pendingNewArtist = displayArtist
                             pendingNewAlbum = displayAlbum
+                            pendingNewGenre = displayGenre
                             // 保持编辑状态不变
                             Toast.makeText(
                                 context,
@@ -217,7 +253,12 @@ class SongInfoHelper(private val context: Context) {
                         }
 
                         AudioTagEditor.TagEditResult.FAILURE -> {
-                            exitEditMode(dialogBinding, artistItemBinding, albumItemBinding)
+                            exitEditMode(
+                                dialogBinding,
+                                artistItemBinding,
+                                albumItemBinding,
+                                genreItemBinding
+                            )
                             Toast.makeText(
                                 context,
                                 R.string.tag_edit_failed,
@@ -257,11 +298,30 @@ class SongInfoHelper(private val context: Context) {
             showKeyboard(albumItemBinding.etValue)
         }
 
+        // 流派：编辑态下点击值或星号跳转选择页；选择后实时刷新展示值（点完成才落库）
+        val openGenrePicker = {
+            GenreSelectActivity.onGenreSelected = { picked ->
+                currentGenre = picked
+                genreItemBinding.tvValue.text = picked
+            }
+            context.startActivity(
+                Intent(context, GenreSelectActivity::class.java)
+                    .putExtra(GenreSelectActivity.EXTRA_CURRENT_GENRE, currentGenre)
+            )
+        }
+        genreItemBinding.llInfo.setOnClickListener {
+            if (genreItemBinding.tvAsterisk.visibility == View.VISIBLE) openGenrePicker()
+        }
+        genreItemBinding.tvAsterisk.setOnClickListener {
+            if (genreItemBinding.tvAsterisk.visibility == View.VISIBLE) openGenrePicker()
+        }
+
         // 增大点击区域
         val expandPx = (48 * context.resources.displayMetrics.density).toInt()
         ViewUtil.expandTouchTarget(dialogBinding.rlSongTitle, expandPx)
         ViewUtil.expandTouchTarget(artistItemBinding.llInfo, expandPx)
         ViewUtil.expandTouchTarget(albumItemBinding.llInfo, expandPx)
+        ViewUtil.expandTouchTarget(genreItemBinding.llInfo, expandPx)
 
         // 添加到歌单（在"文件路径"后面，"分享本地文件"前面，仅当存在歌单时显示）
         if (showAddToPlaylist) {
@@ -298,6 +358,10 @@ class SongInfoHelper(private val context: Context) {
         }
 
         // 设置窗口动画
+        bottomSheetDialog.setOnDismissListener {
+            // 弹窗关闭时清除流派选择回调，避免引用泄漏
+            GenreSelectActivity.onGenreSelected = null
+        }
         bottomSheetDialog.show()
 
         // 用 GradientDrawable 替代 MaterialShapeDrawable，防止拖拽时圆角被动画化为 0
@@ -338,7 +402,8 @@ class SongInfoHelper(private val context: Context) {
     private fun exitEditMode(
         dialogBinding: DialogSongInfo2Binding,
         artistItemBinding: ItemSongInfoBinding,
-        albumItemBinding: ItemSongInfoBinding
+        albumItemBinding: ItemSongInfoBinding,
+        genreItemBinding: ItemSongInfoBinding
     ) {
         hideKeyboard(dialogBinding.etSongTitle)
         hideKeyboard(artistItemBinding.etValue)
@@ -354,6 +419,8 @@ class SongInfoHelper(private val context: Context) {
         albumItemBinding.tvValue.visibility = View.VISIBLE
         albumItemBinding.etValue.visibility = View.GONE
         albumItemBinding.tvAsterisk.visibility = View.GONE
+        // 流派：隐藏星号，退出编辑态后点击不再跳转选择页
+        genreItemBinding.tvAsterisk.visibility = View.GONE
     }
 
     /**
@@ -381,31 +448,39 @@ class SongInfoHelper(private val context: Context) {
         val dlgBinding = pendingDialogBinding
         val artistBinding = pendingArtistItemBinding
         val albumBinding = pendingAlbumItemBinding
+        val genreBinding = pendingGenreItemBinding
         val newTitle = pendingNewTitle
         val newArtist = pendingNewArtist
         val newAlbum = pendingNewAlbum
+        val newGenre = pendingNewGenre
 
         // 清除待重试状态
         pendingDialogBinding = null
         pendingArtistItemBinding = null
         pendingAlbumItemBinding = null
+        pendingGenreItemBinding = null
         pendingNewTitle = null
         pendingNewArtist = null
         pendingNewAlbum = null
+        pendingNewGenre = null
 
         // 更新弹窗 UI 并退出编辑状态
         Handler(Looper.getMainLooper()).post {
             if (result.success && dlgBinding != null && artistBinding != null && albumBinding != null
-                && newTitle != null && newArtist != null && newAlbum != null
+                && genreBinding != null
+                && newTitle != null && newArtist != null && newAlbum != null && newGenre != null
             ) {
                 dlgBinding.tvSongTitle.text = newTitle
                 artistBinding.tvValue.text = newArtist
                 albumBinding.tvValue.text = newAlbum
-                exitEditMode(dlgBinding, artistBinding, albumBinding)
+                genreBinding.tvValue.text = newGenre
+                exitEditMode(dlgBinding, artistBinding, albumBinding, genreBinding)
                 Toast.makeText(context, R.string.tag_edit_success, Toast.LENGTH_SHORT).show()
             } else if (!result.success) {
-                if (dlgBinding != null && artistBinding != null && albumBinding != null) {
-                    exitEditMode(dlgBinding, artistBinding, albumBinding)
+                if (dlgBinding != null && artistBinding != null && albumBinding != null
+                    && genreBinding != null
+                ) {
+                    exitEditMode(dlgBinding, artistBinding, albumBinding, genreBinding)
                 }
                 Toast.makeText(context, R.string.tag_edit_failed, Toast.LENGTH_SHORT).show()
             }
@@ -482,6 +557,23 @@ class SongInfoHelper(private val context: Context) {
     }
 
     /**
+     * 解析弹窗初始显示的流派值。
+     * 曲库记录已有有效流派时直接使用；否则回退到直接读取音频文件的 GENRE 标签
+     * （覆盖播放页传入的、未经重扫的 Song 对象），两者都缺失时返回 "<unknown>"。
+     */
+    private fun resolveInitialGenre(song: Song): String {
+        if (song.genre.isNotBlank() && song.genre != "<unknown>") {
+            return song.genre
+        }
+        return try {
+            TagLib.getMetadata(song.path)["GENRE"]?.takeIf { it.isNotBlank() } ?: "<unknown>"
+        } catch (e: Exception) {
+            LogWriter.writeError(TAG, "读取流派标签失败: ${e.message}", e)
+            "<unknown>"
+        }
+    }
+
+    /**
      * 添加可点击的信息项
      * @param textColor 文字颜色
      */
@@ -529,6 +621,7 @@ class SongInfoHelper(private val context: Context) {
         val res = when (label) {
             "歌手" -> R.drawable.ic_artist_s
             "专辑" -> R.drawable.ic_album_s
+            "流派" -> R.drawable.ic_genre
             "时长" -> R.drawable.ic_duration_s
             "音质" -> R.drawable.ic_quality_s
             "文件大小" -> R.drawable.ic_filesize_s

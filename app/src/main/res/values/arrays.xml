@@ -10,4 +10,29 @@
         <item>@color/disc_playing_color_6</item>
         <item>@color/disc_playing_color_7</item>
     </integer-array>
+
+    <!-- 歌曲信息编辑-流派选择页的内置流派列表（顺序即展示顺序，页尾另加"未知流派"） -->
+    <string-array name="genre_options">
+        <item>流行</item>
+        <item>摇滚</item>
+        <item>电子</item>
+        <item>嘻哈</item>
+        <item>爵士</item>
+        <item>蓝调</item>
+        <item>古典</item>
+        <item>金属</item>
+        <item>民谣</item>
+        <item>乡村</item>
+        <item>R&amp;B</item>
+        <item>氛围</item>
+        <item>工业</item>
+        <item>放克</item>
+        <item>新世纪</item>
+        <item>雷鬼</item>
+        <item>拉丁</item>
+        <item>实验</item>
+        <item>朋克</item>
+        <item>轻音乐</item>
+        <item>其他</item>
+    </string-array>
 </resources>

@@ -13,7 +13,7 @@ import com.unicorn.player.model.Cover
 
 @Database(
     entities = [Song::class, Playlist::class, PlaylistSong::class, Cover::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class MusicDatabase : RoomDatabase() {
@@ -50,6 +50,15 @@ abstract class MusicDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 版本 5 → 6：songs 表新增 genre 列（流派）
+         */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE songs ADD COLUMN genre TEXT NOT NULL DEFAULT '<unknown>'")
+            }
+        }
+
         fun getDatabase(context: Context): MusicDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -57,7 +66,7 @@ abstract class MusicDatabase : RoomDatabase() {
                     MusicDatabase::class.java,
                     "music_database"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5) // 增量迁移，不清库
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) // 增量迁移，不清库
                     .fallbackToDestructiveMigration() // 允许破坏性迁移（兜底）
                     .build()
                 INSTANCE = instance

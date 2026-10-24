@@ -44,7 +44,8 @@ class MusicRepository(private val context: Context) {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.MIME_TYPE
+            MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.GENRE
         )
 
         val selection = MediaStore.Audio.Media.IS_MUSIC + " != 0" +
@@ -72,12 +73,14 @@ class MusicRepository(private val context: Context) {
             val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
             val albumIdColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+            val genreColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.GENRE)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
                 var title = cursor.getString(titleColumn) ?: "Unknown Title"
                 var artist = cursor.getString(artistColumn) ?: "Unknown Artist"
                 var album = cursor.getString(albumColumn) ?: "Unknown Album"
+                var genre = cursor.getString(genreColumn)
                 val duration = cursor.getLong(durationColumn)
                 val path = cursor.getString(pathColumn)
                 val albumId = cursor.getLong(albumIdColumn)
@@ -89,12 +92,16 @@ class MusicRepository(private val context: Context) {
                 fileTags["TITLE"]?.takeIf { it.isNotEmpty() }?.let { title = it }
                 fileTags["ARTIST"]?.takeIf { it.isNotEmpty() }?.let { artist = it }
                 fileTags["ALBUM"]?.takeIf { it.isNotEmpty() }?.let { album = it }
+                fileTags["GENRE"]?.takeIf { it.isNotEmpty() }?.let { genre = it }
 
                 if (isUnknownArtist(artist)) {
                     artist = "<unknown>"
                 }
                 if (isUnknownAlbum(album, path)) {
                     album = "<unknown>"
+                }
+                if (genre.isNullOrEmpty() || genre == "<unknown>") {
+                    genre = "<unknown>"
                 }
 
                 val file = File(path)
@@ -126,7 +133,8 @@ class MusicRepository(private val context: Context) {
                     path = path,
                     albumArt = customCover ?: albumArtUri,
                     lastModified = lastModified,
-                    quality = quality
+                    quality = quality,
+                    genre = genre
                 )
                 newSongs.add(song)
             }
@@ -354,6 +362,7 @@ class MusicRepository(private val context: Context) {
 
         if (isUnknownArtist(artist)) artist = "<unknown>"
         if (isUnknownAlbum(album, realPath)) album = "<unknown>"
+        val genre = fileTags["GENRE"]?.takeIf { it.isNotEmpty() } ?: "<unknown>"
 
         // duration：MediaMetadataRetriever
         val duration = try {
@@ -386,7 +395,8 @@ class MusicRepository(private val context: Context) {
             path = realPath,
             albumArt = albumArtUri,
             lastModified = lastModified,
-            quality = quality
+            quality = quality,
+            genre = genre
         )
     }
 

@@ -44,7 +44,8 @@ class AudioTagEditor(private val context: Context) {
         val song: Song?,
         val newTitle: String?,
         val newArtist: String?,
-        val newAlbum: String?
+        val newAlbum: String?,
+        val newGenre: String?
     )
 
     /**
@@ -65,16 +66,18 @@ class AudioTagEditor(private val context: Context) {
     private var pendingNewTitle: String? = null
     private var pendingNewArtist: String? = null
     private var pendingNewAlbum: String? = null
+    private var pendingNewGenre: String? = null
 
     /**
-     * 使用 TagLib 修改音频文件的标签（歌名、歌手、专辑）
+     * 使用 TagLib 修改音频文件的标签（歌名、歌手、专辑、流派）
      * @return 编辑结果
      */
     fun modifyAudioTags(
         song: Song,
         newTitle: String,
         newArtist: String,
-        newAlbum: String
+        newAlbum: String,
+        newGenre: String
     ): TagEditResult {
         var tempFile: File? = null
         return try {
@@ -103,6 +106,7 @@ class AudioTagEditor(private val context: Context) {
             if (newTitle.isNotEmpty()) meta["TITLE"] = newTitle
             if (newArtist.isNotEmpty()) meta["ARTIST"] = newArtist
             if (newAlbum.isNotEmpty()) meta["ALBUM"] = newAlbum
+            if (newGenre.isNotEmpty()) meta["GENRE"] = newGenre
             TagLib.setMetadata(temp.absolutePath, meta)
 
             // 将修改后的临时文件写回原 content Uri（覆盖）
@@ -125,6 +129,7 @@ class AudioTagEditor(private val context: Context) {
                 pendingNewTitle = newTitle
                 pendingNewArtist = newArtist
                 pendingNewAlbum = newAlbum
+                pendingNewGenre = newGenre
                 tempFile = null // 防止 finally 中删除，保留给重试使用
                 Handler(Looper.getMainLooper()).post {
                     writePermissionCallback?.onRequestWritePermission(
@@ -139,12 +144,18 @@ class AudioTagEditor(private val context: Context) {
             MediaScannerConnection.scanFile(context, arrayOf(song.path), null, null)
 
             // 同步更新 Room 数据库，使 UI 立即生效
-            // 标题为空取文件名（去后缀），歌手/专辑为空取 "<unknown>"
+            // 标题为空取文件名（去后缀），歌手/专辑/流派为空取 "<unknown>"
             val fileName = song.path.substringAfterLast('/').substringBeforeLast('.')
             val dbTitle = newTitle.ifEmpty { fileName }
             val dbArtist = newArtist.ifEmpty { "<unknown>" }
             val dbAlbum = newAlbum.ifEmpty { "<unknown>" }
-            val updatedSong = song.copy(title = dbTitle, artist = dbArtist, album = dbAlbum)
+            val dbGenre = newGenre.ifEmpty { "<unknown>" }
+            val updatedSong = song.copy(
+                title = dbTitle,
+                artist = dbArtist,
+                album = dbAlbum,
+                genre = dbGenre
+            )
             MusicDatabase.getDatabase(context).songDao().updateSong(updatedSong)
 
             Log.d(TAG, "标签修改成功: ${song.path}")
@@ -162,13 +173,14 @@ class AudioTagEditor(private val context: Context) {
      * @return 重试结果，包含成功状态和修改的歌曲信息
      */
     fun retryPendingWrite(): RetryResult {
-        val modifiedFile = pendingModifiedFile ?: return RetryResult(false, null, null, null, null)
-        val uri = pendingContentUri ?: return RetryResult(false, null, null, null, null)
-        val songPath = pendingSongPath ?: return RetryResult(false, null, null, null, null)
+        val modifiedFile = pendingModifiedFile ?: return RetryResult(false, null, null, null, null, null)
+        val uri = pendingContentUri ?: return RetryResult(false, null, null, null, null, null)
+        val songPath = pendingSongPath ?: return RetryResult(false, null, null, null, null, null)
         val song = pendingSong
         val newTitle = pendingNewTitle
         val newArtist = pendingNewArtist
         val newAlbum = pendingNewAlbum
+        val newGenre = pendingNewGenre
 
         val success = try {
             context.contentResolver.openOutputStream(uri, "w")?.use { output ->
@@ -187,24 +199,26 @@ class AudioTagEditor(private val context: Context) {
         pendingNewTitle = null
         pendingNewArtist = null
         pendingNewAlbum = null
+        pendingNewGenre = null
 
         // 通知媒体库重新扫描
         MediaScannerConnection.scanFile(context, arrayOf(songPath), null, null)
 
         // 在后台线程更新 Room 数据库（retryPendingWrite 可能在主线程调用）
-        // 标题为空取文件名（去后缀），歌手/专辑为空取 "<unknown>"
-        if (song != null && newTitle != null && newArtist != null && newAlbum != null) {
+        // 标题为空取文件名（去后缀），歌手/专辑/流派为空取 "<unknown>"
+        if (song != null && newTitle != null && newArtist != null && newAlbum != null && newGenre != null) {
             val fileName = song.path.substringAfterLast('/').substringBeforeLast('.')
             val updatedSong = song.copy(
                 title = newTitle.ifEmpty { fileName },
                 artist = newArtist.ifEmpty { "<unknown>" },
-                album = newAlbum.ifEmpty { "<unknown>" })
+                album = newAlbum.ifEmpty { "<unknown>" },
+                genre = newGenre.ifEmpty { "<unknown>" })
             Thread {
                 MusicDatabase.getDatabase(context).songDao().updateSong(updatedSong)
             }.start()
         }
 
-        return RetryResult(success, song, newTitle, newArtist, newAlbum)
+        return RetryResult(success, song, newTitle, newArtist, newAlbum, newGenre)
     }
 
     /**
@@ -219,5 +233,6 @@ class AudioTagEditor(private val context: Context) {
         pendingNewTitle = null
         pendingNewArtist = null
         pendingNewAlbum = null
+        pendingNewGenre = null
     }
 }

@@ -16,5 +16,6 @@ data class Song(
     val path: String,
     val albumArt: String? = null,
     val lastModified: Long = 0L,
-    val quality: String = "UNK"
+    val quality: String = "UNK",
+    val genre: String = "<unknown>"
 ) : Parcelable
