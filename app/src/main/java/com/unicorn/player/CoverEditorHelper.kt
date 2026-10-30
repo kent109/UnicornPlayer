@@ -1,22 +1,23 @@
 package com.unicorn.player
 
 import android.content.Context
-import android.content.DialogInterface
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
-import android.util.TypedValue
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
-import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import com.unicorn.player.databinding.DialogEditCoverBinding
 import com.unicorn.player.model.Song
+import com.unicorn.player.ui.PanelDialog
 import com.unicorn.player.util.CoverStore
 import java.io.File
 
@@ -39,7 +40,7 @@ class CoverEditorHelper(
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private var dialog: AlertDialog? = null
+    private var dialog: PanelDialog? = null
     private var binding: DialogEditCoverBinding? = null
     private var targetSong: Song? = null
 
@@ -76,7 +77,7 @@ class CoverEditorHelper(
                 candidatePath?.let { if (it != saved) File(it).delete() }
                 candidatePath = saved
                 binding?.let { loadCover(it.ivCoverPreview, saved) }
-                dialog?.getButton(DialogInterface.BUTTON_POSITIVE)?.text = "确定更换"
+                binding?.btnPickCover?.text = "确定更换"
             }
         }.start()
     }
@@ -87,33 +88,20 @@ class CoverEditorHelper(
     }
 
     private fun buildDialog(song: Song, hasCustomCover: Boolean) {
-        val dialogBinding = DialogEditCoverBinding.inflate(LayoutInflater.from(context))
+        val created = PanelDialog(context, R.layout.dialog_edit_cover, sideMarginDp = 32f)
+        val dialogBinding = DialogEditCoverBinding.bind(created.contentView)
         binding = dialogBinding
-        loadCover(dialogBinding.ivCoverPreview, song.albumArt)
-
-        val created = AlertDialog.Builder(context)
-            .setTitle("修改封面")
-            .setMessage("封面图片保存在应用数据中，不会修改音频文件本身。")
-            .setView(dialogBinding.root)
-            .setNegativeButton("取消", null)
-            .setNeutralButton("默认封面", null)
-            .setPositiveButton("选择封面", null)
-            .create()
         created.setOnDismissListener { onDialogDismiss() }
+
+        loadCover(dialogBinding.ivCoverPreview, song.albumArt)
+        dialogBinding.btnDefaultCover.visibility =
+            if (hasCustomCover) View.VISIBLE else View.GONE
+        dialogBinding.btnCancel.setOnClickListener { created.dismiss() }
+        dialogBinding.btnDefaultCover.setOnClickListener { confirm(null, "已恢复默认封面") }
+        dialogBinding.btnPickCover.setOnClickListener { pickOrConfirm() }
+
         created.show()
         dialog = created
-
-        created.getButton(DialogInterface.BUTTON_NEGATIVE)
-            ?.setTextColor(context.getColor(R.color.secondary))
-        created.getButton(DialogInterface.BUTTON_NEUTRAL)?.apply {
-            setTextColor(context.getColor(R.color.danger_text))
-            visibility = if (hasCustomCover) View.VISIBLE else View.GONE
-            setOnClickListener { confirm(null, "已恢复默认封面") }
-        }
-        created.getButton(DialogInterface.BUTTON_POSITIVE)?.apply {
-            setTextColor(resolveThemeColor())
-            setOnClickListener { pickOrConfirm() }
-        }
     }
 
     private fun onDialogDismiss() {
@@ -157,25 +145,39 @@ class CoverEditorHelper(
         candidatePath = null
     }
 
-    private fun loadCover(target: ImageView, source: Any?) {
+    private fun loadCover(view: ImageView, source: Any?) {
+        // 先按「显示的是默认音符」垫上灰底；媒体库封面 URI 常失效，是不是真图片只能问 Glide
+        view.setBackgroundResource(R.drawable.bg_dialog_cover_placeholder)
         Glide.with(context)
             .load(source)
             .placeholder(R.drawable.ic_music_note)
             .error(R.drawable.ic_music_note)
-            .transform(CenterCrop(), RoundedCorners(36))
-            .into(target)
-    }
+            .transform(
+                CenterCrop(),
+                RoundedCorners(
+                    context.resources.getDimensionPixelSize(R.dimen.dialog_cover_corner_radius)
+                )
+            )
+            .listener(object : RequestListener<Drawable> {
+                override fun onLoadFailed(
+                    e: GlideException?,
+                    model: Any?,
+                    target: Target<Drawable>,
+                    isFirstResource: Boolean
+                ): Boolean = false
 
-    private fun resolveThemeColor(): Int {
-        val typedValue = TypedValue()
-        context.theme.resolveAttribute(
-            com.google.android.material.R.attr.colorPrimary, typedValue, true
-        )
-        return if (typedValue.resourceId != 0) {
-            ContextCompat.getColor(context, typedValue.resourceId)
-        } else {
-            typedValue.data
-        }
+                override fun onResourceReady(
+                    resource: Drawable,
+                    model: Any,
+                    target: Target<Drawable>,
+                    dataSource: DataSource,
+                    isFirstResource: Boolean
+                ): Boolean {
+                    view.background = null
+                    return false
+                }
+            })
+            .into(view)
     }
 
     private fun toast(message: String) {

@@ -12,6 +12,7 @@
 
         <com.unicorn.player.widget.TitleBar
             android:id="@+id/titleBar"
+            android:paddingHorizontal="12dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:title="搜索歌词" />

@@ -35,6 +35,30 @@
         <item name="android:windowBackground">@drawable/bg_dialog_panel</item>
     </style>
 
+    <!-- AlertDialog 正文（message）的文字外观：appcompat 的 abc_alert_dialog_material 把这个 TextView 写死成
+         Subhead（16sp），引用的是具体 style 而不是主题属性，所以主题覆盖不到，只能在 show 之后取
+         android.R.id.message 调 setTextAppearance。想调正文字号只改这里这一个值 -->
+    <style name="TextAppearance.Unicorn.Dialog.Message" parent="TextAppearance.AppCompat.Subhead">
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <!-- 通用弹窗外壳（PanelDialog 使用）：不浮起的透明窗口铺满屏幕，可见面板由内容布局自己画，
+         左右间隙用 @dimen/dialog_panel_side_margin。窗口只有做成非浮窗，宽度才不受主题
+         windowMinWidth 支配（浮窗时框架拿它直接替换 WRAP_CONTENT，实测 12dp 就把弹窗做成 12dp 宽），
+         才能表达「屏宽减去固定 dp」，而且首帧就是最终宽度，不会先画一帧默认宽度再跳 -->
+    <style name="ThemeOverlay.Unicorn.Dialog.Panel" parent="ThemeOverlay.Unicorn.Dialog.Alert">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+
+    <!-- 面板与屏幕左右边缘间隙的全局默认值：面板宽度 = 屏宽 − 2×这个值。
+         单个弹窗想更窄/更宽用 PanelDialog 的 sideMarginDp 参数覆盖，不要改这里 -->
+    <dimen name="dialog_panel_side_margin">16dp</dimen>
+
+    <!-- 修改封面弹窗预览图的圆角：Glide 的 RoundedCorners 与 bg_dialog_cover_placeholder 共用这一个值 -->
+    <dimen name="dialog_cover_corner_radius">12dp</dimen>
+
     <!-- 弹窗背景=系统默认时叠加的主题覆盖：弹窗底色回到不跟随主题色的平面色 -->
     <style name="ThemeOverlay.DialogBackgroundSystem" parent="">
         <item name="dialogPanelColor">@color/surface_panel</item>

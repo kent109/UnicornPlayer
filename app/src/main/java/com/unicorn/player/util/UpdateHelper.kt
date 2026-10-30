@@ -1,5 +1,6 @@
 package com.unicorn.player.util
 
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -18,6 +19,7 @@ import androidx.core.net.toUri
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.unicorn.player.R
+import com.unicorn.player.ui.PanelDialog
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -42,7 +44,7 @@ class UpdateHelper(private val activity: AppCompatActivity) {
         fun onCheckFailed(message: String)
     }
 
-    private var loadingDialog: AlertDialog? = null
+    private var loadingDialog: Dialog? = null
     private var updateDialog: AlertDialog? = null
     private var downloadCall: Call? = null
     private var pendingInstallFile: File? = null
@@ -744,14 +746,10 @@ class UpdateHelper(private val activity: AppCompatActivity) {
     }
 
     private fun showLoadingDialog() {
-        val dialog = AlertDialog.Builder(activity)
-            .setView(R.layout.dialog_loading)
-            .setCancelable(false)
-            .create()
-        loadingDialog = dialog
-
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        dialog.show()
+        loadingDialog = PanelDialog(activity, R.layout.dialog_loading).apply {
+            setCancelable(false)
+            show()
+        }
     }
 
 }

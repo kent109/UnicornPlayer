@@ -10,6 +10,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.Window
 import android.view.inputmethod.InputMethodManager
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
@@ -690,6 +691,9 @@ class SongInfoHelper(private val context: Context) {
         // 设置删除按钮文字颜色为危险操作红（danger_text），取消按钮为 secondary 色
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(dangerColor)
         dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
+        // 正文压小一档：appcompat 把 message 写死成 16sp，那个 TextView 在库布局里，只能按 id 取
+        dialog.findViewById<TextView>(android.R.id.message)
+            ?.setTextAppearance(R.style.TextAppearance_Unicorn_Dialog_Message)
     }
 
     /**

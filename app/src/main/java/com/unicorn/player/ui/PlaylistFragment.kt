@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -697,6 +698,9 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
             .show()
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(dangerColor)
         dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
+        // 正文压小一档：appcompat 把 message 写死成 16sp，那个 TextView 在库布局里，只能按 id 取
+        dialog.findViewById<TextView>(android.R.id.message)
+            ?.setTextAppearance(R.style.TextAppearance_Unicorn_Dialog_Message)
     }
 
     override fun onSwipedOpened(position: Int) {

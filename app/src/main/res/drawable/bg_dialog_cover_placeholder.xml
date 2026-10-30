@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 修改封面弹窗预览图的灰底：圆角与封面图的圆角同一个来源（@dimen/dialog_cover_corner_radius），
+     否则读不到封面时灰底卡片看起来比有封面时小一圈 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/art_placeholder_bg" />
+    <corners android:radius="@dimen/dialog_cover_corner_radius" />
+</shape>
