@@ -23,6 +23,16 @@ object LogWriter {
     private const val MAX_LOG_SIZE = 5 * 1024 * 1024 // 5MB 最大文件大小
 
     /**
+     * 诊断日志总开关。平时保持 false（不打印、不写文件、不做取栈等额外开销）；
+     * 排查"服务实例被销毁重建""播放断裂"这类低复现问题时临时置 true。
+     */
+    private const val DIAG_ENABLED = false
+
+    /** 诊断日志是否生效：开关打开且为 debug 构建，release 恒为 false */
+    val isDiagEnabled: Boolean
+        get() = DIAG_ENABLED && BuildConfig.DEBUG
+
+    /**
      * 写入错误日志
      * @param tag 日志标签
      * @param message 日志消息
@@ -42,10 +52,10 @@ object LogWriter {
 
     /**
      * 写入诊断日志：复现概率低、logcat 环形缓冲会被冲掉的问题用本方法留痕。
-     * 仅 debug 构建生效，release 不产生任何输出与文件写入
+     * 受 [DIAG_ENABLED] 总开关控制，且仅 debug 构建生效
      */
     fun writeDiag(tag: String, message: String) {
-        if (!BuildConfig.DEBUG) return
+        if (!isDiagEnabled) return
         Log.i(tag, message)
         writeToFile(tag, "DIAG", message, null)
     }

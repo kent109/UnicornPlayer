@@ -59,7 +59,6 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.bullhead.equalizer.AudioEffectManager
 import com.bullhead.equalizer.EqualizerModel
 import com.bullhead.equalizer.Settings
-import com.unicorn.player.BuildConfig
 import com.unicorn.player.MainActivity
 import com.unicorn.player.R
 import com.unicorn.player.ScanFilterActivity
@@ -495,10 +494,11 @@ class MusicService : Service() {
     }
 
     /**
-     * 诊断用：返回最近的调用帧，用于区分同一方法的多条触发链路（UI 点击 / 焦点回调 / MediaSession）
+     * 诊断用：返回最近的调用帧，用于区分同一方法的多条触发链路（UI 点击 / 焦点回调 / MediaSession）。
+     * 诊断开关关闭时直接返回空串，避免每次调用都做栈遍历
      */
     private fun callerTrace(): String {
-        if (!BuildConfig.DEBUG) return ""
+        if (!LogWriter.isDiagEnabled) return ""
         return Thread.currentThread().stackTrace
             .drop(3)
             .filter { it.className == this.javaClass.name || it.className.startsWith("com.unicorn.player") }
