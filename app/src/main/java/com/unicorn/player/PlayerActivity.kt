@@ -21,7 +21,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.graphics.toColorInt
 import androidx.core.view.doOnPreDraw
-import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import com.hw.lrcviewlib.LrcRow
@@ -1428,6 +1427,11 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             // 初始设置完成
             isProgrammaticSetItem = false
             isInitialSetup = false
+
+            // 对齐到正在播放的歌；首帧布局前再兜一次，因为 updateSongs 的
+            // notifyDataSetChanged 还没应用，前一次 setCurrentItem 可能被挂起的整表刷新吃掉
+            syncPagerToPlayingSong()
+            binding.viewPager.doOnPreDraw { syncPagerToPlayingSong() }
         }
     }
 
@@ -1517,6 +1521,37 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         }
     }
 
+    /**
+     * 把 ViewPager 对齐到正在播放的那首歌。
+     *
+     * 配置变更（自动黑白模式、切主题色）导致的 relaunch 会让 ViewPager2 恢复到灭屏前的页码，
+     * 而灭屏期间播放器已经自动切到下一首，于是回来看到的是旧那一首歌（lrcView 由 service
+     * 直接驱动，所以是对的）。setupViewPager 算出了正确起点却没挪过 pager，唯一会挪的
+     * currentSong 观察者只粘性派发一次、且同一首歌的后续派发会被 lastHandledSongId 拦掉，
+     * 那一次没生效就再也不会重试，所以这里主动兜底对齐。
+     */
+    private fun syncPagerToPlayingSong() {
+        val song = musicService?.currentSong?.value ?: return
+        val songs = pagerAdapter.songs
+        if (songs.isEmpty()) return
+        val index = songs.indexOfFirst { it.id == song.id }
+        if (index < 0) return
+        // 用户正在翻页时不打断。用 scrollState 而不是 isUserScrolling：后者由
+        // onPageScrolled 的 positionOffsetPixels!=0 置位，恢复期的中间态事件能把它误置真
+        // 且没有对应的 IDLE 回调来清
+        if (binding.viewPager.scrollState
+            != androidx.viewpager2.widget.ViewPager2.SCROLL_STATE_IDLE
+        ) return
+        if (binding.viewPager.currentItem == index) return
+
+        isProgrammaticSetItem = true
+        try {
+            binding.viewPager.setCurrentItem(index, false)
+        } finally {
+            isProgrammaticSetItem = false
+        }
+    }
+
     private fun handlePageSelected(position: Int) {
         if (isHandlingSongChange) return
 
@@ -1532,6 +1567,11 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 Log.d(TAG, "Initial setup, skipping playback")
                 return
             }
+
+            // 程序化对齐页码（打开/恢复时跳到正在播的那首）也会派发 onPageSelected。
+            // 这一页已经是当前播放歌时什么都不做：走下面的分支会重新请求焦点并
+            // playCurrentSong，把正在放的声音打断成冷恢复
+            if (songs[position].id == service.currentSong.value?.id) return
 
             // 如果当前歌曲位置与目标位置不同，才切换歌曲
             if (service.currentIndex != position) {
