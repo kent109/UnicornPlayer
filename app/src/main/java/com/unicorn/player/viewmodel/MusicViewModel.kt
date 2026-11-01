@@ -525,14 +525,21 @@ class MusicViewModel(
     }
 
     /**
-     * 按指定模式排序当前歌曲列表
+     * 按指定模式排序当前歌曲列表。
+     * 必须同时更新 _allSongs 和 _fullSongs：
+     * - _allSongs 驱动 UI 展示排序后的列表
+     * - _fullSongs 变化会触发 MainActivity.fullSongs.observe → updateServiceSongList()，
+     *   进而把新排序同步到 MusicService 的播放队列；漏掉 _fullSongs 更新会导致 Service
+     *   队列保持旧排序，playNext() 从旧列表取下一首，出现"切了排序但下一首不对"的 bug。
      */
     fun sortSongs(mode: SortMode) {
         _sortMode.value = mode
         saveSortMode(mode)
-        val currentSongs = _allSongs.value ?: return
-        val sorted = sortSongsInternal(currentSongs, mode)
-        _allSongs.value = sorted
+        // rawSongs 是完整的未过滤列表，applyHiddenAndSort 会按新模式过滤隐藏歌曲+排序
+        val base = rawSongs.ifEmpty { _fullSongs.value ?: _allSongs.value ?: return }
+        val filteredSorted = applyHiddenAndSort(base)
+        _allSongs.value = filteredSorted
+        _fullSongs.value = filteredSorted
     }
 
     /**
