@@ -87,6 +87,30 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <!-- 本地未命中、网络搜索歌词期间显示的加载提示 -->
+        <LinearLayout
+            android:id="@+id/lrcSearchingBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                style="?android:attr/progressBarStyleSmall" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/lyrics_searching"
+                android:textColor="@color/onSurfaceVariant"
+                android:textSize="14sp" />
+        </LinearLayout>
+
         <!-- 无歌词时在 LrcView 中央显示的"新建歌词"按钮 -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCreateLyrics"

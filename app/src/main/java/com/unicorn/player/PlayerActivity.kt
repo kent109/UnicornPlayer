@@ -36,7 +36,6 @@ import com.unicorn.player.util.LrcFetcher
 import com.unicorn.player.util.LrcHelper
 import com.unicorn.player.util.LyricsSaveManager
 import com.unicorn.player.util.ViewUtil
-import com.unicorn.player.util.toSimpleCustom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -202,6 +201,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     // 歌词加载代数计数器：每次调用 loadAndShowLrc 递增，异步结果只在接受时检查代数是否匹配，
     // 保证只有最新一次调用的结果生效，避免并发加载互相覆盖
     private var lrcLoadGeneration = 0
+
+    // 歌词区当前对应的歌曲路径：切歌时立即清空上一首歌词，避免 SAF/网络加载期间旧歌词滞留
+    private var lastLrcAudioPath: String? = null
 
     // ===== SAF 歌词保存 =====
     // 待保存的歌词内容（授权完成后写入）
@@ -686,7 +688,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      * 全屏模式下长按 LrcView 时：从 Download/Unicorn/Lyrics 读取 .lrc 文件内容，弹出编辑预览对话框
      */
     private fun showLrcPreviewForLocalFile(audioPath: String) {
-        val lrcFileName = File(audioPath).nameWithoutExtension.toSimpleCustom() + ".lrc"
+        val lrcFileName = File(audioPath).nameWithoutExtension + ".lrc"
         val content = LyricsSaveManager.readLrcFile(this, lrcFileName)
         if (content == null) {
             Toast.makeText(this, "本地歌词文件不存在", Toast.LENGTH_SHORT).show()
@@ -725,9 +727,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      */
     private fun saveLyrics(content: String, audioPath: String) {
         try {
-            // 使用音频文件名（不含扩展名）作为歌词文件名，与搜索、加载保持一致
+            // 使用音频文件名（不含扩展名）作为歌词文件名，与歌曲文件名保持一致
             // 例如音频文件为 "a - b.mp3"，则保存为 "a - b.lrc"
-            val fileName = File(audioPath).nameWithoutExtension.toSimpleCustom() + ".lrc"
+            val fileName = File(audioPath).nameWithoutExtension + ".lrc"
 
             // 1. 先检查是否有保存的 tree URI（没有则无法创建目录，直接授权）
             if (!LyricsSaveManager.hasSavedTreeUri(this)) {
@@ -1092,7 +1094,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
      */
     private suspend fun loadLrcFromDocuments(audioPath: String): List<LrcRow>? {
         return withContext(Dispatchers.IO) {
-            val fileName = File(audioPath).nameWithoutExtension.toSimpleCustom() + ".lrc"
+            val fileName = File(audioPath).nameWithoutExtension + ".lrc"
             val content = LyricsSaveManager.readLrcFile(this@PlayerActivity, fileName)
                 ?: return@withContext null
             LrcHelper.parseLrcContent(this@PlayerActivity, content)
@@ -1106,6 +1108,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         showNoLyricsButton = false
         binding.lrcView.setLrcData(emptyList())
         binding.lrcView.visibility = View.GONE
+        binding.lrcSearchingBar.visibility = View.GONE
         LyricsOptionsActivity.toggleLyricsEnabled(this, lifecycleScope, false)
         updateLyricsButtonsVisibility()
     }
@@ -1138,6 +1141,16 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         }
 
         val myGeneration = ++lrcLoadGeneration
+        if (audioPath != lastLrcAudioPath) {
+            // 切歌瞬间：立即清空上一首歌词与"新建歌词"按钮；
+            // 搜索提示要等确认本地无歌词、发起网络下载时才显示，本地命中不闪 loading
+            lastLrcAudioPath = audioPath
+            showNoLyricsButton = false
+            binding.lrcView.setLrcData(emptyList())
+            binding.lrcView.visibility = View.GONE
+            binding.btnCreateLyrics.visibility = View.GONE
+        }
+        binding.lrcSearchingBar.visibility = View.GONE
         lifecycleScope.launch {
             try {
                 // 1. SAF 权限前置检查——无权限则关闭歌词开关，不显示不下载
@@ -1171,6 +1184,8 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 // 3. 网络兜底
                 binding.lrcView.setLrcData(emptyList())
                 binding.lrcView.visibility = View.GONE
+                binding.lrcSearchingBar.visibility = View.VISIBLE
+                binding.btnCreateLyrics.visibility = View.GONE
                 Log.d(TAG, "Download 无歌词，尝试网络下载")
                 fetchLrcFromNetwork(audioPath, myGeneration, syncPosition)
             } catch (e: Exception) {
@@ -1221,6 +1236,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                         Log.d(TAG, "网络歌词加载已过时(generation=$generation, current=$lrcLoadGeneration)，丢弃: $audioPath")
                         return@launch
                     }
+                    binding.lrcSearchingBar.visibility = View.GONE
                     try {
                         val lrcRows = loadLrcFromDocuments(audioPath)
                         if (!lrcRows.isNullOrEmpty()) {
@@ -1248,14 +1264,20 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             }
 
             override fun onFileExists(lrcFileName: String) {
-                // 已在 loadAndShowLrc 中处理本地文件，此处忽略
+                // 已在 loadAndShowLrc 中处理本地文件，此处仅收起"正在搜索歌词"提示，避免卡在加载态
                 Log.d(TAG, "歌词文件已存在（回调）: $lrcFileName")
+                runOnUiThread {
+                    if (lrcLoadGeneration == generation) {
+                        binding.lrcSearchingBar.visibility = View.GONE
+                    }
+                }
             }
 
             override fun onNoLyricsFound() {
                 lifecycleScope.launch {
                     // 代数不匹配说明已有更新的歌词请求，不应影响新歌曲的状态
                     if (lrcLoadGeneration != generation) return@launch
+                    binding.lrcSearchingBar.visibility = View.GONE
                     showNoLyricsButton = true
                     updateLyricsButtonsVisibility()
                     binding.lrcView.visibility = View.GONE
@@ -1266,6 +1288,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             override fun onFailure(message: String) {
                 lifecycleScope.launch {
                     if (lrcLoadGeneration != generation) return@launch
+                    binding.lrcSearchingBar.visibility = View.GONE
                     showNoLyricsButton = true
                     updateLyricsButtonsVisibility()
                     binding.lrcView.visibility = View.GONE

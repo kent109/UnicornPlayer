@@ -19,6 +19,9 @@
     <!-- 歌词开关关闭时的开启歌词按钮 -->
     <string name="enable_lyrics">开启歌词</string>
 
+    <!-- 网络搜索歌词期间歌词区域的加载提示 -->
+    <string name="lyrics_searching">正在搜索歌词</string>
+
     <!-- 歌词设置 -->
     <string name="lyrics_settings">歌词显示</string>
     <string name="lyrics_enabled">显示歌词</string>

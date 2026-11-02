@@ -228,7 +228,8 @@ class LrcSearchActivity : BaseActivity(),
      * 无 SAF 权限时引导用户授权，授权完成后自动继续保存
      */
     private fun saveSelectedLyrics(result: LrcSearchResult) {
-        val baseName = File(audioPath).nameWithoutExtension.toSimpleCustom()
+        // 歌词文件名与歌曲文件名保持一致（不做繁简转换），内容仍会转简体
+        val baseName = File(audioPath).nameWithoutExtension
         val lrcFileName = "$baseName.lrc"
 
         // 首行插入 "[00:00.00]Artist - Title"

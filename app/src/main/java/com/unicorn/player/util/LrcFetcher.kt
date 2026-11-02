@@ -204,7 +204,7 @@ object LrcFetcher {
         }
 
         val baseName =
-            java.io.File(audioPath).nameWithoutExtension.toSimpleCustom() // "Artist - Title"（简体）
+            java.io.File(audioPath).nameWithoutExtension // "Artist - Title"（与歌曲文件名一致，不转简体）
         val lrcFileName = "$baseName.lrc"
 
         // 1. 检查 Download/Unicorn/Lyrics/ 下歌词文件是否已存在
