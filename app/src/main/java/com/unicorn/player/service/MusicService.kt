@@ -64,6 +64,7 @@ import com.unicorn.player.R
 import com.unicorn.player.ScanFilterActivity
 import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.equalizer.TenBandEqualizerProcessor
+import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.model.Cover
 import com.unicorn.player.model.Song
 import com.unicorn.player.playback.SongPlayableRegistry
@@ -1156,6 +1157,7 @@ class MusicService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isServiceDestroyed = true
         Log.d(TAG, "onDestroy")
         LogWriter.writeDiag(
             TAG,
@@ -1247,6 +1249,11 @@ class MusicService : Service() {
 
         // 销毁音频效果管理器
         AudioEffectManager.destroy()
+
+        // 实例已死亡，主动通知管理器：框架只在宿主进程异常时才回调 ServiceConnection
+        // .onServiceDisconnected，正常销毁路径没有任何通知，存活的 Activity 会继续持有
+        // 这个引用，主线程队列里已排队的点击打到死实例上即崩溃。
+        MusicManager.onServiceDestroyed(this)
     }
 
     private fun createNotificationChannel() {
@@ -1418,6 +1425,9 @@ class MusicService : Service() {
     }
 
     private fun playSongDirectly(song: Song) {
+        if (rejectIfDestroyed("playSongDirectly()")) {
+            return
+        }
         // 检查文件是否存在
         val file = java.io.File(song.path)
         if (!file.exists()) {
@@ -1646,6 +1656,9 @@ class MusicService : Service() {
     }
 
     fun play() {
+        if (rejectIfDestroyed("play()")) {
+            return
+        }
         // 如果当前没有歌曲，尝试加载或播放当前歌曲
         if (_currentSong.value == null) {
             loadPlaybackState(serviceCreate)
@@ -1700,6 +1713,9 @@ class MusicService : Service() {
     }
 
     fun pause() {
+        if (rejectIfDestroyed("pause()")) {
+            return
+        }
         LogWriter.writeDiag(
             TAG,
             "pause(): isPlaying=${player.isPlaying}, song=${_currentSong.value?.title}, ${callerTrace()}"
@@ -1996,6 +2012,15 @@ class MusicService : Service() {
 
     private val executorService: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor()
+
+    /**
+     * 服务实例是否已执行 onDestroy。
+     * 系统销毁服务（或引用空窗期真解绑）时，主线程队列里已排队的按钮回调仍可能打到
+     * 这个死实例上——框架只在宿主进程异常时才回调 onServiceDisconnected，正常销毁路径没有通知。
+     * 此时线程池已 shutdown、播放器已 release，继续提交任务会抛 RejectedExecutionException。
+     */
+    @Volatile
+    private var isServiceDestroyed = false
     private var lastCheckTime = 0L
 
     // 兼容不同API级别的getParcelableExtra（API 33+使用Class版本）
@@ -2072,6 +2097,9 @@ class MusicService : Service() {
     }
 
     private fun startFileObserver() {
+        if (!canScheduleObserver()) {
+            return
+        }
         // 创建一个定期检查文件变化的定时任务
         executorService.scheduleWithFixedDelay({
             checkCurrentSongFile()
@@ -2106,9 +2134,33 @@ class MusicService : Service() {
         if (playStateFuture != null) {
             return
         }
+        if (!canScheduleObserver()) {
+            return
+        }
         playStateFuture = executorService.scheduleWithFixedDelay({
             savePlaybackState()
         }, 0, 5, TimeUnit.SECONDS)
+    }
+
+    /** 线程池在 onDestroy 中被永久关闭，销毁后的实例不能再提交周期任务 */
+    private fun canScheduleObserver(): Boolean {
+        if (isServiceDestroyed || executorService.isShutdown) {
+            LogWriter.writeDiag(TAG, "skip observer schedule on destroyed instance: ${hashCode()}")
+            return false
+        }
+        return true
+    }
+
+    /**
+     * 播放控制入口的空窗兜底：服务销毁通知送达 UI 前，主线程队列里已排队的点击仍可能
+     * 打到这个实例上，而播放器已 release，继续操作会抛 IllegalStateException。
+     */
+    private fun rejectIfDestroyed(site: String): Boolean {
+        if (!isServiceDestroyed) {
+            return false
+        }
+        LogWriter.writeDiag(TAG, "$site ignored on destroyed instance: ${hashCode()}")
+        return true
     }
 
     private fun stopPlayStateObserver() {

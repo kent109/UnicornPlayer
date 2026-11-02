@@ -44,7 +44,15 @@ object MusicManager {
     private const val REAL_UNBIND_DELAY_MS = 1000L
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var pendingUnbindContext: Context? = null
+
+    /**
+     * 待执行的真解绑任务。这里必须由闭包持有 unbind 传入的 Context，而不是存成字段：
+     * object 是进程级单例，任何 Context 类型的静态字段都会被 lint 判成泄漏。
+     * 该引用最长存活 REAL_UNBIND_DELAY_MS，任务执行、bind() 取消或 forceCleanup() 时清空。
+     * 不能改成 WeakReference：空窗期 Activity 往往已被 GC，但 ActivityThread 里的 binding
+     * 仍在，取不到 Context 就无法 unbindService，服务会被这个遗留 binding 永久钉住。
+     */
+    private var pendingUnbind: Runnable? = null
 
     /** 活跃的 Activity 引用集合（弱引用，避免内存泄漏） */
     private val activityReferences = mutableSetOf<WeakReference<Any>>()
@@ -67,14 +75,10 @@ object MusicManager {
         }
     }
 
-    /** binding 归零后延迟执行的真正解绑；期间若有 bind() 会被取消 */
-    private val deferredUnbind = Runnable {
-        val context = pendingUnbindContext
-        pendingUnbindContext = null
-        if (context == null) return@Runnable
-        cleanupInvalidReferences()
-        if (activityReferences.isNotEmpty()) return@Runnable
-        realUnbind(context)
+    /** 取消尚未执行的真解绑 */
+    private fun cancelPendingUnbind() {
+        pendingUnbind?.let { mainHandler.removeCallbacks(it) }
+        pendingUnbind = null
     }
 
     private fun realUnbind(context: Context) {
@@ -98,8 +102,7 @@ object MusicManager {
      */
     fun bind(context: Context): Boolean {
         // 取消上一次 unbind 延后的真解绑：recreate 的新实例接着绑上，服务实例得以存活
-        mainHandler.removeCallbacks(deferredUnbind)
-        pendingUnbindContext = null
+        cancelPendingUnbind()
 
         activityReferences.add(WeakReference(context))
         LogWriter.writeDiag(
@@ -143,9 +146,15 @@ object MusicManager {
         // 引用归零不立即解绑：recreate 场景下新 Activity 几十毫秒后就会 bind 回来，
         // 立即 unbindService 会让 AMS 销毁正在播放的服务实例。延后到空窗期结束再判一次。
         if (activityReferences.isEmpty()) {
-            pendingUnbindContext = context
-            mainHandler.removeCallbacks(deferredUnbind)
-            mainHandler.postDelayed(deferredUnbind, REAL_UNBIND_DELAY_MS)
+            cancelPendingUnbind()
+            val unbindTask = Runnable {
+                pendingUnbind = null
+                cleanupInvalidReferences()
+                if (activityReferences.isNotEmpty()) return@Runnable
+                realUnbind(context)
+            }
+            pendingUnbind = unbindTask
+            mainHandler.postDelayed(unbindTask, REAL_UNBIND_DELAY_MS)
         }
     }
 
@@ -175,11 +184,29 @@ object MusicManager {
     }
 
     /**
+     * MusicService.onDestroy 的自报死亡入口。
+     *
+     * 系统只在宿主进程异常时回调 serviceConnection.onServiceDisconnected；服务被后台
+     * 策略回收或真解绑后销毁时不会通知客户端，于是 Activity 仍持有播放器已 release、
+     * 线程池已 shutdown 的死实例，点击播放按钮即在主线程抛 RejectedExecutionException。
+     *
+     * 按实例比对：recreate 空窗期旧实例的 onDestroy 可能晚于新实例 onServiceConnected，
+     * 不能误清新引用。isBound 交给框架的回调维护，此处不代改。
+     */
+    fun onServiceDestroyed(service: MusicService) {
+        if (musicService !== service) {
+            return
+        }
+        musicService = null
+        LogWriter.writeDiag(TAG, "onServiceDestroyed: 清除死实例 ${service.hashCode()}")
+        notifyServiceDisconnected()
+    }
+
+    /**
      * 强制清理所有状态（用于进程恢复场景）
      */
     fun forceCleanup() {
-        mainHandler.removeCallbacks(deferredUnbind)
-        pendingUnbindContext = null
+        cancelPendingUnbind()
         activityReferences.clear()
         connectionCallbacks.clear()
         isBound = false
