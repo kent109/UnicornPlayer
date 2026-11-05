@@ -29,7 +29,9 @@ import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongMultiChoiceFragment
 import com.unicorn.player.util.AudioTagEditor
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.ScrollToTopHelper
+import com.unicorn.player.util.SongDragReorderHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +50,7 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener,
     private lateinit var binding: ActivityAlbumSongsBinding
     private lateinit var songAdapter: SongAdapter
     private lateinit var songInfoHelper: SongInfoHelper
+    private lateinit var dragHelper: SongDragReorderHelper
 
     private val writePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -123,6 +126,10 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener,
 
     override fun onResume() {
         super.onResume()
+        // 回本页时重算一次顺序：排序方式或自定义排序开关可能在别处被改过，
+        // 而 allSongs 的值没变，观察者不会再投递
+        viewModel.syncSortModeFromPrefs()
+        submitAlbumSongs(viewModel.allSongs.value ?: emptyList())
         // 重新注册观察者（onPause 中已移除），LiveData 会立即把当前值投递给新观察者，
         // 触发 notifyDataSetChanged()，刷新高亮与动画，使列表与当前播放歌曲一致。
         observeMusicService()
@@ -154,6 +161,7 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener,
 
     override fun onDestroy() {
         super.onDestroy()
+        dragHelper.release()
         songAdapter.stopCurrentSongAnimation()
         // 确保底部播放栏观察者被清理（服务未断开时 onPause 已处理）
         bottomPlayerController.removeObservers()
@@ -184,11 +192,16 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener,
         val filtered = songs.filter {
             it.album.equals(albumName, ignoreCase = true)
         }
-        val sorted = viewModel.sortWithCurrentMode(filtered)
+        val sorted = viewModel.sortWithCurrentMode(filtered, CustomSortStore.albumScope(albumName))
 
         albumSongs = sorted
-        songAdapter.submitList(sorted)
+        dragHelper.submit(sorted)
         updateSongCount(sorted.size)
+        // 该专辑的歌删空后（曲库还有别的歌），它的自定义顺序不再有用；
+        // 曲库列表尚未加载完时 songs 为空，不能据此清除，否则重进页面会丢掉刚拖好的顺序
+        if (songs.isNotEmpty() && sorted.isEmpty()) {
+            CustomSortStore.clearScope(this, CustomSortStore.albumScope(albumName))
+        }
     }
 
     private fun updateSongCount(count: Int) {
@@ -204,6 +217,17 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener,
             adapter = songAdapter
             songAdapter.setRecyclerView(this)
         }
+        dragHelper = SongDragReorderHelper(
+            recyclerView = binding.recyclerView,
+            adapter = songAdapter,
+            scopeProvider = { CustomSortStore.albumScope(albumName) },
+            canDrag = { viewModel.isCustomSortEnabled() && !isMultiChoiceActive() },
+            serviceProvider = { musicService },
+            onOrderChanged = { scope, songs ->
+                albumSongs = songs
+                viewModel.saveCustomOrder(scope, songs.map { it.path })
+            }
+        ).apply { attach() }
     }
 
     private fun setupSmartRefreshLayout() {

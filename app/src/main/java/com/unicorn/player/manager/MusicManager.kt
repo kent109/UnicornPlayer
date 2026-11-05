@@ -60,7 +60,14 @@ object MusicManager {
     /** 服务连接回调集合：Activity 可注册回调以在服务连接/断开时收到通知 */
     private val connectionCallbacks = mutableSetOf<WeakReference<ConnectionCallback>>()
 
-    private val serviceConnection = object : ServiceConnection {
+    /**
+     * 当前的连接对象。必须在"服务实例死亡/真解绑"后换成新对象：
+     * ActivityThread 按 ServiceConnection 复用 ServiceDispatcher，旧对象绑在已销毁的
+     * Activity 上下文上，再 bindService 也只会复用那条已废的记录，收不到 onServiceConnected。
+     */
+    private var serviceConnection = newConnection()
+
+    private fun newConnection(): ServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as MusicService.MusicBinder
             musicService = binder.getService()
@@ -92,6 +99,7 @@ object MusicManager {
         }
         musicService = null
         isServiceStarted = false
+        serviceConnection = newConnection()
         LogWriter.writeDiag(TAG, "realUnbind: 服务 binding 已释放")
     }
 
@@ -191,13 +199,19 @@ object MusicManager {
      * 线程池已 shutdown 的死实例，点击播放按钮即在主线程抛 RejectedExecutionException。
      *
      * 按实例比对：recreate 空窗期旧实例的 onDestroy 可能晚于新实例 onServiceConnected，
-     * 不能误清新引用。isBound 交给框架的回调维护，此处不代改。
+     * 不能误清新引用。
+     *
+     * isBound 必须跟着一起订废：划掉最近任务后服务随旧 Activity 的 binding 一起被框架清除，
+     * 之后服务被 startService 重建时框架不会再给这个 connection 派发 onServiceConnected（真机实测）。
+     * 留着 true 会让 bind() 跳过 bindService，Activity 永远拿不到新实例，底部播放条空白。
      */
     fun onServiceDestroyed(service: MusicService) {
         if (musicService !== service) {
             return
         }
         musicService = null
+        isBound = false
+        serviceConnection = newConnection()
         LogWriter.writeDiag(TAG, "onServiceDestroyed: 清除死实例 ${service.hashCode()}")
         notifyServiceDisconnected()
     }

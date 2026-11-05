@@ -25,7 +25,9 @@ import com.unicorn.player.service.PlaySource
 import com.unicorn.player.ui.SelectSongsDialog
 import com.unicorn.player.ui.SongMultiChoiceFragment
 import com.unicorn.player.util.AudioTagEditor
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.ScrollToTopHelper
+import com.unicorn.player.util.SongDragReorderHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import com.unicorn.player.viewmodel.PlaylistViewModel
@@ -44,6 +46,7 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
     private lateinit var binding: ActivityPlaylistSongsBinding
     private lateinit var songAdapter: SongAdapter
     private lateinit var songInfoHelper: SongInfoHelper
+    private lateinit var dragHelper: SongDragReorderHelper
 
     private val writePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -57,6 +60,9 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
 
     // 当前歌单的歌曲列表（排序后），用于播放时设置给 MusicService
     private var playlistSongs: List<Song> = emptyList()
+
+    /** 本页实例是否已见过非空歌曲列表；Room Flow 落库前会先投一个空列表，不能拿它当"歌单被删空" */
+    private var hasSeenPlaylistSongs = false
 
     // 服务观察者
     private var currentSongObserver: Observer<Song?>? = null
@@ -191,6 +197,10 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
 
     override fun onResume() {
         super.onResume()
+        // 回本页时重算一次顺序：排序方式或自定义排序开关可能在别处改过，
+        // 而 playlistSongs 的值没变，观察者不会再投递
+        viewModel.syncSortModeFromPrefs()
+        viewModel.playlistSongs.value?.let { submitPlaylistSongs(it) }
         observeMusicService()
         val newCassetteMode = ThemeSettingActivity.resolveIconMode(this) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
         if (songAdapter.isCassetteMode != newCassetteMode) {
@@ -219,6 +229,7 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
 
     override fun onDestroy() {
         super.onDestroy()
+        dragHelper.release()
         songAdapter.stopCurrentSongAnimation()
         bottomPlayerController.removeObservers()
         // 注销服务连接回调并解绑
@@ -249,13 +260,23 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
     }
 
     private fun submitPlaylistSongs(songs: List<Song>) {
-        // 展示顺序跟随主界面 ivSort 所选排序模式
-        val sorted = viewModel.sortWithCurrentMode(songs)
+        // 展示顺序跟随主界面 ivSort 所选排序模式；处于自定义排序时用本歌单的拖动顺序
+        val scope = CustomSortStore.playlistScope(playlistId)
+        val sorted = viewModel.sortWithCurrentMode(songs, scope)
         playlistSongs = sorted
-        songAdapter.submitList(sorted)
+        dragHelper.submit(sorted)
         updateSongCount(sorted.size)
 
         multiChoiceView?.visibility = if (playlistSongs.isEmpty()) View.GONE else View.VISIBLE
+
+        // 歌单删空后，它的自定义顺序不再有用。进页面时 Room 加载完成前 observer 会先收到
+        // 一次空列表（真机栈已证实），只有确实见过非空列表后再变空才允许清记录，
+        // 否则重进页面会在数据到达前把刚拖好的顺序抹掉
+        if (sorted.isNotEmpty()) {
+            hasSeenPlaylistSongs = true
+        } else if (hasSeenPlaylistSongs) {
+            CustomSortStore.clearScope(this, scope)
+        }
 
         // 歌曲数量、排序等发生变化时，只有当前正在播放此歌单才同步播放列表
         if (musicService != null) {
@@ -276,6 +297,18 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
             adapter = songAdapter
             songAdapter.setRecyclerView(this)
         }
+        dragHelper = SongDragReorderHelper(
+            recyclerView = binding.recyclerView,
+            adapter = songAdapter,
+            scopeProvider = { CustomSortStore.playlistScope(playlistId) },
+            canDrag = { viewModel.isCustomSortEnabled() && !isMultiChoiceActive() },
+            serviceProvider = { musicService },
+            onOrderChanged = { scope, songs ->
+                playlistSongs = songs
+                viewModel.saveCustomOrder(scope, songs.map { it.path })
+                // 播放队列由 helper 在当前来源匹配时统一同步，这里不再调 syncPlaylistSongList
+            }
+        ).apply { attach() }
     }
 
     private fun setupSmartRefreshLayout() {

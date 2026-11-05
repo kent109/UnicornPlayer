@@ -52,6 +52,9 @@ open class SongMultiChoiceBaseActivity : BaseActivity(),
         showDeleteConfirmDialog(playlistId, selectedSongIds)
     }
 
+    /** 多选面板是否正覆盖列表：期间禁用长按拖动排序，避免与多选勾选互相干扰 */
+    protected fun isMultiChoiceActive(): Boolean = songMultiChoiceFragment != null
+
     private fun updateServiceSongList() {
         // 当前播放来源不是 f0 时，不覆盖播放列表
         val currentSong = musicService?.currentSong?.value

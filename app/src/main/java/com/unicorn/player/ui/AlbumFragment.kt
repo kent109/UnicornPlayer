@@ -28,6 +28,7 @@ import com.unicorn.player.model.Cover
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.ui.SongsFragment.SongListHost
 import com.unicorn.player.util.CoverStore
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.ImagePicker
 import com.unicorn.player.util.PlayHelper
 import com.unicorn.player.util.PlaylistHelper
@@ -340,7 +341,8 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
                 // 从全量歌曲列表中过滤并排序，确保与当前排序模式一致
                 val allSongs = viewModel.allSongs.value ?: emptyList()
                 val albumSongs = allSongs.filter { it.album.equals(album.name, ignoreCase = true) }
-                val sortedAlbumSongs = viewModel.sortWithCurrentMode(albumSongs)
+                val sortedAlbumSongs =
+                    viewModel.sortWithCurrentMode(albumSongs, CustomSortStore.albumScope(album.name))
 
                 PlayHelper.playAlbum(
                     context = requireContext(),

@@ -29,6 +29,7 @@ import com.unicorn.player.databinding.FragmentPlaylistBinding
 import com.unicorn.player.model.Cover
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.util.CoverStore
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.ImagePicker
 import com.unicorn.player.util.PlayHelper
 import com.unicorn.player.util.PlaylistFileManager
@@ -727,8 +728,9 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         position: Int
     ) {
         val service = (activity as? MainActivity)?.musicService
-        // 按当前排序模式对歌单歌曲排序
-        val sortedSongs = musicViewModel.sortWithCurrentMode(playlist.songList)
+        // 按当前排序模式对歌单歌曲排序；处于自定义排序时用本歌单的拖动顺序
+        val sortedSongs =
+            musicViewModel.sortWithCurrentMode(playlist.songList, CustomSortStore.playlistScope(playlist.id))
 
         PlayHelper.playPlaylist(
             context = requireContext(),

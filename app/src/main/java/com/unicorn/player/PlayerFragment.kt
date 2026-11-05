@@ -36,6 +36,7 @@ import com.unicorn.player.ui.EmptyPlaylistActionDialog
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.util.AudioTagEditor
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.ScreenCornerUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -445,6 +446,7 @@ class PlayerFragment : Fragment() {
             .getOrElse(savedOrdinal) { MusicService.Companion.SortMode.BY_TITLE }
         val checkColor = ThemeSettingActivity.resolveHighlightColor(requireContext())
         val normalColor = ContextCompat.getColor(requireContext(), R.color.text_primary)
+        val customEnabled = CustomSortStore.isEnabled(requireContext())
 
         fun setupSortItem(textView: TextView, isSelected: Boolean) {
             textView.setTextColor(if (isSelected) checkColor else normalColor)
@@ -456,9 +458,20 @@ class PlayerFragment : Fragment() {
             }
         }
 
-        setupSortItem(sortBinding.tvSortByTime, currentMode == MusicService.Companion.SortMode.BY_TIME)
-        setupSortItem(sortBinding.tvSortByTitle, currentMode == MusicService.Companion.SortMode.BY_TITLE)
-        setupSortItem(sortBinding.tvSortByArtist, currentMode == MusicService.Companion.SortMode.BY_ARTIST)
+        // 与首页排序弹窗一致：处于自定义排序时前三种不显示对钩
+        setupSortItem(
+            sortBinding.tvSortByTime,
+            !customEnabled && currentMode == MusicService.Companion.SortMode.BY_TIME
+        )
+        setupSortItem(
+            sortBinding.tvSortByTitle,
+            !customEnabled && currentMode == MusicService.Companion.SortMode.BY_TITLE
+        )
+        setupSortItem(
+            sortBinding.tvSortByArtist,
+            !customEnabled && currentMode == MusicService.Companion.SortMode.BY_ARTIST
+        )
+        setupSortItem(sortBinding.tvSortCustom, customEnabled)
 
         sortBinding.tvSortByTime.setOnClickListener {
             applySortMode(MusicService.Companion.SortMode.BY_TIME)
@@ -470,6 +483,10 @@ class PlayerFragment : Fragment() {
         }
         sortBinding.tvSortByArtist.setOnClickListener {
             applySortMode(MusicService.Companion.SortMode.BY_ARTIST)
+            bottomSheetDialog.dismiss()
+        }
+        sortBinding.tvSortCustom.setOnClickListener {
+            applyCustomSort()
             bottomSheetDialog.dismiss()
         }
 
@@ -512,15 +529,43 @@ class PlayerFragment : Fragment() {
      * 3. 刷新播放页 ViewPager 的页面顺序
      */
     private fun applySortMode(mode: MusicService.Companion.SortMode) {
-        val service = getService() ?: return
         requireContext().getSharedPreferences(SORT_PREFS_NAME, Context.MODE_PRIVATE)
             .edit(commit = true) {
                 putInt(SORT_MODE_KEY, mode.ordinal)
             }
+        // 从队列弹窗选回基础排序方式同样算"退出自定义排序"：
+        // 关掉开关并清掉各来源拖动过的顺序，保持和首页入口一致
+        if (CustomSortStore.isEnabled(requireContext())) {
+            CustomSortStore.setEnabled(requireContext(), false)
+            CustomSortStore.clearAll(requireContext())
+        }
+        resortQueue(mode)
+    }
 
-        val list = service.getSongList()
+    /**
+     * 选择"自定义排序"：只打开叠加开关，基准仍是当前排序方式，
+     * 队列按当前播放来源拖动过的顺序重排；该来源没拖动过则顺序不变。
+     */
+    private fun applyCustomSort() {
+        CustomSortStore.setEnabled(requireContext(), true)
+        val prefs = requireContext().getSharedPreferences(SORT_PREFS_NAME, Context.MODE_PRIVATE)
+        val mode = MusicService.Companion.SortMode.entries
+            .getOrElse(prefs.getInt(SORT_MODE_KEY, 0)) { MusicService.Companion.SortMode.BY_TITLE }
+        resortQueue(mode)
+    }
+
+    /**
+     * 按基准模式 + （开关打开时）本播放来源的拖动顺序重排当前队列，
+     * 正在播放的歌曲继续播，只把它挪到新位置
+     */
+    private fun resortQueue(mode: MusicService.Companion.SortMode) {
+        val service = getService() ?: return
+        val sorted = CustomSortStore.applyOrder(
+            requireContext(),
+            service.currentPlaySourceTag(),
+            MusicService.sortSongs(service.getSongList(), mode)
+        )
         val currentId = service.currentSong.value?.id
-        val sorted = MusicService.sortSongs(list, mode)
         val newIndex = sorted.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
         service.setSongList(sorted, newIndex)
 

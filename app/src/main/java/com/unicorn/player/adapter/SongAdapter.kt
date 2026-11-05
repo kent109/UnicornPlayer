@@ -70,6 +70,26 @@ class SongAdapter(
     }
 
     /**
+     * 是否还有未完成的后台 DiffUtil 计算。
+     *
+     * 拖动排序会就地修改提交给 ListAdapter 的那个列表实例（AsyncListDiffer 保存的就是
+     * 调用方传入的引用），diff 还在后台跑时改它会被读到中间状态。长按拖动前查这个标记，
+     * 有未落地的 diff 就放弃本次拖动手势。
+     */
+    var isDiffPending = false
+        private set
+
+    override fun submitList(list: List<Song>?) {
+        isDiffPending = true
+        super.submitList(list)
+    }
+
+    override fun onCurrentListChanged(previous: List<Song>, current: List<Song>) {
+        super.onCurrentListChanged(previous, current)
+        isDiffPending = false
+    }
+
+    /**
      * 注册不支持格式黑名单变化监听：黑名单更新（预检完成/播放错误累积）后重绑全部 item，
      * 刷新置灰状态。宿主在创建 adapter 后调用一次即可。
      */

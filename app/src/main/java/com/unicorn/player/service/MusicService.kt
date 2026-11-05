@@ -69,6 +69,7 @@ import com.unicorn.player.model.Cover
 import com.unicorn.player.model.Song
 import com.unicorn.player.playback.SongPlayableRegistry
 import com.unicorn.player.scanFiltersDataStore
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.PinyinUtil
 import io.github.eugenedibtsev.media3.ape.ApeSupport
@@ -218,6 +219,7 @@ class MusicService : Service() {
     fun setCurrentSong(song: Song) {
         val isSongChanged = _currentSong.value?.id != song.id
         _currentSong.value = song
+        hasOwnedCurrentSong = true
         // 仅在真正切歌时重置进度为 0，避免打开 PlayerActivity 时进度条从实际位置跳到 0
         if (isSongChanged) {
             _currentPosition.value = 0
@@ -617,6 +619,14 @@ class MusicService : Service() {
     // 标记loadPlaybackState是否已经被调用过
     private var isPlaybackStateLoaded = false
 
+    /**
+     * 本实例是否真的持有过歌曲（播过歌或被恢复出来过）。
+     * 与 isPlaybackStateLoaded 一起用来判断"当前歌曲为空"是否有资格清除 DataStore 里的记录：
+     * 组件被杀后重建的新服务在恢复完成前也是空歌曲，那只是尚未加载。
+     */
+    @Volatile
+    private var hasOwnedCurrentSong = false
+
     // 标记正在设置外部歌曲播放，防止 loadPlaybackState 覆盖外部歌曲
     @Volatile
     private var isSettingExternalSong = false
@@ -662,6 +672,12 @@ class MusicService : Service() {
         val (sourceType, _) = PlaySource.parse(playSourceTag)
         return sourceType == PlaySource.SONGS
     }
+
+    /**
+     * 当前播放来源标签（f0 / f1$name / f2$name / f3$id）。
+     * 自定义排序拖动结束后，用它判断该列表是否正是当前队列的来源。
+     */
+    fun currentPlaySourceTag(): String = playSourceTag
 
     /**
      * 删除歌单时，检查当前是否正在播放被删除的歌单。
@@ -1586,8 +1602,10 @@ class MusicService : Service() {
         val (sourceType, sourceName) = PlaySource.parse(playSourceTag)
         val belongsToSource = when (sourceType) {
             PlaySource.SONGS -> true
-            PlaySource.ARTIST -> currentSong.artist == sourceName
-            PlaySource.ALBUM -> currentSong.album == sourceName
+            // 曲库同名歌手/专辑可能混用大小写，标签里存的是点击时的原始写法，比较须忽略大小写，
+            // 否则显示名翻面后销毁校验会把还在播放的来源误重置为 f0
+            PlaySource.ARTIST -> currentSong.artist.equals(sourceName, ignoreCase = true)
+            PlaySource.ALBUM -> currentSong.album.equals(sourceName, ignoreCase = true)
             PlaySource.PLAYLIST -> {
                 val playlistId = sourceName.toLongOrNull()
                 if (playlistId != null) {
@@ -2599,7 +2617,7 @@ class MusicService : Service() {
                         val reverbToSave = Settings.reverbPreset.toInt()
                         preferences[DataStoreKeys.REVERB_PRESET] =
                             if (reverbToSave in 0..6) reverbToSave else 0
-                    } else {
+                    } else if (hasOwnedCurrentSong || isPlaybackStateLoaded) {
                         // 清除保存的状态（包括上次播放进度、播放入口标签）
                         preferences.remove(DataStoreKeys.CURRENT_SONG_ID)
                         preferences.remove(DataStoreKeys.SONG_TITLE)
@@ -2616,6 +2634,14 @@ class MusicService : Service() {
                         preferences.remove(DataStoreKeys.EQUALIZER_PRESET_POS)
                         preferences.remove(DataStoreKeys.BASS_STRENGTH)
                         preferences.remove(DataStoreKeys.REVERB_PRESET)
+                    } else {
+                        // 本实例没播过歌、也还没从 DataStore 恢复出记录：此时的"空当前歌"只是
+                        // 尚未加载，不是用户清掉了播放。落盘会把上一次的播放记录连同进度抹掉
+                        // （组件被杀后重建服务、恢复还没跑完就到达的保存正是这种）
+                        Log.d(
+                            TAG,
+                            "savePlaybackState: nothing owned and not loaded yet, keep saved record"
+                        )
                     }
                 }
             } catch (e: Exception) {
@@ -2948,7 +2974,12 @@ class MusicService : Service() {
                     // 来源作用域为空（f1/f2 下已无歌曲）→ 退化到全部歌曲
                     val finalSongs =
                         if (scoped.isEmpty() && sourceType != PlaySource.SONGS) songsFromDb else scoped
-                    val songs = sortSongs(finalSongs, sortMode)
+                    // 与来源页面的展示顺序保持一致：自定义排序开启时用该来源拖动过的顺序
+                    val songs = CustomSortStore.applyOrder(
+                        this@MusicService,
+                        PlaySource.build(sourceType, sourceName),
+                        sortSongs(finalSongs, sortMode)
+                    )
 
                     // 以当前实际播放的歌曲定位 startIndex（currentSong 真值优先）。
                     // 恢复入参 songId 只是回退值：DB 查询期间 playNext 可能已切到下一首，

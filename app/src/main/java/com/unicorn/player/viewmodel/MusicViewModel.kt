@@ -20,6 +20,7 @@ import com.unicorn.player.service.DataStoreKeys
 import com.unicorn.player.service.PlaySource
 import com.unicorn.player.service.PlaySourceManager
 import com.unicorn.player.service.applicationDataStore
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.PinyinUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -159,7 +160,7 @@ class MusicViewModel(
         hiddenRegistryObserver = androidx.lifecycle.Observer { paths ->
             if (rawSongs.isEmpty()) return@Observer
             val visible = rawSongs.filter { it.path !in paths }
-            val sorted = sortSongsInternal(visible, _sortMode.value ?: SortMode.BY_TIME)
+            val sorted = sortForScope(visible, _sortMode.value ?: SortMode.BY_TIME, PlaySource.SONGS)
             _allSongs.postValue(sorted)
             _fullSongs.postValue(sorted)
             // 同步过滤歌单歌曲列表，使歌单页面也响应隐藏/恢复操作
@@ -224,13 +225,29 @@ class MusicViewModel(
     }
 
     /**
+     * 上一次算出全部歌曲列表时所处的自定义排序状态。
+     * 播放页队列弹窗不经过本 ViewModel，直接改 prefs；跨页面回到主界面时靠比对它，
+     * 才能发现开关已被别处改动、列表需要重排。
+     */
+    private var customSortEnabledAtLastEmit: Boolean = CustomSortStore.isEnabled(context)
+
+    /**
      * 过滤隐藏歌曲并按当前排序模式排序（共用逻辑）
+     *
+     * 全部歌曲列表同时是播放来源 f0 的列表，因此这里叠加 f0 的自定义拖动顺序。
      */
     private fun applyHiddenAndSort(songs: List<Song>): List<Song> {
         val hidden = HiddenSongRegistry.currentPaths()
         val visible = songs.filter { it.path !in hidden }
-        return sortSongsInternal(visible, _sortMode.value ?: SortMode.BY_TIME)
+        customSortEnabledAtLastEmit = CustomSortStore.isEnabled(context)
+        return sortForScope(visible, _sortMode.value ?: SortMode.BY_TIME, PlaySource.SONGS)
     }
+
+    /**
+     * 在基准排序之上叠加某个播放来源的自定义拖动顺序
+     */
+    private fun sortForScope(songs: List<Song>, mode: SortMode, scope: String): List<Song> =
+        CustomSortStore.applyOrder(context, scope, sortSongsInternal(songs, mode))
 
     /**
      * 同步保存排序模式到 SharedPreferences，确保杀进程时也不丢失
@@ -256,6 +273,10 @@ class MusicViewModel(
                 cleanupRemovedSongs(songs)
                 rawSongs = songs
                 val sorted = applyHiddenAndSort(songs)
+                // 曲库真的空了（不是全被隐藏）才算"全部歌曲"这个来源没有歌，清掉它的拖动顺序
+                if (songs.isEmpty()) {
+                    CustomSortStore.clearScope(context, PlaySource.SONGS)
+                }
                 _allSongs.postValue(sorted)
                 _fullSongs.postValue(sorted)
                 // 首次发射后标记已加载，避免启动时 emptyView 闪现
@@ -543,12 +564,79 @@ class MusicViewModel(
     }
 
     /**
-     * 按当前全局排序模式排序任意歌曲列表（供歌手/专辑/歌单详情页展示用），
-     * 让详情页歌曲的展示顺序与主界面 ivSort 所选模式保持一致。
+     * 用户在排序菜单里主动选择某个基础排序方式：退出自定义排序并清除全部来源的拖动顺序。
+     *
+     * 与 [sortSongs] 分开，是因为跨页面同步排序（onResume 读 prefs）也走 sortSongs，
+     * 那种场景只是恢复既有状态，不能顺手把用户拖动出来的顺序清掉。
      */
-    fun sortWithCurrentMode(songs: List<Song>): List<Song> {
+    fun selectBaseSortMode(mode: SortMode) {
+        if (CustomSortStore.isEnabled(context)) {
+            CustomSortStore.setEnabled(context, false)
+            CustomSortStore.clearAll(context)
+        }
+        sortSongs(mode)
+    }
+
+    /** 当前是否处于自定义排序（列表据此决定是否允许长按拖动） */
+    fun isCustomSortEnabled(): Boolean = CustomSortStore.isEnabled(context)
+
+    /** 列表当前展示的顺序是否已和持久化的自定义排序开关脱节，需要在恢复界面时重排 */
+    fun isCustomSortStateChanged(): Boolean =
+        customSortEnabledAtLastEmit != CustomSortStore.isEnabled(context)
+
+    /**
+     * 从 SharedPreferences 重新读取排序模式（不回写）。
+     * 每个界面各自持有 ViewModel，模式是启动时从 prefs 取的；首页排序弹窗与播放页队列弹窗
+     * 会直接改 prefs，详情页恢复显示时先同步再重排，避免用内存里的旧模式排版。
+     */
+    fun syncSortModeFromPrefs() {
+        try {
+            val prefs = context.getSharedPreferences("sort_mode_prefs", Context.MODE_PRIVATE)
+            val savedMode = SortMode.entries
+                .getOrElse(prefs.getInt("sort_mode", 0)) { SortMode.BY_TITLE }
+            if (_sortMode.value != savedMode) {
+                _sortMode.value = savedMode
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * 选择"自定义排序"：只打开叠加开关，基准顺序仍是当前的 sort_mode，
+     * 因此没拖动过就完全保持当前列表顺序。
+     */
+    fun setCustomSortEnabled(enabled: Boolean) {
+        if (CustomSortStore.isEnabled(context) == enabled) return
+        CustomSortStore.setEnabled(context, enabled)
+        val base = rawSongs.ifEmpty { _fullSongs.value ?: _allSongs.value ?: emptyList() }
+        val sorted = applyHiddenAndSort(base)
+        _allSongs.value = sorted
+        _fullSongs.value = sorted
+    }
+
+    /**
+     * 保存某个播放来源的拖动顺序，并让全部歌曲列表（f0）重新 emit。
+     * 其他来源的列表由各自页面用内存中的新顺序直接刷新。
+     */
+    fun saveCustomOrder(scope: String, paths: List<String>) {
+        CustomSortStore.saveOrder(context, scope, paths)
+        if (scope == PlaySource.SONGS) {
+            val base = rawSongs.ifEmpty { _fullSongs.value ?: _allSongs.value ?: emptyList() }
+            val sorted = applyHiddenAndSort(base)
+            _allSongs.value = sorted
+            _fullSongs.value = sorted
+        }
+    }
+
+    /**
+     * 按指定模式排序任意歌曲列表。
+     * scope 为该列表对应的播放来源标签（见 CustomSortStore）；处于自定义排序且有
+     * 拖动记录时以拖动顺序为准，否则回落到当前排序模式。
+     */
+    fun sortWithCurrentMode(songs: List<Song>, scope: String): List<Song> {
         val mode = _sortMode.value ?: SortMode.BY_TITLE
-        return sortSongsInternal(songs, mode)
+        return sortForScope(songs, mode, scope)
     }
 
     /**
@@ -557,7 +645,7 @@ class MusicViewModel(
     fun getSortedFullSongs(): List<Song> {
         val fullSongs = _fullSongs.value ?: return emptyList()
         val mode = _sortMode.value ?: SortMode.BY_TIME
-        return sortSongsInternal(fullSongs, mode)
+        return sortForScope(fullSongs, mode, PlaySource.SONGS)
     }
 
     /**

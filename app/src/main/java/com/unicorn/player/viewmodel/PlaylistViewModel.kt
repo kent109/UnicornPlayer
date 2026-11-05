@@ -17,6 +17,7 @@ import com.unicorn.player.service.PlaySource
 import com.unicorn.player.service.PlaySourceManager
 import com.unicorn.player.service.applicationDataStore
 import com.unicorn.player.ui.PlaylistRefresher
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.PlaylistFileManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -267,6 +268,11 @@ class PlaylistViewModel(
         viewModelScope.launch {
             try {
                 repository.deletePlaylistById(id)
+                // 歌单本身没了，它那份拖动顺序也一并清掉
+                CustomSortStore.clearScope(
+                    getApplication(),
+                    CustomSortStore.playlistScope(id)
+                )
                 onPlaylistDeleted?.invoke(id)
                 val currentId = _currentPlayingPlaylistId.value
                 if (currentId == id) {
@@ -425,7 +431,11 @@ class PlaylistViewModel(
                     val songs = repository.getPlaylistSongs(id).first()
                     val ownFileName = PlaylistFileManager.fileNameForPlaylist(id)
                     val conflicts = parsed.filter { isConflictFile(it, playlist) }
-                    var paths: List<String> = songs.map { it.path }
+                    // 导出按界面上看到的顺序（自定义排序时即拖动顺序），
+                    // 否则导入回来后只能按曲库默认排序还原
+                    var paths: List<String> = CustomSortStore
+                        .applyOrder(app, CustomSortStore.playlistScope(id), songs)
+                        .map { it.path }
                     if (mergeConflicts && conflicts.isNotEmpty()) {
                         // 合并：当前歌单路径 + 旧导出文件路径取并集
                         val oldPaths = conflicts.flatMap { it.data.songs }
@@ -559,6 +569,15 @@ class PlaylistViewModel(
                                 // 实际有新增才刷新更新时间
                                 repository.touchPlaylist(targetId)
                             }
+                            // 导入以歌单文件自身的顺序为准：把文件里的路径顺序（过滤掉
+                            // 曲库中已不存在的）落成该歌单的自定义顺序
+                            val matchedPaths = matched.map { it.path }.toSet()
+                            val orderedPaths = distinctPaths.filter { it in matchedPaths }
+                            CustomSortStore.saveOrder(
+                                app,
+                                CustomSortStore.playlistScope(targetId),
+                                orderedPaths
+                            )
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()

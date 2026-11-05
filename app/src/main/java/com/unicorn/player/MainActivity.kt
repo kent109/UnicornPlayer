@@ -700,47 +700,62 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         val tvSortByTime = popupView.findViewById<android.widget.TextView>(R.id.tvSortByTime)
         val tvSortByTitle = popupView.findViewById<android.widget.TextView>(R.id.tvSortByTitle)
         val tvSortByArtist = popupView.findViewById<android.widget.TextView>(R.id.tvSortByArtist)
+        val tvSortCustom = popupView.findViewById<android.widget.TextView>(R.id.tvSortCustom)
 
         // 根据当前排序模式显示钩号
         val currentSortMode = viewModel.sortMode.value
+        val customEnabled = viewModel.isCustomSortEnabled()
         val checkColor = ThemeSettingActivity.resolveHighlightColor(this)
         val normalTextColor = ContextCompat.getColor(this, R.color.text_primary)
 
         setupSortItem(
             tvSortByTime,
-            currentSortMode == MusicViewModel.SortMode.BY_TIME,
+            !customEnabled && currentSortMode == MusicViewModel.SortMode.BY_TIME,
             checkColor,
             normalTextColor
         )
         setupSortItem(
             tvSortByTitle,
-            currentSortMode == MusicViewModel.SortMode.BY_TITLE,
+            !customEnabled && currentSortMode == MusicViewModel.SortMode.BY_TITLE,
             checkColor,
             normalTextColor
         )
         setupSortItem(
             tvSortByArtist,
-            currentSortMode == MusicViewModel.SortMode.BY_ARTIST,
+            !customEnabled && currentSortMode == MusicViewModel.SortMode.BY_ARTIST,
+            checkColor,
+            normalTextColor
+        )
+        setupSortItem(
+            tvSortCustom,
+            customEnabled,
             checkColor,
             normalTextColor
         )
 
         // 点击排序选项
         tvSortByTime.setOnClickListener {
-            viewModel.sortSongs(MusicViewModel.SortMode.BY_TIME)
+            viewModel.selectBaseSortMode(MusicViewModel.SortMode.BY_TIME)
             updateServiceSongList()
             sortPopup?.dismiss()
             sortPopup = null
         }
         tvSortByTitle.setOnClickListener {
-            viewModel.sortSongs(MusicViewModel.SortMode.BY_TITLE)
+            viewModel.selectBaseSortMode(MusicViewModel.SortMode.BY_TITLE)
             updateServiceSongList()
             sortPopup?.dismiss()
             sortPopup = null
         }
         tvSortByArtist.setOnClickListener {
-            viewModel.sortSongs(MusicViewModel.SortMode.BY_ARTIST)
+            viewModel.selectBaseSortMode(MusicViewModel.SortMode.BY_ARTIST)
             updateServiceSongList()
+            sortPopup?.dismiss()
+            sortPopup = null
+        }
+        // 自定义排序：只在当前排序方式上叠加拖动顺序，没拖动过列表顺序不变，
+        // 因此这里不能像切换排序那样重设播放队列
+        tvSortCustom.setOnClickListener {
+            viewModel.setCustomSortEnabled(true)
             sortPopup?.dismiss()
             sortPopup = null
         }
@@ -1317,6 +1332,13 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     // ==================== SongListHost 接口实现 ====================
     // 由 SongsFragment 转发的歌曲点击事件
 
+    /**
+     * 搜索框有输入内容时，歌曲列表是全量列表的子集；
+     * 此时禁用长按拖动排序，避免把子集顺序当成全量顺序写回自定义排序记录。
+     */
+    override fun isSearchActive(): Boolean =
+        binding.searchView.query?.toString()?.isNotBlank() == true
+
     override fun onSongClick(song: Song, position: Int) {
         // 使用 fullSongs（完整列表）而不是 allSongs（可能是搜索结果）
         // 这样播放完成自动播放下一首时，会按照完整列表的顺序播放
@@ -1405,7 +1427,10 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             val savedOrdinal = prefs.getInt("sort_mode", 0)
             val savedMode = MusicViewModel.SortMode.entries
                 .getOrElse(savedOrdinal) { MusicViewModel.SortMode.BY_TITLE }
-            if (viewModel.sortMode.value != savedMode) {
+            if (viewModel.sortMode.value != savedMode ||
+                viewModel.isCustomSortStateChanged()
+            ) {
+                // 自定义排序开关以 prefs 为准：播放页队列弹窗可能已把它关掉并清空了顺序
                 viewModel.sortSongs(savedMode)
                 updateServiceSongList()
             }

@@ -84,7 +84,8 @@ class AlbumAdapter(
                 tvAlbumName.text = album.name
                 tvAlbumSubtitle.text = "${album.artist} - ${album.songCount} 首"
 
-                val isPlaying = album.name == currentPlayingAlbum
+                // 同 ArtistAdapter：显示名取首次出现的原始大小写，与来源标签比较必须忽略大小写
+                val isPlaying = album.name.equals(currentPlayingAlbum, ignoreCase = true)
                 CoverImage.bind(
                     ivAlbumIcon, album.coverPath, isPlaying, R.drawable.album_icon,
                     imageInsetDp = 6

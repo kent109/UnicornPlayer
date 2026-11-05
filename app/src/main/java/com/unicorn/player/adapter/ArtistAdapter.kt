@@ -53,7 +53,10 @@ class ArtistAdapter(
                 tvArtistName.text = artist.name
                 tvSongCount.text = "${artist.songCount} 首"
 
-                val isPlaying = artist.name == currentPlayingArtist
+                // 曲库里同名歌手可能混用大小写（如 Beyond/BEYOND），网格显示名取"首次出现的
+                // 原始写法"，列表顺序一变显示名就会翻面；来源标签存的还是当初点击时的写法，
+                // 高亮比较必须忽略大小写，否则显示名翻面后高亮永远匹配不上
+                val isPlaying = artist.name.equals(currentPlayingArtist, ignoreCase = true)
                 CoverImage.bind(
                     ivArtistIcon, artist.coverPath, isPlaying, R.drawable.artist_icon,
                     imageInsetDp = 6

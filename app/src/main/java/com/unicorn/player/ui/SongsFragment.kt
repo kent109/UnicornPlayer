@@ -18,6 +18,8 @@ import com.unicorn.player.databinding.FragmentSongsBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
+import com.unicorn.player.util.CustomSortStore
+import com.unicorn.player.util.SongDragReorderHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import com.unicorn.player.widget.CustomRadarHeader
@@ -34,6 +36,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
 
     private lateinit var viewModel: MusicViewModel
     private lateinit var songAdapter: SongAdapter
+    private lateinit var dragHelper: SongDragReorderHelper
 
     private var host: SongListHost? = null
 
@@ -70,6 +73,11 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
          * 扫描完成回调，empty=true 表示扫描结果为空
          */
         fun onScanCompleted(empty: Boolean) {}
+
+        /**
+         * 搜索框是否处于输入状态：搜索结果是全量列表的子集，此时不允许拖动排序
+         */
+        fun isSearchActive(): Boolean = false
     }
 
     override fun onAttach(context: android.content.Context) {
@@ -126,6 +134,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
 
     override fun onDestroyView() {
         super.onDestroyView()
+        dragHelper.release()
         songAdapter.stopCurrentSongAnimation()
         recyclerView = null
         hideHandler.removeCallbacksAndMessages(null)
@@ -220,7 +229,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         }
 
         viewModel.allSongs.observe(viewLifecycleOwner) { songs ->
-            songAdapter.submitList(songs)
+            dragHelper.submit(songs)
             updateSongCount(songs.size)
             // 数据加载完成后，才根据列表是否为空切换 emptyView，避免启动时闪现
             if (!hasLoaded) return@observe
@@ -253,6 +262,16 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
             adapter = concatAdapter
             songAdapter.setRecyclerView(this@apply)
         }
+        // 自定义排序模式下的长按拖动排序；列表是 ConcatAdapter（顶部占位 + 歌曲），
+        // helper 内部按 SongAdapter 的局部位置重排数据，ItemTouchHelper 负责整表的移动通知
+        dragHelper = SongDragReorderHelper(
+            recyclerView = binding.recyclerView,
+            adapter = songAdapter,
+            scopeProvider = { CustomSortStore.allSongsScope() },
+            canDrag = { viewModel.isCustomSortEnabled() && host?.isSearchActive() != true },
+            serviceProvider = { host?.musicService },
+            onOrderChanged = { scope, songs -> viewModel.saveCustomOrder(scope, songs.map { it.path }) }
+        ).apply { attach() }
         // "立即扫描"按钮点击
         binding.tvScan.setOnClickListener { startScan() }
     }

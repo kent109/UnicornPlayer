@@ -27,6 +27,7 @@ import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.ui.SongsFragment.SongListHost
 import com.unicorn.player.util.CoverStore
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.ImagePicker
 import com.unicorn.player.util.PinyinUtil
 import com.unicorn.player.util.PlayHelper
@@ -291,7 +292,8 @@ class ArtistFragment : Fragment(), ArtistAdapter.OnArtistClickListener {
                 val allSongs = viewModel.allSongs.value ?: emptyList()
                 val artistSongs =
                     allSongs.filter { it.artist.equals(artist.name, ignoreCase = true) }
-                val sortedArtistSongs = viewModel.sortWithCurrentMode(artistSongs)
+                val sortedArtistSongs =
+                    viewModel.sortWithCurrentMode(artistSongs, CustomSortStore.artistScope(artist.name))
 
                 PlayHelper.playArtist(
                     context = requireContext(),

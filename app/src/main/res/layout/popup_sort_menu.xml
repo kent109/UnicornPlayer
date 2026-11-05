@@ -59,7 +59,7 @@
         android:id="@+id/tvSortByArtist"
         android:layout_width="match_parent"
         android:layout_height="48dp"
-        android:background="@drawable/bg_popup_item_last"
+        android:background="?attr/selectableItemBackground"
         android:drawablePadding="12dp"
         android:gravity="center_vertical"
         android:paddingStart="16dp"
@@ -67,6 +67,30 @@
         android:paddingEnd="16dp"
         android:paddingBottom="10dp"
         android:text="按歌手首字母"
+        android:textColor="@color/text_primary"
+        android:textSize="16sp" />
+
+    <!-- 分隔线 -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0.8dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:background="@color/divider_color" />
+
+    <!-- 自定义排序（在当前排序方式上叠加长按拖动顺序） -->
+    <TextView
+        android:id="@+id/tvSortCustom"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_popup_item_last"
+        android:drawablePadding="12dp"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="10dp"
+        android:text="自定义排序"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 
