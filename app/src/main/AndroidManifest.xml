@@ -193,6 +193,19 @@
             </intent-filter>
         </service>
 
+        <activity
+            android:name=".ShortcutBridgeActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            tools:ignore="DiscouragedApi">
+            <intent-filter>
+                <action android:name="com.unicorn.player.action.TOGGLE_EQUALIZER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

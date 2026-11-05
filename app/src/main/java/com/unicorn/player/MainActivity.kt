@@ -216,6 +216,9 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
 
         // 检查是否需要从 Documents 迁移到 Download
         checkDirectoryMigration()
+
+        // 初始化桌面长按图标快捷方式
+        ShortcutUtil.setupEqualizerShortcut(this)
     }
 
     /**
@@ -473,7 +476,9 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             binding.searchView.dispatchTouchEvent(cancel)
             cancel.recycle()
         }
-        val enabled = ShortcutUtil.toggleEqualizer(musicService)
+        val enabled = ShortcutUtil.toggleEqualizer(this, musicService)
+        // 同步更新桌面快捷方式文本
+        ShortcutUtil.updateEqualizerShortcut(this, enabled)
         Toast.makeText(
             this,
             if (enabled) "已打开均衡器" else "已关闭均衡器",
@@ -1416,6 +1421,8 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         // 同步排序设置：播放页修改排序后写入同一个 SharedPreferences，
         // 回到本页面时若与当前模式不同，则应用新排序并同步到 MusicService
         syncSortModeFromPrefs()
+        // 同步桌面快捷方式文本：均衡器页面可能改变了开关状态
+        ShortcutUtil.setupEqualizerShortcut(this)
     }
 
     /**
