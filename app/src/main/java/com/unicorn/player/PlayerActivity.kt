@@ -104,6 +104,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     companion object {
         const val TAG = "PlayerActivity"
 
+        /** 本次运行已确认"网络无歌词"的歌曲路径：本地无歌词时直接显示"新建歌词"，不再重复搜索；搜索失败不标记、可重试 */
+        private val noLyricsConfirmedPaths = mutableSetOf<String>()
+
         /** seekbar 操作的进度抑制时长：拖动中随 progress 续期，松手后覆盖 seek 生效期 */
         private const val SEEK_SUPPRESS_MS = 1000L
 
@@ -1181,9 +1184,16 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     Log.d(TAG, "Download 歌词加载成功: ${docsRows.size} 行")
                     return@launch
                 }
-                // 3. 网络兜底
+                // 3. 网络兜底：已确认无结果的歌曲直接显示"新建歌词"，不再重复搜索；
+                //    搜索失败不标记，下次（含 onResume）可重试
                 binding.lrcView.setLrcData(emptyList())
                 binding.lrcView.visibility = View.GONE
+                if (audioPath in noLyricsConfirmedPaths) {
+                    Log.d(TAG, "网络歌词已确认无结果，跳过搜索: $audioPath")
+                    showNoLyricsButton = true
+                    updateLyricsButtonsVisibility()
+                    return@launch
+                }
                 binding.lrcSearchingBar.visibility = View.VISIBLE
                 binding.btnCreateLyrics.visibility = View.GONE
                 Log.d(TAG, "Download 无歌词，尝试网络下载")
@@ -1251,6 +1261,8 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                             binding.lrcView.visibility = View.VISIBLE
                             Log.d(TAG, "网络歌词加载成功: ${lrcRows.size} 行")
                         } else {
+                            // 下载成功但内容不可用，等同无结果，不再重复自动搜索
+                            noLyricsConfirmedPaths.add(audioPath)
                             showNoLyricsButton = true
                             updateLyricsButtonsVisibility()
                             binding.lrcView.visibility = View.GONE
@@ -1278,6 +1290,8 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     // 代数不匹配说明已有更新的歌词请求，不应影响新歌曲的状态
                     if (lrcLoadGeneration != generation) return@launch
                     binding.lrcSearchingBar.visibility = View.GONE
+                    // 标记已确认无结果，之后不再自动搜索
+                    noLyricsConfirmedPaths.add(audioPath)
                     showNoLyricsButton = true
                     updateLyricsButtonsVisibility()
                     binding.lrcView.visibility = View.GONE
