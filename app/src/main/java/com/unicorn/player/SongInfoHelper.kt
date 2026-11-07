@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.Window
@@ -133,6 +134,11 @@ class SongInfoHelper(private val context: Context) {
             val itemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context))
             itemBinding.tvLabel.text = label
             itemBinding.tvValue.text = value
+            if (label == "文件路径") {
+                // 路径长且关键信息在中间：中间截断、放宽到两行
+                itemBinding.tvValue.ellipsize = TextUtils.TruncateAt.MIDDLE
+                itemBinding.tvValue.maxLines = 2
+            }
             itemBinding.root.background = null
             setIconForLabel(itemBinding.ivIcon, label)
             dialogBinding.infoContainer.addView(itemBinding.root)

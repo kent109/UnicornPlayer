@@ -42,8 +42,8 @@
 
             <TextView
                 android:id="@+id/tvValue"
-                android:ellipsize="middle"
-                android:maxLines="2"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="@color/onSurface"
@@ -56,7 +56,7 @@
                 android:background="@android:color/transparent"
                 android:importantForAutofill="no"
                 android:inputType="text"
-                android:maxLength="20"
+                android:maxLength="50"
                 android:maxLines="1"
                 android:minWidth="2dp"
                 android:textColor="@color/onSurface"
