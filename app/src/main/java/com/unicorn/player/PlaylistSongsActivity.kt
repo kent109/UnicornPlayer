@@ -61,9 +61,6 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
     // 当前歌单的歌曲列表（排序后），用于播放时设置给 MusicService
     private var playlistSongs: List<Song> = emptyList()
 
-    /** 本页实例是否已见过非空歌曲列表；Room Flow 落库前会先投一个空列表，不能拿它当"歌单被删空" */
-    private var hasSeenPlaylistSongs = false
-
     // 服务观察者
     private var currentSongObserver: Observer<Song?>? = null
     private var isPlayingObserver: Observer<Boolean>? = null
@@ -268,15 +265,6 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
         updateSongCount(sorted.size)
 
         multiChoiceView?.visibility = if (playlistSongs.isEmpty()) View.GONE else View.VISIBLE
-
-        // 歌单删空后，它的自定义顺序不再有用。进页面时 Room 加载完成前 observer 会先收到
-        // 一次空列表（真机栈已证实），只有确实见过非空列表后再变空才允许清记录，
-        // 否则重进页面会在数据到达前把刚拖好的顺序抹掉
-        if (sorted.isNotEmpty()) {
-            hasSeenPlaylistSongs = true
-        } else if (hasSeenPlaylistSongs) {
-            CustomSortStore.clearScope(this, scope)
-        }
 
         // 歌曲数量、排序等发生变化时，只有当前正在播放此歌单才同步播放列表
         if (musicService != null) {

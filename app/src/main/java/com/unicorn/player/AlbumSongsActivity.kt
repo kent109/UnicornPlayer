@@ -197,11 +197,6 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener,
         albumSongs = sorted
         dragHelper.submit(sorted)
         updateSongCount(sorted.size)
-        // 该专辑的歌删空后（曲库还有别的歌），它的自定义顺序不再有用；
-        // 曲库列表尚未加载完时 songs 为空，不能据此清除，否则重进页面会丢掉刚拖好的顺序
-        if (songs.isNotEmpty() && sorted.isEmpty()) {
-            CustomSortStore.clearScope(this, CustomSortStore.albumScope(albumName))
-        }
     }
 
     private fun updateSongCount(count: Int) {

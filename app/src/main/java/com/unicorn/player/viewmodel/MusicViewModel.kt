@@ -273,10 +273,6 @@ class MusicViewModel(
                 cleanupRemovedSongs(songs)
                 rawSongs = songs
                 val sorted = applyHiddenAndSort(songs)
-                // 曲库真的空了（不是全被隐藏）才算"全部歌曲"这个来源没有歌，清掉它的拖动顺序
-                if (songs.isEmpty()) {
-                    CustomSortStore.clearScope(context, PlaySource.SONGS)
-                }
                 _allSongs.postValue(sorted)
                 _fullSongs.postValue(sorted)
                 // 首次发射后标记已加载，避免启动时 emptyView 闪现
@@ -564,15 +560,15 @@ class MusicViewModel(
     }
 
     /**
-     * 用户在排序菜单里主动选择某个基础排序方式：退出自定义排序并清除全部来源的拖动顺序。
+     * 用户在排序菜单里主动选择某个基础排序方式：退出自定义排序。
+     * 各来源的拖动顺序记录保留，重新选择"自定义排序"时原顺序继续生效。
      *
      * 与 [sortSongs] 分开，是因为跨页面同步排序（onResume 读 prefs）也走 sortSongs，
-     * 那种场景只是恢复既有状态，不能顺手把用户拖动出来的顺序清掉。
+     * 那种场景只是恢复既有状态。
      */
     fun selectBaseSortMode(mode: SortMode) {
         if (CustomSortStore.isEnabled(context)) {
             CustomSortStore.setEnabled(context, false)
-            CustomSortStore.clearAll(context)
         }
         sortSongs(mode)
     }

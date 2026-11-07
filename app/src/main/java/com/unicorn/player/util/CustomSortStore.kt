@@ -103,12 +103,6 @@ object CustomSortStore {
         orderPrefs(context).edit(commit = true) { remove(ORDER_KEY_PREFIX + scope) }
     }
 
-    /** 清除全部来源的拖动顺序（从自定义切回基础排序时调用） */
-    fun clearAll(context: Context) {
-        rankCache.clear()
-        orderPrefs(context).edit(commit = true) { clear() }
-    }
-
     private fun ranksFor(context: Context, scope: String): Map<String, Int> {
         rankCache[scope]?.let { return it }
         val json = orderPrefs(context).getString(ORDER_KEY_PREFIX + scope, null)

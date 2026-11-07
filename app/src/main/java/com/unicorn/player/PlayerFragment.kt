@@ -533,11 +533,10 @@ class PlayerFragment : Fragment() {
             .edit(commit = true) {
                 putInt(SORT_MODE_KEY, mode.ordinal)
             }
-        // 从队列弹窗选回基础排序方式同样算"退出自定义排序"：
-        // 关掉开关并清掉各来源拖动过的顺序，保持和首页入口一致
+        // 从队列弹窗选回基础排序方式同样算"退出自定义排序"：关掉开关即可，
+        // 各来源拖动顺序保留，重新选择"自定义排序"时原顺序继续生效（与首页入口一致）
         if (CustomSortStore.isEnabled(requireContext())) {
             CustomSortStore.setEnabled(requireContext(), false)
-            CustomSortStore.clearAll(requireContext())
         }
         resortQueue(mode)
     }
