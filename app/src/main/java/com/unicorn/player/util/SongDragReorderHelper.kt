@@ -35,6 +35,9 @@ class SongDragReorderHelper(
     private var dragging = false
     private var movedDuringDrag = false
 
+    /** 拖拽开始时的路径顺序：松手时顺序没变（拖出去又放回来）就不提交，避免无意义的持久化重写和队列重建 */
+    private var pathsBeforeDrag: List<String>? = null
+
     /** 拖拽期间到达的新数据：不打断手势，松手后再合并提交 */
     private var pendingSubmit: List<Song>? = null
 
@@ -112,7 +115,8 @@ class SongDragReorderHelper(
                 dragging = true
                 movedDuringDrag = false
                 pendingSubmit = null
-                viewHolder.itemView.alpha = 0.7f
+                pathsBeforeDrag = backing.map { it.path }
+                viewHolder.itemView.alpha = 0.5f
             }
         }
 
@@ -135,8 +139,12 @@ class SongDragReorderHelper(
         }
         val ordered = ArrayList(backing)
         val scope = scopeProvider()
-        onOrderChanged(scope, ordered)
-        syncQueueIfCurrentSource(ordered)
+        val orderChanged = ordered.map { it.path } != pathsBeforeDrag
+        pathsBeforeDrag = null
+        if (orderChanged) {
+            onOrderChanged(scope, ordered)
+            syncQueueIfCurrentSource(ordered)
+        }
         if (pending != null) {
             // 拖拽期间到达的新数据（如隐藏歌曲、重新扫描）：按刚落地的拖动顺序重排后再提交
             submit(CustomSortStore.applyOrder(recyclerView.context, scope, pending))
