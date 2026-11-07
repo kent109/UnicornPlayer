@@ -332,6 +332,19 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         }
         ViewUtil.expandTouchTarget(binding.ivEditCover, expandPx)
 
+        // ivLyrics：跳转歌词搜索页（与长按歌词区入口一致）
+        binding.ivLyrics.setOnClickListener {
+            val song = musicService?.currentSong?.value ?: return@setOnClickListener
+            val intent = Intent(this@PlayerActivity, LrcSearchActivity::class.java).apply {
+                putExtra(LrcSearchActivity.EXTRA_ARTIST, song.artist)
+                putExtra(LrcSearchActivity.EXTRA_TITLE, song.title)
+                putExtra(LrcSearchActivity.EXTRA_AUDIO_PATH, song.path)
+            }
+            leavingForLrcSearch = true
+            startActivity(intent)
+        }
+        ViewUtil.expandTouchTarget(binding.ivLyrics, expandPx)
+
         // 注册绘制前监听：非全屏时持续把容器顶部锚到当前页 playPauseButton 底部
         binding.root.viewTreeObserver.addOnPreDrawListener(preDrawListener)
 
@@ -914,6 +927,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         // 全屏：显示居中收起箭头，隐藏 topBar 向下箭头、修改封面和分享按钮
         binding.ivCollapse.visibility = View.VISIBLE
         binding.dropdown.visibility = View.GONE
+        binding.ivLyrics.visibility = View.GONE
         binding.ivEditCover.visibility = View.GONE
         binding.ivShare.visibility = View.GONE
 
@@ -997,6 +1011,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 // 退出全屏：隐藏居中收起箭头，恢复 topBar 向下箭头、修改封面和分享按钮
                 binding.ivCollapse.visibility = View.GONE
                 binding.dropdown.visibility = View.VISIBLE
+                binding.ivLyrics.visibility = View.VISIBLE
                 binding.ivEditCover.visibility = View.VISIBLE
                 binding.ivShare.visibility = View.VISIBLE
                 // 恢复容器非全屏布局：左右 16dp、底部 24dp；
