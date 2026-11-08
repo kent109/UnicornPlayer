@@ -39,6 +39,20 @@ object CustomSortStore {
         sortPrefs(context).getBoolean(CUSTOM_ENABLED_KEY, false)
 
     /**
+     * 进程内自增的顺序数据版本：saveOrder/clearScope 时递增。
+     * 播放页队列拖动直接写这里，绕过了各页面 ViewModel，回首页时用它判断
+     * "持久化顺序是否被别处改过、需要重排"，避免每次 onResume 都无条件重排。
+     */
+    @Volatile
+    private var dataVersionCounter = 0L
+
+    fun dataVersion(): Long = dataVersionCounter
+
+    private fun bumpDataVersion() {
+        dataVersionCounter++
+    }
+
+    /**
      * 切换自定义排序开关。同步提交：切回基础排序时要紧接一次列表重排与队列同步，
      * 异步落盘可能让另一处入口读到旧值。
      */
@@ -66,6 +80,15 @@ object CustomSortStore {
         PlaySource.build(PlaySource.PLAYLIST, playlistId.toString())
 
     /**
+     * 统一 scope 键：来源名转小写。网格显示名会翻面（Beyond/BEYOND），service 标签存的又是
+     * 点击时的原始写法，入口不归一会让同一来源产生多份记录互相对不上。
+     */
+    private fun normalizeScope(scope: String): String {
+        val (type, name) = PlaySource.parse(scope)
+        return PlaySource.build(type, name.lowercase())
+    }
+
+    /**
      * 在基准排序结果上叠加该来源的拖动顺序。
      *
      * 未开启开关或该来源没有拖动记录时原样返回，保证"选了自定义但还没拖动"
@@ -73,7 +96,7 @@ object CustomSortStore {
      */
     fun applyOrder(context: Context, scope: String, baseSorted: List<Song>): List<Song> {
         if (!isEnabled(context)) return baseSorted
-        val ranks = ranksFor(context, scope)
+        val ranks = ranksFor(context, normalizeScope(scope))
         if (ranks.isEmpty()) return baseSorted
         val ordered = ArrayList<Song>(baseSorted.size)
         val unranked = ArrayList<Song>()
@@ -86,21 +109,25 @@ object CustomSortStore {
 
     /** 保存该来源的拖动顺序；列表为空时等同于清除，避免留下无主的空记录 */
     fun saveOrder(context: Context, scope: String, paths: List<String>) {
-        rankCache.remove(scope)
+        val key = normalizeScope(scope)
+        rankCache.remove(key)
         if (paths.isEmpty()) {
-            clearScope(context, scope)
+            clearScope(context, key)
             return
         }
         // 同步提交：拖动松手后用户可能立刻划掉/强杀进程，异步 apply 会丢掉这份顺序
         orderPrefs(context).edit(commit = true) {
-            putString(ORDER_KEY_PREFIX + scope, gson.toJson(paths, pathListType))
+            putString(ORDER_KEY_PREFIX + key, gson.toJson(paths, pathListType))
         }
+        bumpDataVersion()
     }
 
     /** 清除某个来源的拖动顺序（来源被删空、歌单被删除时调用） */
     fun clearScope(context: Context, scope: String) {
-        rankCache.remove(scope)
-        orderPrefs(context).edit(commit = true) { remove(ORDER_KEY_PREFIX + scope) }
+        val key = normalizeScope(scope)
+        rankCache.remove(key)
+        orderPrefs(context).edit(commit = true) { remove(ORDER_KEY_PREFIX + key) }
+        bumpDataVersion()
     }
 
     private fun ranksFor(context: Context, scope: String): Map<String, Int> {

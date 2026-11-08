@@ -38,6 +38,7 @@ import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongsFragment
 import com.unicorn.player.util.AudioTagEditor
+import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.DirectoryMigrationManager
 import com.unicorn.player.util.LyricsSaveManager
 import com.unicorn.player.util.PlaylistFileManager
@@ -58,6 +59,10 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: MusicViewModel
+
+    // 播放页队列拖动会直接写 CustomSortStore（绕过本页 ViewModel），回到首页时靠版本号
+    // 发现"持久化顺序被别处改过"并重排；模式/开关变化另有条件覆盖
+    private var lastSeenCustomSortVersion = CustomSortStore.dataVersion()
 
     private lateinit var playlistViewModel: PlaylistViewModel
     private lateinit var songInfoHelper: SongInfoHelper
@@ -1440,9 +1445,11 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             val savedMode = MusicViewModel.SortMode.entries
                 .getOrElse(savedOrdinal) { MusicViewModel.SortMode.BY_TITLE }
             if (viewModel.sortMode.value != savedMode ||
-                viewModel.isCustomSortStateChanged()
+                viewModel.isCustomSortStateChanged() ||
+                CustomSortStore.dataVersion() != lastSeenCustomSortVersion
             ) {
                 // 自定义排序开关以 prefs 为准：播放页队列弹窗可能已把它关掉并清空了顺序
+                lastSeenCustomSortVersion = CustomSortStore.dataVersion()
                 viewModel.sortSongs(savedMode)
                 updateServiceSongList()
             }

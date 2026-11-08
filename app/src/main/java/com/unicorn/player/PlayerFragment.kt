@@ -18,12 +18,15 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.unicorn.player.PlayerActivity
 import com.unicorn.player.adapter.PlayQueueAdapter
 import com.unicorn.player.databinding.DialogPlayQueueBinding
 import com.unicorn.player.databinding.DialogSortOptionsBinding
@@ -285,8 +288,9 @@ class PlayerFragment : Fragment() {
     private fun showPlayQueueDialog() {
         val service = getService() ?: return
         // 必须拷贝一份：getSongList() 返回 Service 内部可变列表本身，
-        // 若直接把它传回 setSongList()，内部 clear() 会连带清空传入的列表（同一引用）
-        val songs = service.getSongList().toList()
+        // 若直接把它传回 setSongList()，内部 clear() 会连带清空传入的列表（同一引用）。
+        // 拖动排序就地重排这份副本，因此用可变列表
+        val songs = service.getSongList().toMutableList()
         if (songs.isEmpty()) {
             Toast.makeText(requireContext(), "当前播放队列为空", Toast.LENGTH_SHORT).show()
             return
@@ -327,6 +331,80 @@ class PlayerFragment : Fragment() {
 
         dialogBinding.rvPlayQueue.layoutManager = LinearLayoutManager(requireContext())
         dialogBinding.rvPlayQueue.adapter = adapter
+
+        // 队列长按拖动排序：与列表页一致，只在自定义排序开启时生效。
+        // songs 是 getSongList() 的副本，拖动就地重排它并 notifyItemMoved（与 SongDragReorderHelper
+        // 同一套模式），松手时若顺序有变：重设 Service 队列（当前歌曲继续播、只挪位置），
+        // 并把新顺序持久化到当前播放来源的 scope，列表页下次提交即生效
+        val dragContext = requireContext()
+        ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
+            ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0
+        ) {
+            private var movedDuringDrag = false
+            private var pathsBeforeDrag: List<String>? = null
+
+            override fun isLongPressDragEnabled(): Boolean =
+                CustomSortStore.isEnabled(dragContext)
+
+            override fun isItemViewSwipeEnabled(): Boolean = false
+
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean {
+                val from = viewHolder.bindingAdapterPosition
+                val to = target.bindingAdapterPosition
+                if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false
+                if (from >= songs.size || to >= songs.size) return false
+                songs.add(to, songs.removeAt(from))
+                movedDuringDrag = true
+                // ItemTouchHelper 不代派移动通知，必须自己通知，否则其它行不补位、松手后弹回
+                adapter.notifyItemMoved(from, to)
+                return true
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                // 只允许上下拖动，没有滑动动作
+            }
+
+            override fun onSelectedChanged(
+                viewHolder: RecyclerView.ViewHolder?,
+                actionState: Int
+            ) {
+                super.onSelectedChanged(viewHolder, actionState)
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && viewHolder != null) {
+                    movedDuringDrag = false
+                    pathsBeforeDrag = songs.map { it.path }
+                    viewHolder.itemView.alpha = 0.7f
+                }
+            }
+
+            override fun clearView(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder
+            ) {
+                super.clearView(recyclerView, viewHolder)
+                viewHolder.itemView.alpha = 1f
+                if (!movedDuringDrag) return
+                movedDuringDrag = false
+                val ordered = ArrayList(songs)
+                val before = pathsBeforeDrag
+                pathsBeforeDrag = null
+                // 拖出去又放回原位：顺序没变就不提交
+                if (before == null || ordered.map { it.path } == before) return
+                val currentId = service.currentSong.value?.id
+                val newIndex = ordered.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+                // setSongList 内部 clear() 会连带清掉传入的引用，必须交副本
+                service.setSongList(ArrayList(ordered), newIndex)
+                CustomSortStore.saveOrder(
+                    dragContext,
+                    service.currentPlaySourceTag(),
+                    ordered.map { it.path }
+                )
+                (activity as? PlayerActivity)?.onPlayQueueReordered()
+            }
+        }).attachToRecyclerView(dialogBinding.rvPlayQueue)
 
         // 弹窗显示期间观察播放状态：通知栏/耳机按键暂停时动画同步暂停或恢复
         val isPlayingObserver = androidx.lifecycle.Observer<Boolean> { playing ->
