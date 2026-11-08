@@ -189,4 +189,22 @@ object LyricsSaveManager {
             false
         }
     }
+
+    /**
+     * 从 Lyrics 目录删除歌词文件。
+     *
+     * @param fileName 文件名，如 "Artist - Title.lrc"
+     * @return 文件存在且删除成功返回 true；文件不存在或删除失败返回 false
+     */
+    fun deleteLrcFile(context: Context, fileName: String): Boolean {
+        return try {
+            val treeUri = getSavedTreeUri(context) ?: return false
+            val root = DocumentFile.fromTreeUri(context, treeUri) ?: return false
+            val dir = root.findFile(LYRICS_DIR) ?: return false
+            dir.findFile(fileName)?.delete() ?: false
+        } catch (e: Throwable) {
+            LogWriter.writeError("LyricsSave", "删除歌词文件失败: ${e.message}", e)
+            false
+        }
+    }
 }

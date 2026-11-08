@@ -650,6 +650,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 centerY,
                 startInEditMode = true,
                 onSave = { content -> saveLyrics(content, songPath) },
+                // 新建场景保存空内容：不生成空文件
+                onEmptySave = {
+                    Toast.makeText(this@PlayerActivity, "歌词为空未保存", Toast.LENGTH_SHORT).show()
+                },
                 showSaveButton = false
             ).also { it.show() }
         }
@@ -724,8 +728,30 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             centerY,
             startInEditMode = true,
             onSave = { newContent -> saveLyrics(newContent, audioPath) },
+            // 编辑已有歌词场景保存空内容：删掉本地歌词文件
+            onEmptySave = { deleteLyricsFile(audioPath) },
             showSaveButton = false
         ).also { it.show() }
+    }
+
+    /**
+     * 编辑弹窗里把歌词清空后点保存：删除本地歌词文件；若删的是当前播放歌曲，刷新 LrcView
+     */
+    private fun deleteLyricsFile(audioPath: String) {
+        val fileName = File(audioPath).nameWithoutExtension + ".lrc"
+        lifecycleScope.launch(Dispatchers.IO) {
+            val deleted = LyricsSaveManager.deleteLrcFile(this@PlayerActivity, fileName)
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    this@PlayerActivity,
+                    if (deleted) "已删除歌词文件" else "删除失败",
+                    Toast.LENGTH_SHORT
+                ).show()
+                if (deleted && audioPath == musicService?.currentSong?.value?.path) {
+                    reloadLrcView(audioPath)
+                }
+            }
+        }
     }
 
     /**
@@ -832,6 +858,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
     /**
      * 重新加载 LrcView 数据（从 Download/Unicorn/Lyrics 解析 .lrc 文件并刷新视图）
+     * 文件不存在（如清空内容保存后已删除）时回到"无歌词"状态并显示"新建歌词"按钮
      */
     private fun reloadLrcView(audioPath: String) {
         lifecycleScope.launch {
@@ -845,6 +872,18 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     // 同步到当前播放位置
                     val pos = musicService?.getCurrentPosition() ?: 0
                     binding.lrcView.seekLrcToTime(pos.toLong())
+                } else {
+                    showNoLyricsButton = true
+                    // 用户刚主动删除歌词，本次运行内不再自动网络搜索，避免歌词"复活"
+                    noLyricsConfirmedPaths.add(audioPath)
+                    binding.lrcView.setLrcData(emptyList())
+                    binding.lrcView.visibility = View.GONE
+                    if (isLrcFullscreen) {
+                        // 全屏下删除当前歌曲歌词：退出全屏（退出动画结束时会显示"新建歌词"按钮）
+                        exitLrcFullscreen()
+                    } else {
+                        updateLyricsButtonsVisibility()
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "重载歌词失败: ${e.message}", e)

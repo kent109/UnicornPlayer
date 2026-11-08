@@ -16,7 +16,7 @@ import kotlin.math.hypot
 /**
  * 歌词预览对话框（基于 AlertDialog）
  *
- * 支持上下滑动关闭、点击外部关闭、返回键关闭。
+ * 支持上下滑动关闭；返回键与点外部不关闭，退出只走取消/保存按钮。
  * 支持编辑模式：点击"编辑"进入编辑态，点击"保存"判断是否更新内容。
  */
 class LrcPreviewDialog(
@@ -27,6 +27,8 @@ class LrcPreviewDialog(
     private val onContentUpdated: ((String) -> Unit)? = null,
     private val startInEditMode: Boolean = false,
     private val onSave: ((String) -> Unit)? = null,
+    /** 保存时内容已清空的兜底：是否生成/删除文件由宿主按场景决定（新建不落文件、编辑删文件、不给则等同取消） */
+    private val onEmptySave: (() -> Unit)? = null,
     private val showSaveButton: Boolean = true
 ) {
 
@@ -71,7 +73,8 @@ class LrcPreviewDialog(
         // 创建 AlertDialog（无标题、无按钮）
         val builder = AlertDialog.Builder(context)
         builder.setView(previewView)
-        builder.setCancelable(true)
+        // false = 返回键和点面板外都不再关闭，退出只走取消/保存按钮（预览态的取消按钮因此常驻）
+        builder.setCancelable(false)
 
         dialog = builder.create()
 
@@ -118,7 +121,8 @@ class LrcPreviewDialog(
             saveAndDismiss()
         }
 
-        // 取消按钮 - 直接关闭弹窗
+        // 取消按钮 - 直接关闭弹窗；返回键/点外部已禁用，预览态也必须显示它作为退出入口
+        binding.btnCancel.visibility = View.VISIBLE
         binding.btnCancel.setOnClickListener {
             dismiss()
         }
@@ -154,6 +158,13 @@ class LrcPreviewDialog(
      */
     private fun saveAndDismiss() {
         val currentText = binding.etLrcContent.text?.toString() ?: ""
+
+        // 内容已清空：不走 onContentUpdated/onSave，交给宿主决定是否动文件，弹窗照常收起
+        if (currentText.isBlank()) {
+            onEmptySave?.invoke()
+            dismiss()
+            return
+        }
 
         // 内容有变化才回调更新列表
         if (currentText != originalContent) {

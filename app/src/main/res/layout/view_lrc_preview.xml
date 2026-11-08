@@ -19,12 +19,14 @@
         android:layout_marginBottom="8dp"
         android:background="@drawable/drag_handle" />
 
-    <!-- 歌词内容（可滚动、无滚动条） -->
+    <!-- 歌词内容（可滚动、无滚动条）；fillViewport 让内容不足一屏时 EditText 撑满整个区域，
+         空白处长按粘贴才有点击热区，内容超出时照常滚动 -->
     <ScrollView
         android:id="@+id/scrollContent"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:fillViewport="true"
         android:overScrollMode="never"
         android:scrollbars="none">
 
