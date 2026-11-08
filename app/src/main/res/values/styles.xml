@@ -56,9 +56,6 @@
          单个弹窗想更窄/更宽用 PanelDialog 的 sideMarginDp 参数覆盖，不要改这里 -->
     <dimen name="dialog_panel_side_margin">16dp</dimen>
 
-    <!-- 修改封面弹窗预览图的圆角：Glide 的 RoundedCorners 与 bg_dialog_cover_placeholder 共用这一个值 -->
-    <dimen name="dialog_cover_corner_radius">12dp</dimen>
-
     <!-- 弹窗背景=系统默认时叠加的主题覆盖：弹窗底色回到不跟随主题色的平面色 -->
     <style name="ThemeOverlay.DialogBackgroundSystem" parent="">
         <item name="dialogPanelColor">@color/surface_panel</item>

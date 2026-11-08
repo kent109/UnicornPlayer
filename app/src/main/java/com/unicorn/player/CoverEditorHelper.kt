@@ -1,7 +1,6 @@
 package com.unicorn.player
 
 import android.content.Context
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -9,12 +8,8 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.Toast
 import com.bumptech.glide.Glide
-import com.bumptech.glide.load.DataSource
-import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
-import com.bumptech.glide.request.RequestListener
-import com.bumptech.glide.request.target.Target
 import com.unicorn.player.databinding.DialogEditCoverBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.ui.PanelDialog
@@ -145,39 +140,13 @@ class CoverEditorHelper(
         candidatePath = null
     }
 
-    private fun loadCover(view: ImageView, source: Any?) {
-        // 先按「显示的是默认音符」垫上灰底；媒体库封面 URI 常失效，是不是真图片只能问 Glide
-        view.setBackgroundResource(R.drawable.bg_dialog_cover_placeholder)
+    private fun loadCover(target: ImageView, source: Any?) {
         Glide.with(context)
             .load(source)
             .placeholder(R.drawable.ic_music_note)
             .error(R.drawable.ic_music_note)
-            .transform(
-                CenterCrop(),
-                RoundedCorners(
-                    context.resources.getDimensionPixelSize(R.dimen.dialog_cover_corner_radius)
-                )
-            )
-            .listener(object : RequestListener<Drawable> {
-                override fun onLoadFailed(
-                    e: GlideException?,
-                    model: Any?,
-                    target: Target<Drawable>,
-                    isFirstResource: Boolean
-                ): Boolean = false
-
-                override fun onResourceReady(
-                    resource: Drawable,
-                    model: Any,
-                    target: Target<Drawable>,
-                    dataSource: DataSource,
-                    isFirstResource: Boolean
-                ): Boolean {
-                    view.background = null
-                    return false
-                }
-            })
-            .into(view)
+            .transform(CenterCrop(), RoundedCorners(36))
+            .into(target)
     }
 
     private fun toast(message: String) {

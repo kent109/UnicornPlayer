@@ -4,6 +4,7 @@ import android.app.Dialog
 import android.content.Context
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import androidx.annotation.LayoutRes
@@ -27,6 +28,14 @@ class PanelDialog(
 
     val contentView: View = LayoutInflater.from(context).inflate(layoutResId, null)
 
+    /** 点面板外的空白处是否关闭弹窗（[setCancelable] false 时无论如何都不关） */
+    var cancelOnTouchOutside: Boolean = true
+
+    // Dialog 没有对外的是否可取消读数，只能自己跟着 setCancelable 记一份
+    private var cancelable: Boolean = true
+
+    private val panelLocation = IntArray(2)
+
     init {
         val density = context.resources.displayMetrics.density
         val sideMargin = sideMarginDp?.let { (it * density).toInt() }
@@ -40,5 +49,30 @@ class PanelDialog(
         panelParams.setMargins(sideMargin, 0, sideMargin, 0)
         container.addView(contentView, panelParams)
         setContentView(container)
+    }
+
+    override fun setCancelable(flag: Boolean) {
+        super.setCancelable(flag)
+        cancelable = flag
+    }
+
+    // 浮窗时代由框架代管的「点空白处关闭」：窗口铺满屏幕后既没有 outside 区域，
+    // 也不会收到 outside-touch 回调，只能自己按面板矩形判断
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN
+            && cancelable && cancelOnTouchOutside && !isOnPanel(event)
+        ) {
+            dismiss()
+            return true
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    private fun isOnPanel(event: MotionEvent): Boolean {
+        contentView.getLocationInWindow(panelLocation)
+        val left = panelLocation[0]
+        val top = panelLocation[1]
+        return event.x >= left && event.x < left + contentView.width
+            && event.y >= top && event.y < top + contentView.height
     }
 }
