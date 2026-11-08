@@ -270,6 +270,11 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
             tab.text = titles[position]
         }.attach()
+        // Material TabView 每次选中都会重新给标签挂 tooltip（长按弹出文本气泡），
+        // 清 tooltipText 会被覆盖，改为消费长按事件压住：长按被监听器处理后不再弹提示
+        for (i in 0 until binding.tabLayout.tabCount) {
+            binding.tabLayout.getTabAt(i)?.view?.setOnLongClickListener { true }
+        }
 
         // 切换标签页时，仅在"歌曲"页显示排序按钮
         binding.viewPager.registerOnPageChangeCallback(object :
