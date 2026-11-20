@@ -799,9 +799,21 @@ class MusicService : Service() {
         } catch (e: Exception) {
             LogWriter.writeError(TAG, "generateAudioSessionId failed", e)
         }
+        // LoadControl 调大预缓冲：默认 min=5s max=50s 对于本地文件已经足够，
+        // 但蓝牙 A2DP 需要解码器持续喂数据给 AudioTrack，适当调大 min 缓冲可以
+        // 吸收偶发的解码抖动，防止 AudioTrack underrun 导致蓝牙卡顿。
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs= */ 8_000,
+                /* maxBufferMs= */ 50_000,
+                /* bufferForPlaybackMs= */ 1_500,
+                /* bufferForPlaybackAfterRebufferMs= */ 3_000
+            )
+            .build()
         player = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
             .setAudioAttributes(
                 Media3AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                     .setUsage(C.USAGE_MEDIA).build(), /* handleAudioFocus= */ false
@@ -826,6 +838,10 @@ class MusicService : Service() {
                 audioSessionId: Int
             ) {
                 if (audioSessionId == 0) return
+                LogWriter.writeDiag(
+                    TAG,
+                    "onAudioSessionIdChanged: audioSessionId=$audioSessionId"
+                )
                 // 已绑定的 session id 发生变化时，先释放旧 session 上的音效对象，
                 // 否则 initialize() 会因 sIsInitialized 直接 return，新 session 上没有任何音效生效。
                 if (AudioEffectManager.areEffectsEnabled() &&
@@ -965,11 +981,6 @@ class MusicService : Service() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                LogWriter.writeDiag(
-                    TAG,
-                    "onIsPlayingChanged: isPlaying=$isPlaying, playWhenReady=${player.playWhenReady}, " +
-                            "state=${player.playbackState}, position=${player.currentPosition}, song=${_currentSong.value?.title}"
-                )
                 // ExoPlayer 内部自动暂停/恢复（handleAudioBecomingNoisy / audio focus）
                 // 不会走 pause()/play()，必须在此同步 _isPlaying，否则 UI 和通知栏状态脱节。
                 // 注意：isPlaying=false 可能是切歌/seek 过渡期间的短暂状态，而非真实暂停。

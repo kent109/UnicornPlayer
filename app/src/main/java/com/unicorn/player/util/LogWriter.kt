@@ -24,7 +24,7 @@ object LogWriter {
 
     /**
      * 诊断日志总开关。平时保持 false（不打印、不写文件、不做取栈等额外开销）；
-     * 排查"服务实例被销毁重建""播放断裂"这类低复现问题时临时置 true。
+     * 排查"服务实例被销毁重建""播放断裂""蓝牙卡顿"这类低复现问题时临时置 true。
      */
     private const val DIAG_ENABLED = false
 
