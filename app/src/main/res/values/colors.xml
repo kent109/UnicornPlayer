@@ -32,14 +32,16 @@
     <color name="onSurface">#1C1B1F</color>
     <color name="surfaceVariant">#E7E0EC</color>
     <color name="onSurfaceVariant">#49454F</color>
-    <!-- 悬浮面板背景：BottomSheetDialog / AlertDialog / 底部播放条 / 多选底部面板 -->
+    <!-- 悬浮面板背景：BottomSheetDialog / AlertDialog / 底部播放条 -->
     <color name="surface_panel">#FFFBFE</color>
+    <!-- 多选页面底部操作面板：日间与列表项同色，夜间跟 surface_panel -->
+    <color name="multi_select_panel_bg">#E6E8F1</color>
     <!-- 列表项背景 -->
     <color name="list_item_bg">#FFFBFE</color>
     <!-- RecyclerView 列表项背景 -->
-    <color name="recycler_item_bg">#FFFBFE</color>
+    <color name="recycler_item_bg">#FDFDFD</color>
     <!-- 设置页 item 背景：分组卡片 + 行 bg_preference_* -->
-    <color name="settings_item_bg">#FFFBFE</color>
+    <color name="settings_item_bg">#FDFDFD</color>
 
     <!-- 通知栏/锁屏封面占位图（日间）：底色 + 中间音符图标 -->
     <color name="art_placeholder_bg">#EAEAEA</color>
@@ -72,7 +74,7 @@
     <color name="divider">#cccccc</color>
 
     <!-- 音频品质标签颜色 -->
-    <color name="quality_sq">#FFF8B20E</color>   <!-- 金色 -->
+    <color name="quality_sq">#FFC46C</color>   <!-- 金色 -->
     <color name="quality_hq">#9C27B0</color>   <!-- 紫色 -->
     <color name="quality_std">#4CAF50</color>  <!-- 绿色 -->
     <color name="quality_ord">#9E9E9E</color>  <!-- 灰色 -->

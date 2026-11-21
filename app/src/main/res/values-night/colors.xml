@@ -30,8 +30,10 @@
     <color name="onSurface">#E6E1E5</color>
     <color name="surfaceVariant">#49454F</color>
     <color name="onSurfaceVariant">#CAC4D0</color>
-    <!-- 悬浮面板背景：BottomSheetDialog / AlertDialog / 底部播放条 / 多选底部面板 -->
+    <!-- 悬浮面板背景：BottomSheetDialog / AlertDialog / 底部播放条 -->
     <color name="surface_panel">#2D2D2D</color>
+    <!-- 多选底部面板：夜间保持 surface_panel 原色 -->
+    <color name="multi_select_panel_bg">@color/surface_panel</color>
     <!-- 列表项背景 -->
     <!-- RecyclerView 列表项背景 -->
     <color name="recycler_item_bg">#262626</color>

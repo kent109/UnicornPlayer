@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?><!-- 封面 ImageView 的灰底（播放页/修改封面弹窗）：浅色封面/占位音符在白色页面上轮廓不清；封面铺满后灰底被完全盖住，只在未覆盖区域可见 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/art_placeholder_bg" />
+    <corners android:radius="@dimen/cover_corner_radius" />
+</shape>

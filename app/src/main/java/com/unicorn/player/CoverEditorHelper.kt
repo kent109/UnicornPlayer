@@ -1,12 +1,14 @@
 package com.unicorn.player
 
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.ImageView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
@@ -14,6 +16,7 @@ import com.unicorn.player.databinding.DialogEditCoverBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.ui.PanelDialog
 import com.unicorn.player.util.CoverStore
+import com.unicorn.player.util.DynamicBgColorUtil
 import java.io.File
 
 /**
@@ -87,6 +90,7 @@ class CoverEditorHelper(
         val dialogBinding = DialogEditCoverBinding.bind(created.contentView)
         binding = dialogBinding
         created.setOnDismissListener { onDialogDismiss() }
+        applyDynamicPanelColor(created.contentView)
 
         loadCover(dialogBinding.ivCoverPreview, song.albumArt)
         dialogBinding.btnDefaultCover.visibility =
@@ -97,6 +101,19 @@ class CoverEditorHelper(
 
         created.show()
         dialog = created
+    }
+
+    /**
+     * 面板底色覆盖为 PlayerActivity 的动态取色值（同首歌与页面/窗口背景同色），且不跟随
+     * 「设置-主题样式-弹窗背景」开关；圆角沿用 bg_dialog_panel 的 16dp，仅换色。
+     * 无取色记录时（首次启动尚未取过色）保留 XML 原面板色兜底。
+     */
+    private fun applyDynamicPanelColor(panel: View) {
+        val color = DynamicBgColorUtil.cachedColor(context) ?: return
+        val bg = ContextCompat.getDrawable(context, R.drawable.bg_dialog_panel)
+            ?.mutate() as? GradientDrawable ?: return
+        bg.setColor(color)
+        panel.background = bg
     }
 
     private fun onDialogDismiss() {
@@ -145,7 +162,10 @@ class CoverEditorHelper(
             .load(source)
             .placeholder(R.drawable.ic_music_note)
             .error(R.drawable.ic_music_note)
-            .transform(CenterCrop(), RoundedCorners(36))
+            .transform(
+                CenterCrop(),
+                RoundedCorners(context.resources.getDimensionPixelSize(R.dimen.cover_corner_radius))
+            )
             .into(target)
     }
 

@@ -31,12 +31,14 @@
         android:textColor="@color/onSurfaceVariant"
         android:textSize="14sp" />
 
+    <!-- 预览图与播放页封面同一套处理：恒垫灰底（浅色封面/占位音符在弹窗底色上轮廓不清）+ CenterCrop 铺满 -->
     <ImageView
         android:id="@+id/ivCoverPreview"
         android:layout_width="160dp"
         android:layout_height="160dp"
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="16dp"
+        android:background="@drawable/bg_cover_placeholder"
         android:contentDescription="@null"
         android:scaleType="centerCrop"
         tools:src="@drawable/ic_music_note" />

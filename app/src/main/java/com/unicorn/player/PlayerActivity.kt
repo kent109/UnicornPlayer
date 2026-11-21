@@ -1,6 +1,7 @@
 package com.unicorn.player
 
 import android.content.Intent
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -33,6 +34,7 @@ import com.unicorn.player.util.DisplayUtil
 import com.unicorn.player.util.ImagePicker
 import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.LrcFetcher
+import com.unicorn.player.util.DynamicBgColorUtil
 import com.unicorn.player.util.LrcHelper
 import com.unicorn.player.util.LyricsSaveManager
 import com.unicorn.player.util.ViewUtil
@@ -55,6 +57,9 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
     // 最近一次已由 currentSong 观察者处理过的歌曲 id：
     // 用于区分"切歌"与"同一首歌的记录刷新"（如改写封面后重新派发）
     private var lastHandledSongId = -1L
+
+    // 窗口背景取色代数：切歌后只让最新一次取色结果落背景，丢弃过期的异步结果
+    private var bgGeneration = 0
 
     // 修改封面：相册选图
     private val coverPickerLauncher = registerForActivityResult(
@@ -1530,6 +1535,10 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         musicService?.let { service ->
             // 观察当前歌曲变化，同步ViewPager位置和歌词
             service.currentSong.observe(this) { song ->
+                // 同一首歌的记录刷新（如改封面后重新派发）也重新取色，让背景跟随新封面；
+                // 页面各自背景由 PlayerFragment 处理，这里负责窗口与顶栏
+                song?.let { applyWindowBackground(it) }
+
                 // 同一首歌的记录刷新（如封面改写后重新派发）：页面位置与歌词都无需重做
                 val isSameSongRefresh = song?.id == lastHandledSongId
                 song?.let { lastHandledSongId = it.id }
@@ -1609,6 +1618,21 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * 播放页整体动态背景：有封面用封面主色、无封面用主题色（日夜自动回混保证文字可读）。
+     * window 背景覆盖状态栏与歌词全屏区域，topBar 跟随同一颜色保持整页一致；
+     * 结果经代数校验后才落背景，丢弃切歌前的过期颜色
+     */
+    private fun applyWindowBackground(song: Song) {
+        val gen = ++bgGeneration
+        lifecycleScope.launch {
+            val color = DynamicBgColorUtil.extract(this@PlayerActivity, song.albumArt)
+            if (gen != bgGeneration || isFinishing || isDestroyed) return@launch
+            window.setBackgroundDrawable(ColorDrawable(color))
+            binding.topBar.setBackgroundColor(color)
         }
     }
 
