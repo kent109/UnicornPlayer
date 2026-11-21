@@ -41,7 +41,7 @@
     <color name="settings_item_bg">#262626</color>
 
     <!-- 通知栏/锁屏封面占位图（夜间）：底色 + 中间音符图标 -->
-    <color name="art_placeholder_bg">#4B4B4B</color>
+    <color name="art_placeholder_bg">#4F4F4F</color>
     <color name="art_placeholder_icon">#c2c2c2</color>
 
     <!-- 不支持播放格式的角标背景（夜间） -->

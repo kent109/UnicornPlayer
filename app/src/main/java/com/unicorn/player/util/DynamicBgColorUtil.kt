@@ -4,15 +4,20 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.graphics.ColorUtils
 import androidx.palette.graphics.Palette
 import com.bumptech.glide.Glide
 import com.unicorn.player.R
+import com.unicorn.player.util.DynamicBgColorUtil.BG_BLEND_ALPHA
+import com.unicorn.player.util.DynamicBgColorUtil.OVERRIDE_SIZE
+import com.unicorn.player.util.DynamicBgColorUtil.adjustForReadability
+import com.unicorn.player.util.DynamicBgColorUtil.persistedBase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 动态背景取色（播放页 / 底部播放条）。
+ * 动态背景取色（播放页）。
  *
  * - 有封面：Glide 解码小尺寸位图（[OVERRIDE_SIZE] px）后用 Palette 取占比最高的主色；
  * - 无封面（或封面解码失败）：沿用最近一次取色值；无历史取色时以 R.color.primary
@@ -21,13 +26,14 @@ import kotlinx.coroutines.withContext
  * 取出的原始色先按 [BG_BLEND_ALPHA] 与页面底色（R.color.background）预合成——
  * 等效半透明叠加，观感变浅；因为 PlayerActivity 的窗口背景本身就是动态色
  * （不透明窗口会忽略 alpha），真 alpha 只会叠到 window 的动态色上，必须在取色侧
- * 预合成出不透明的最终色，页面/窗口/播放条三层共用同一结果。
+ * 预合成出不透明的最终色，页面与窗口两层共用同一结果。
  * 合成后再经 [adjustForReadability]：日间过暗的背景向白色回混、夜间过亮的背景向
  * 黑色回混，保证标题、时间、按钮等主题固定色文字始终可读。
  *
- * 最近取色值缓存的是合成与回混前的原始色（进程内存，不落盘），重用时按当前日夜
- * 模式重新合成回混，避免日夜切换后沿用反色的旧结果；最终色按日夜分键持久化到
- * SharedPreferences（[cachedColor]），冷启动时底部播放条先瞬时套用再等异步校正。
+ * 最近取色值缓存的是合成与回混前的原始色（进程内存 + 持久化 [persistedBase]），重用时按当前
+ * 日夜模式重新合成回混，避免日夜切换后沿用反色的旧结果；原始色也持久化，让无封面回退
+ * 不依赖取色时机（ViewPager 多页快照、窗口与页面并发取色都落到同一历史值）。最终色按
+ * 日夜分键持久化到 SharedPreferences（[cachedColor]），供修改封面弹窗面板直接套用当前取色值。
  *
  * 采样尺寸、合成强度与亮度阈值收敛在本类，调视觉只改这里。
  */
@@ -45,10 +51,11 @@ object DynamicBgColorUtil {
     /** 原始色向页面底色合成的强度（0-255，相当于 alpha）：越小背景越浅，调"深浅"主要改这个 */
     private const val BG_BLEND_ALPHA = 170
 
-    // 最近一次最终色的持久化（按日夜分键）：冷启动时底部播放条先瞬时套用，避免白条闪变
+    // 最近一次最终色的持久化（按日夜分键）：修改封面弹窗面板用它直接套用当前取色值
     private const val PREFS_NAME = "dynamic_bg_color"
     private const val KEY_LAST_COLOR_DAY = "last_final_day"
     private const val KEY_LAST_COLOR_NIGHT = "last_final_night"
+    private const val KEY_LAST_BASE = "last_base"
 
     // 最近一次取色的原始色（未做合成与日夜回混）。无封面/解码失败时沿用，每次取色都刷新
     @Volatile
@@ -61,11 +68,13 @@ object DynamicBgColorUtil {
     suspend fun extract(context: Context, albumArt: String?): Int =
         withContext(Dispatchers.IO) {
             val base = if (albumArt.isNullOrEmpty()) {
-                lastBaseColor ?: defaultBaseColor(context)
+                lastBaseColor ?: persistedBase(context) ?: defaultBaseColor(context)
             } else {
-                extractFromArt(context, albumArt) ?: lastBaseColor ?: defaultBaseColor(context)
+                extractFromArt(context, albumArt) ?: lastBaseColor
+                ?: persistedBase(context) ?: defaultBaseColor(context)
             }
             lastBaseColor = base
+            persistBase(context, base)
             val blended = blendOverBackground(context, base)
             val final = adjustForReadability(blended, isNightMode(context))
             persistColor(context, final)
@@ -80,13 +89,26 @@ object DynamicBgColorUtil {
     }
 
     private fun persistColor(context: Context, color: Int) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-            .putInt(prefsKey(context), color)
-            .apply()
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
+            putInt(prefsKey(context), color)
+        }
     }
 
     private fun prefsKey(context: Context): String =
         if (isNightMode(context)) KEY_LAST_COLOR_NIGHT else KEY_LAST_COLOR_DAY
+
+    /** 上次取色的持久化原始色：无封面回退不依赖取色时机，多页快照与并发取色都落到同一历史值 */
+    private fun persistedBase(context: Context): Int? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val value = prefs.getInt(KEY_LAST_BASE, Int.MIN_VALUE)
+        return if (value == Int.MIN_VALUE) null else value
+    }
+
+    private fun persistBase(context: Context, color: Int) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
+            putInt(KEY_LAST_BASE, color)
+        }
+    }
 
     /** 等效半透明：按 [BG_BLEND_ALPHA] 把原始色叠到页面底色上，输出不透明颜色 */
     private fun blendOverBackground(context: Context, base: Int): Int {

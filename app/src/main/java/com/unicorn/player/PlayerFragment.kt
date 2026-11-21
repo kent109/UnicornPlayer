@@ -40,7 +40,6 @@ import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.util.AudioTagEditor
 import com.unicorn.player.util.CustomSortStore
-import com.unicorn.player.util.DynamicBgColorUtil
 import com.unicorn.player.util.ScreenCornerUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
@@ -55,9 +54,6 @@ class PlayerFragment : Fragment() {
     private val binding get() = _binding!!
 
     private var currentSong: Song? = null
-
-    // 页面背景取色代数：切歌后只让最新一次取色结果落背景，丢弃过期的异步结果
-    private var bgGeneration = 0
 
     // 当前打开的播放队列适配器引用，用于生命周期回调暂停/恢复旋转动画
     private var queueAdapter: com.unicorn.player.adapter.PlayQueueAdapter? = null
@@ -784,7 +780,6 @@ class PlayerFragment : Fragment() {
                     )
                     .into(binding.albumArt)
             }
-            applyPageBackground(it)
 
             // 设置进度条最大值（使用歌曲实际时长）
             binding.seekBar.max = it.duration.toInt()
@@ -795,21 +790,6 @@ class PlayerFragment : Fragment() {
     fun updateCurrentSong(song: Song) {
         currentSong = song
         updateSongInfo(song)
-    }
-
-    /**
-     * 页面背景取色：有封面用封面主色、无封面用主题色（日夜模式下自动向白/黑回混保证文字可读）。
-     * 异步结果经代数与歌曲双重校验后才落背景，丢弃切歌前的过期颜色
-     */
-    private fun applyPageBackground(song: Song) {
-        val context = binding.root.context
-        val gen = ++bgGeneration
-        viewLifecycleOwner.lifecycleScope.launch {
-            val color = DynamicBgColorUtil.extract(context, song.albumArt)
-            if (gen == bgGeneration && currentSong?.id == song.id) {
-                _binding?.root?.setBackgroundColor(color)
-            }
-        }
     }
 
     private fun updateSeekBar(position: Int) {

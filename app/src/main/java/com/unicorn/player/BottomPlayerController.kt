@@ -4,15 +4,12 @@ import android.content.Intent
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
-import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.unicorn.player.databinding.ViewBottomPlayerBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.service.MusicService
-import com.unicorn.player.util.DynamicBgColorUtil
-import kotlinx.coroutines.launch
 
 /**
  * 底部播放栏控制器
@@ -34,9 +31,6 @@ class BottomPlayerController(
 
     private var isPlayingObserver: Observer<Boolean>? = null
     private var currentSongObserver: Observer<Song?>? = null
-
-    // 播放条背景取色代数：切歌后只让最新一次取色结果落背景，丢弃过期的异步结果
-    private var bgGeneration = 0
 
     /**
      * 设置底部播放栏按钮点击事件
@@ -134,9 +128,6 @@ class BottomPlayerController(
         }
         // 专辑封面恢复默认图标
         binding.albumArt.setImageResource(R.drawable.ic_music_note)
-        // 背景恢复主题面板色（无歌时播放条一般隐藏，兜底复位）
-        binding.playerBarContent.setBackgroundResource(R.color.surface_panel)
-        bgGeneration++
     }
 
     /**
@@ -154,30 +145,11 @@ class BottomPlayerController(
             binding.songTitle.requestFocus()
         }
 
-        applyBarBackground(song.albumArt)
-
         // 使用 Glide 加载专辑封面并添加圆角（CenterCrop 先把图裁成控件尺寸，圆角才稳定）
         Glide.with(activity).load(song.albumArt).placeholder(R.drawable.ic_music_note)
             .error(R.drawable.ic_music_note)
             .transform(CenterCrop(), RoundedCorners(20))
             .into(binding.albumArt)
-    }
-
-    /**
-     * 播放条动态背景：与播放页同一套取色（封面主色/无封面沿用最近取色值），
-     * 使列表页底部播放条与 PlayerActivity 背景对同一首歌保持一致。
-     * 冷启动先瞬时套用上次持久化的最终色，异步取色完成后再校正，避免白条闪变
-     */
-    private fun applyBarBackground(albumArt: String?) {
-        DynamicBgColorUtil.cachedColor(activity)?.let {
-            binding.playerBarContent.setBackgroundColor(it)
-        }
-        val gen = ++bgGeneration
-        activity.lifecycleScope.launch {
-            val color = DynamicBgColorUtil.extract(activity, albumArt)
-            if (gen != bgGeneration || activity.isDestroyed || activity.isFinishing) return@launch
-            binding.playerBarContent.setBackgroundColor(color)
-        }
     }
 
     fun show() {
