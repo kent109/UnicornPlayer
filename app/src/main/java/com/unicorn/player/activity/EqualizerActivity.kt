@@ -60,7 +60,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                         } else {
                             Toast.makeText(
                                 this@EqualizerActivity,
-                                "授权目录创建失败",
+                                getString(R.string.auth_dir_create_failed),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -202,7 +202,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                         PendingAction.NONE -> {}
                     }
                 } else {
-                    Toast.makeText(this@EqualizerActivity, "目录创建失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@EqualizerActivity, getString(R.string.dir_create_failed), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -253,7 +253,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             }
             adapter.submitList(files)
             dialogBinding.btnDelete.isEnabled = false
-            dialogBinding.btnDelete.text = "删除"
+            dialogBinding.btnDelete.text = getString(R.string.delete)
         }
         render(initialFiles)
 
@@ -303,7 +303,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 dialogBinding.etFileName.setSelection(input.length)
             }
             if (input.isEmpty()) {
-                Toast.makeText(this, "请输入文件名", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.input_filename_required), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             val fileName = EqualizerConfigManager.normalizeFileName(input)
@@ -337,7 +337,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             Gson().toJson(config)
         } catch (e: Exception) {
             Log.e(TAG, "序列化配置失败", e)
-            Toast.makeText(this, "序列化失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.serialization_failed), Toast.LENGTH_SHORT).show()
             return
         }
         lifecycleScope.launch(Dispatchers.IO) {
@@ -389,7 +389,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             val adapter = dialogBinding.recyclerView.adapter as? SelectableEqConfigAdapter
             val selected = adapter?.selectedFileName
             if (selected.isNullOrEmpty()) {
-                Toast.makeText(this, "请选择一个配置", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.choose_a_config), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             dialog.dismiss()
@@ -413,13 +413,13 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             .create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
-        view.findViewById<TextView>(R.id.tvTitle).text = "导入错误"
+        view.findViewById<TextView>(R.id.tvTitle).text = getString(R.string.import_error)
         // 展示名去掉 .json 后缀
         val displayName = fileName.removeSuffix(".json")
         view.findViewById<TextView>(R.id.tvMessage).text =
             "$reason，是否删除配置『$displayName』？"
         val btnConfirm = view.findViewById<TextView>(R.id.btnConfirm)
-        btnConfirm.text = "删除"
+        btnConfirm.text = getString(R.string.delete)
         btnConfirm.setOnClickListener {
             dialog.dismiss()
             lifecycleScope.launch(Dispatchers.IO) {
@@ -435,7 +435,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             }
         }
         val btnCancel = view.findViewById<TextView>(R.id.btnCancel)
-        btnCancel.text = "取消"
+        btnCancel.text = getString(R.string.cancel)
         btnCancel.setOnClickListener { dialog.dismiss() }
         dialog.show()
     }
@@ -446,7 +446,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             val content = EqualizerConfigManager.readConfig(this@EqualizerActivity, fileName)
             if (content.isNullOrEmpty()) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@EqualizerActivity, "读取失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@EqualizerActivity, getString(R.string.read_failed), Toast.LENGTH_SHORT).show()
                 }
                 return@launch
             }
@@ -488,7 +488,7 @@ class EqualizerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 val fragment =
                     supportFragmentManager.findFragmentByTag("f_eq") as? EqualizerFragment
                 if (fragment == null) {
-                    Toast.makeText(this@EqualizerActivity, "均衡器未就绪", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@EqualizerActivity, getString(R.string.equalizer_not_ready), Toast.LENGTH_SHORT).show()
                     return@withContext
                 }
                 // 库 1.0.1 四参重载：内部按文件精确刻度落盘 saveReverbProgress、

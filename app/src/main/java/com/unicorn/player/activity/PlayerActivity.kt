@@ -232,7 +232,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                             pendingSaveAudioPath = null
                             Toast.makeText(
                                 this@PlayerActivity,
-                                "保存目录创建失败",
+                                getString(R.string.save_dir_create_failed),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -389,7 +389,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(
                         this@PlayerActivity,
-                        "无法打开此音频文件",
+                        getString(R.string.cannot_open_audio),
                         Toast.LENGTH_SHORT
                     ).show()
                     finish()
@@ -595,7 +595,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         binding.btnCreateLyrics.setOnClickListener {
             val song = musicService?.currentSong?.value
             if (song == null) {
-                Toast.makeText(this@PlayerActivity, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@PlayerActivity, getString(R.string.no_playing_song), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             // 在打开弹窗时即捕获音频路径，避免保存时已切歌导致写入到下一首的歌词文件
@@ -615,7 +615,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 onSave = { content -> saveLyrics(content, songPath) },
                 // 新建场景保存空内容：不生成空文件
                 onEmptySave = {
-                    Toast.makeText(this@PlayerActivity, "歌词为空未保存", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@PlayerActivity, getString(R.string.lyrics_empty_not_saved), Toast.LENGTH_SHORT).show()
                 },
                 showSaveButton = false
             ).also { it.show() }
@@ -647,7 +647,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         binding.lrcViewContainer.onLongPressListener = listener@{
             val song = musicService?.currentSong?.value
             if (song == null) {
-                Toast.makeText(this@PlayerActivity, "当前无播放歌曲", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@PlayerActivity, getString(R.string.no_playing_song), Toast.LENGTH_SHORT).show()
                 return@listener
             }
             if (isLrcFullscreen) {
@@ -674,7 +674,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         val lrcFileName = File(audioPath).nameWithoutExtension + ".lrc"
         val content = LyricsSaveManager.readLrcFile(this, lrcFileName)
         if (content == null) {
-            Toast.makeText(this, "本地歌词文件不存在", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.local_lyrics_not_found), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -707,7 +707,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             withContext(Dispatchers.Main) {
                 Toast.makeText(
                     this@PlayerActivity,
-                    if (deleted) "已删除歌词文件" else "删除失败",
+                    if (deleted) getString(R.string.lyrics_delete_success) else getString(R.string.lyrics_delete_fail),
                     Toast.LENGTH_SHORT
                 ).show()
                 if (deleted && audioPath == musicService?.currentSong?.value?.path) {
@@ -739,7 +739,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             // 1. 先检查是否有保存的 tree URI（没有则无法创建目录，直接授权）
             if (!LyricsSaveManager.hasSavedTreeUri(this)) {
                 Log.d(TAG, "saveLyrics: 无保存的 tree URI，启动目录选择器")
-                Toast.makeText(this, "请选择 Download 目录以授权保存", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.choose_download_dir_to_save), Toast.LENGTH_LONG).show()
                 pendingSaveContent = content
                 pendingSaveFileName = fileName
                 pendingSaveAudioPath = audioPath
@@ -752,7 +752,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 val dirReady = LyricsSaveManager.ensureSaveDirExists(this@PlayerActivity)
                 if (!dirReady) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@PlayerActivity, "保存目录创建失败", Toast.LENGTH_SHORT)
+                        Toast.makeText(this@PlayerActivity, getString(R.string.save_dir_create_failed), Toast.LENGTH_SHORT)
                             .show()
                     }
                     return@launch
@@ -774,7 +774,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             }
         } catch (e: Exception) {
             Log.e(TAG, "saveLyrics 异常: ${e.javaClass.name}: ${e.message}", e)
-            Toast.makeText(this, "保存失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.save_failed_with_msg, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -793,7 +793,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             withContext(Dispatchers.Main) {
                 Toast.makeText(
                     this@PlayerActivity,
-                    if (success) "保存成功" else "保存失败",
+                    if (success) getString(R.string.lyrics_save_success) else getString(R.string.lyrics_save_fail),
                     Toast.LENGTH_SHORT
                 ).show()
                 // 保存成功后刷新 LrcView 显示
@@ -1829,7 +1829,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         try {
             val file = File(song.path)
             if (!file.exists()) {
-                Toast.makeText(this, "文件不存在", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.file_not_found), Toast.LENGTH_SHORT).show()
                 return
             }
             val uri = FileProvider.getUriForFile(
@@ -1845,7 +1845,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
         } catch (e: Exception) {
             LogWriter.writeError(TAG, "分享文件失败: ${e.message}", e)
-            Toast.makeText(this, "分享失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.share_failed), Toast.LENGTH_SHORT).show()
         }
     }
 

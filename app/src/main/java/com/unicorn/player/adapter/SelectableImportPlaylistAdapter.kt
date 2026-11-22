@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ItemPlaylistImportBinding
 import com.unicorn.player.viewmodel.PlaylistViewModel
 
@@ -67,8 +68,8 @@ class SelectableImportPlaylistAdapter(
         fun bind(item: PlaylistViewModel.PlaylistImportItem) {
             binding.tvPlaylistName.text = item.displayName
             binding.tvPlaylistInfo.text = buildString {
-                append(item.songCount)
-                append(" 首 · ")
+                append(itemView.context.resources.getQuantityString(R.plurals.song_count, item.songCount, item.songCount))
+                append(" · ")
                 append(
                     when {
                         item.targetExists && !item.sameNameMerge -> "将合并到当前歌单"
@@ -77,9 +78,9 @@ class SelectableImportPlaylistAdapter(
                     }
                 )
                 if (item.matchedCount < item.songCount) {
+                    val remaining = item.songCount - item.matchedCount
                     append("，曲库缺失 ")
-                    append(item.songCount - item.matchedCount)
-                    append(" 首")
+                    append(itemView.context.resources.getQuantityString(R.plurals.song_count, remaining, remaining))
                 }
             }
             binding.checkBox.isChecked = selectedFileNames.contains(item.fileName)

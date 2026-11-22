@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
         android:layout_marginEnd="12dp"
-        app:title="选择目录" />
+        app:title="@string/title_choose_dir" />
 
     <!-- 目录列表 -->
     <com.scwang.smart.refresh.layout.SmartRefreshLayout
@@ -47,7 +47,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:text="暂无可选择的目录"
+                android:text="@string/no_dirs_available"
                 android:textColor="@color/onSurfaceVariant"
                 android:textSize="15sp"
                 android:visibility="gone" />
@@ -65,7 +65,7 @@
         android:layout_marginEnd="16dp"
         android:layout_marginTop="8dp"
         android:layout_marginBottom="16dp"
-        android:text="确定"
+        android:text="@string/confirm"
         android:textSize="16sp" />
 
 </LinearLayout>

@@ -4,6 +4,7 @@ import android.app.Application
 import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.playback.SongPlayableRegistry
 import com.unicorn.player.util.datastore.themeDataStore
+import com.unicorn.player.util.lang.LanguageManager
 import com.unicorn.player.util.sort.PinyinUtil
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -33,6 +34,9 @@ class UnicornPlayerApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // 恢复用户语言偏好到 AppCompatDelegate
+        LanguageManager.restore(this)
 
         // 后台预加载多音字配置（assets/pinyin/polyphonic.txt），避免首次排序时读文件
         PinyinUtil.preload()

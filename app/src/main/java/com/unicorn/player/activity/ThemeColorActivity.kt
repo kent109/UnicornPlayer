@@ -30,9 +30,9 @@ class ThemeColorActivity : BaseActivity() {
                 }
             }
             return when (mode) {
-                COLOR_MODE_RANDOM -> "随机变化"
-                COLOR_MODE_FIXED -> "固定使用"
-                else -> "系统默认"
+                COLOR_MODE_RANDOM -> context.getString(R.string.color_mode_random)
+                COLOR_MODE_FIXED -> context.getString(R.string.color_mode_fixed)
+                else -> context.getString(R.string.color_mode_system)
             }
         }
 

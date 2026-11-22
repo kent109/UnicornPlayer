@@ -132,7 +132,7 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
         binding.btAddSongs.setOnClickListener { view ->
             // 无歌曲数据时提示用户，不弹出选择框
             if (viewModel.getSortedFullSongs().isEmpty()) {
-                Toast.makeText(this@PlaylistSongsActivity, "暂无歌曲可添加", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@PlaylistSongsActivity, getString(R.string.no_songs_to_add), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             // 以「添加」按钮中心作为弹窗动画起点（参考 PlayerActivity 中 LrcPreviewDialog 触发坐标计算方式）
@@ -276,7 +276,7 @@ class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener
     }
 
     private fun updateSongCount(count: Int) {
-        binding.titleBar.setTitle("$playlistName ($count 首)")
+        binding.titleBar.setTitle(getString(R.string.title_count_format, playlistName, count))
     }
 
     private fun setupRecyclerView() {

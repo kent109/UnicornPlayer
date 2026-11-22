@@ -51,7 +51,7 @@ class ArtistAdapter(
         fun bind(artist: Artist, position: Int) {
             binding.apply {
                 tvArtistName.text = artist.name
-                tvSongCount.text = "${artist.songCount} 首"
+                tvSongCount.text = itemView.context.resources.getQuantityString(R.plurals.song_count, artist.songCount, artist.songCount)
 
                 // 曲库里同名歌手可能混用大小写（如 Beyond/BEYOND），网格显示名取"首次出现的
                 // 原始写法"，列表顺序一变显示名就会翻面；来源标签存的还是当初点击时的写法，

@@ -13,7 +13,7 @@
         android:id="@+id/tvTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="导出配置"
+        android:text="@string/export_config"
         android:textColor="@color/onSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
@@ -23,7 +23,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="请输入配置文件名 (不用加扩展名)"
+        android:text="@string/eq_filename_desc"
         android:textColor="@color/onSurfaceVariant"
         android:textSize="14sp" />
 
@@ -33,7 +33,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:hint="自定义配置名">
+        android:hint="@string/custom_config_name_hint">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etFileName"
@@ -52,7 +52,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:checked="false"
-        android:text="覆盖同名配置"
+        android:text="@string/overwrite_same_name"
         android:textColor="@color/danger_text"
         android:textSize="13sp" />
 
@@ -68,7 +68,7 @@
             style="@style/Widget.UnicornPlayer.Button.TextButton.Secondary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="取消" />
+            android:text="@string/cancel" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnConfirm"
@@ -76,7 +76,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:text="确定" />
+            android:text="@string/confirm" />
 
     </LinearLayout>
 

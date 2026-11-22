@@ -13,7 +13,7 @@
         android:id="@+id/titleBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:title="意见反馈" />
+        app:title="@string/title_feedback" />
 
     <!-- 内容区域 -->
     <com.scwang.smart.refresh.layout.SmartRefreshLayout
@@ -49,7 +49,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="8dp"
-                    android:text="问题描述："
+                    android:text="@string/feedback_problem_title"
                     android:textColor="@color/onSurface"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -59,7 +59,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_edittext"
-                    android:hint="简要描述问题"
+                    android:hint="@string/feedback_problem_hint"
                     android:inputType="text"
                     android:maxLength="50"
                     android:maxLines="1"
@@ -74,7 +74,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:layout_marginBottom="8dp"
-                    android:text="问题详情："
+                    android:text="@string/feedback_detail_title"
                     android:textColor="@color/onSurface"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -85,7 +85,7 @@
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_edittext"
                     android:gravity="top|start"
-                    android:hint="描述您遇到的问题，或分享改进建议。"
+                    android:hint="@string/feedback_detail_hint"
                     android:inputType="textMultiLine"
                     android:maxLength="500"
                     android:minHeight="180dp"
@@ -100,7 +100,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:layout_marginBottom="8dp"
-                    android:text="联系方式："
+                    android:text="@string/feedback_contact_title"
                     android:textColor="@color/onSurface"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -110,7 +110,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_edittext"
-                    android:hint="输入您的QQ或邮箱"
+                    android:hint="@string/feedback_contact_hint"
                     android:inputType="text"
                     android:maxLength="30"
                     android:padding="12dp"
@@ -125,7 +125,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
                     android:backgroundTint="?attr/colorPrimary"
-                    android:text="提交"
+                    android:text="@string/feedback_submit"
                     android:textColor="?attr/colorOnPrimary" />
 
             </LinearLayout>

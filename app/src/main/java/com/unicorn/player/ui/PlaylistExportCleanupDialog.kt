@@ -111,7 +111,7 @@ object PlaylistExportCleanupDialog {
 
         val adapter = MultiSelectableEqConfigAdapter { selectedCount ->
             dialogBinding.btnDelete.isEnabled = selectedCount > 0
-            dialogBinding.btnDelete.text = if (selectedCount > 0) "删除($selectedCount)" else "删除"
+            dialogBinding.btnDelete.text = if (selectedCount > 0) "删除($selectedCount)" else context.getString(R.string.delete)
         }
         dialogBinding.recyclerView.layoutManager = LinearLayoutManager(context)
         dialogBinding.recyclerView.adapter = adapter
@@ -127,7 +127,7 @@ object PlaylistExportCleanupDialog {
             }
             adapter.submitList(displays)
             dialogBinding.btnDelete.isEnabled = false
-            dialogBinding.btnDelete.text = "删除"
+            dialogBinding.btnDelete.text = context.getString(R.string.delete)
         }
         render(displayToFileName.keys.toList())
 

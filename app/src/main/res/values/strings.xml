@@ -9,7 +9,10 @@
     <string name="unknown_artist">未知艺术家</string>
     <string name="unknown_album">未知专辑</string>
     <string name="unknown_title">未知标题</string>
+    <string name="unknown_genre">未知流派</string>
+    <string name="unknown">未知</string>
     <string name="permission_required">需要存储权限才能访问音乐文件</string>
+    <string name="notification_permission_denied">通知权限被拒绝，通知功能可能受限</string>
     <string name="notification_channel_name">音乐播放</string>
     <string name="notification_channel_description">音乐播放通知</string>
 
@@ -32,16 +35,86 @@
     <string name="font_size_small">小</string>
     <string name="font_size_medium">中</string>
     <string name="font_size_large">大</string>
+    <string name="lyrics_directory">歌词目录</string>
+    <string name="lyrics_directory_summary">主存储卡/Download/Unicorn/Lyrics</string>
+
+    <!-- 主题 -->
     <string name="color_theme">颜色主题</string>
     <string name="color_theme_system">跟随系统</string>
     <string name="color_theme_light">浅色</string>
     <string name="color_theme_dark">深色</string>
+    <string name="theme_style">主题样式</string>
+    <string name="theme_mode">深色模式</string>
+    <string name="theme_mode_follow_system">跟随系统</string>
+    <string name="theme_mode_light">白天模式</string>
+    <string name="theme_mode_dark">黑夜模式</string>
+    <string name="theme_color">主题色</string>
+    <string name="highlight_color">高亮色</string>
+    <string name="icon_appearance">图标外观</string>
+    <string name="bottom_panel">底部面板</string>
+    <string name="dialog_background">弹窗背景</string>
+    <string name="panel_card">卡片</string>
+    <string name="panel_banner">横幅</string>
+    <string name="dialog_bg_system">系统默认</string>
+    <string name="dialog_bg_theme">跟随主题</string>
+    <string name="highlight_system">系统默认</string>
+    <string name="highlight_fixed">固定使用</string>
+    <string name="icon_disc">唱片</string>
+    <string name="icon_cassette">磁带</string>
+    <string name="color_mode_system">系统默认</string>
+    <string name="color_mode_random">随机变化</string>
+    <string name="color_mode_fixed">固定使用</string>
+
+    <!-- 扫描过滤 -->
+    <string name="scan_filter">扫描过滤</string>
+    <string name="scan_filter_short_duration">不扫描少于30秒</string>
+    <string name="scan_filter_small_file">不扫描小于100K</string>
+    <string name="scan_filter_unsupported_format">不扫描不支持的格式</string>
+    <string name="scan_filter_unsupported_format_summary">过滤设备无法解码或播放失败的格式</string>
+    <string name="scan_filter_deleted_songs">扫描删除的歌曲</string>
+    <string name="scan_filter_deleted_songs_summary">关闭时不扫描已删除的歌曲</string>
+    <string name="scan_filter_excluded_dirs_summary">选择的目录不扫描</string>
+    <string name="scan_filter_included_dirs_summary">不指定时全部扫描</string>
+
+    <!-- 语言 -->
+    <string name="language_title">语言环境</string>
+    <string name="language_zh_cn">简体中文</string>
+    <string name="language_en">English</string>
+
+    <!-- 设置页条目 -->
+    <string name="equalizer">均衡器</string>
+    <string name="clear_storage">清理存储</string>
+    <string name="auto_check_update">自动检查更新</string>
+    <string name="version_name">版本号</string>
+    <string name="share_friends">分享好友</string>
+    <string name="feedback">意见反馈</string>
+    <string name="manual">使用指南</string>
+    <string name="privacy_policy">隐私协议</string>
 
     <!-- 歌单 -->
     <string name="playlist_name_exists">歌单「%1$s」已存在</string>
+    <string name="new_playlist">新建歌单</string>
+    <string name="edit_playlist">编辑歌单</string>
+    <string name="playlist_name_hint">歌单名称</string>
+    <string name="same_name_playlist">同名歌单</string>
+    <string name="overwrite">覆盖</string>
+    <string name="merge">合并</string>
+    <string name="delete_playlist_title">删除歌单</string>
+    <string name="delete_playlist_message">确定要删除歌单「%1$s」吗？此操作不可恢复。</string>
+    <string name="add_to_playlist">添加到歌单</string>
+    <string name="no_songs_to_add">暂无歌曲可添加</string>
 
     <!-- 多选 -->
     <string name="selected_count">已选择 %1$d 项</string>
+    <string name="select_all">全选</string>
+    <string name="deselect_all">取消全选</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确定</string>
+    <string name="delete">删除</string>
+    <string name="done">完成</string>
+    <string name="create">创建</string>
+    <string name="import_action">导入</string>
+    <string name="export">导出</string>
 
     <!-- 清除缓存 -->
     <string name="clear_cache">清理存储</string>
@@ -62,14 +135,302 @@
     <string name="update_already_latest">已是最新版本</string>
     <string name="update_check_failed">检查更新失败，请稍后重试</string>
     <string name="update_download_failed">下载失败，请重试</string>
-    <string name="share_friends">分享好友</string>
+    <string name="update_checking">正在检查新版本</string>
+    <string name="no_update_notes">暂无更新说明</string>
+    <string name="share_app_image">分享轻籁</string>
+    <string name="share_failed">分享失败</string>
+    <string name="share_failed_with_msg">分享失败: %1$s</string>
     <string name="share_text">给你安利一款体验良好的音乐播放器『轻籁』</string>
 
     <!-- 歌曲信息编辑 -->
     <string name="edit_song_info">编辑歌曲信息</string>
-    <string name="done">完成</string>
     <string name="tag_edit_success">标签修改成功</string>
     <string name="tag_edit_failed">标签修改失败</string>
     <string name="tag_edit_permission_pending">请授权后完成修改</string>
     <string name="tag_no_changes">没有修改内容</string>
+    <string name="artist">歌手</string>
+    <string name="album">专辑</string>
+    <string name="genre">流派</string>
+
+    <!-- Toast 提示 -->
+    <string name="no_playing_song">当前无播放歌曲</string>
+    <string name="lyrics_empty_not_saved">歌词为空未保存</string>
+    <string name="local_lyrics_not_found">本地歌词文件不存在</string>
+    <string name="choose_download_dir_to_save">请选择 Download 目录以授权保存</string>
+    <string name="save_dir_create_failed">保存目录创建失败</string>
+    <string name="save_failed_with_msg">保存失败: %1$s</string>
+    <string name="save_failed">保存失败</string>
+    <string name="file_not_found">文件不存在</string>
+    <string name="artist_and_title_required">请填写歌手和歌名</string>
+    <string name="no_lyrics_found">未搜索到歌词</string>
+    <string name="search_failed_with_msg">搜索失败: %1$s</string>
+    <string name="lyrics_saved">歌词已保存</string>
+    <string name="dir_create_failed">目录创建失败</string>
+    <string name="input_filename_required">请输入文件名</string>
+    <string name="serialization_failed">序列化失败</string>
+    <string name="choose_a_config">请选择一个配置</string>
+    <string name="read_failed">读取失败</string>
+    <string name="equalizer_not_ready">均衡器未就绪</string>
+    <string name="image_read_failed_retry">图片读取失败，请重试</string>
+    <string name="music_service_not_running">音乐服务没有运行</string>
+    <string name="unsupported_format">暂不支持播放该格式</string>
+    <string name="play_failed_retrying">播放失败，正在重试</string>
+    <string name="empty_queue">当前播放队列为空</string>
+    <string name="auth_dir_create_failed">授权目录创建失败</string>
+    <string name="deleted_from_list">已从列表中删除</string>
+    <string name="import_failed">导入失败</string>
+    <string name="exported">已导出</string>
+    <string name="export_failed">导出失败</string>
+
+    <!-- Dialog 按钮 -->
+    <string name="delete_song_title">删除歌曲</string>
+    <string name="delete_song_message">确定要从列表中删除「%1$s」吗？\n\n注意：这不会删除本地文件。</string>
+    <string name="delete_songs_title">删除歌曲</string>
+    <string name="delete_songs_message">确定要从列表中删除选中的歌曲吗？\n\n注意：这不会删除本地文件。</string>
+    <string name="delete_playlist_songs_title">删除歌单歌曲</string>
+
+    <!-- Dialog titles & messages -->
+    <string name="use_lyrics">使用歌词</string>
+    <string name="use_lyrics_message">确定要使用「%1$s」的歌词吗？</string>
+    <string name="storage_migration_title">存储目录升级</string>
+    <string name="storage_migration_message">为提供更好的体验，文件的保存位置已从 Documents/Unicorn 升级到 Download/Unicorn。\n\n点击"开始迁移"后，请在文件管理器中选择 Download/Unicorn 文件夹以完成授权，我们将自动迁移您的文件。\n\n后续使用需要您重新授权之前已授权的目录文件。</string>
+    <string name="migration_start">开始迁移</string>
+    <string name="remind_later">稍后提醒</string>
+    <string name="migrating_dir">正在迁移目录，请稍候...</string>
+
+    <!-- Dialog: New Playlist -->
+    <string name="playlist_cover">歌单封面</string>
+    <string name="modify">修改</string>
+    <string name="default_cover_label">默认</string>
+
+    <!-- Dialog: Sort -->
+    <string name="sort_options">排序方式</string>
+    <string name="sort_by_add_time">按添加时间排序</string>
+    <string name="sort_by_letter">按首字母排序</string>
+    <string name="sort_by_artist_letter">按歌手首字母</string>
+    <string name="sort_custom">自定义排序</string>
+
+    <!-- Dialog: Edit Cover -->
+    <string name="modify_cover">修改封面</string>
+    <string name="cover_save_note">封面图片保存在应用数据中，不会修改音频文件本身。</string>
+    <string name="default_cover">默认封面</string>
+    <string name="select_cover">选择封面</string>
+    <string name="confirm_replace_cover">确定更换</string>
+
+    <!-- Dialog: EQ -->
+    <string name="export_config">导出配置</string>
+    <string name="eq_filename_desc">请输入配置文件名 (不用加扩展名)</string>
+    <string name="custom_config_name_hint">自定义配置名</string>
+    <string name="overwrite_same_name">覆盖同名配置</string>
+    <string name="cleanup_configs">清理配置文件</string>
+    <string name="cleanup_configs_desc">最多保存 10 个配置，请先删除一些后再导出</string>
+    <string name="no_config_files">暂无配置文件</string>
+    <string name="import_config">导入配置</string>
+    <string name="import_error">导入错误</string>
+
+    <!-- Dialog: Playlist cleanup/import/conflict -->
+    <string name="cleanup_playlist_exports">清理导出文件</string>
+    <string name="cleanup_playlist_exports_desc">最多保存 10 个歌单导出文件，请先删除一些后再导出</string>
+    <string name="no_export_files">暂无导出文件</string>
+    <string name="import_playlist">导入歌单</string>
+
+    <!-- Dialog: Empty playlist action -->
+    <string name="create_playlist">创建歌单</string>
+    <string name="can_create_or_import">可以新建歌单，或者导入已有歌单。</string>
+    <string name="create_new_playlist_prompt">是否创建新歌单？</string>
+
+    <!-- Dialog: Play queue -->
+    <string name="play_queue">播放队列</string>
+    <string name="play_queue_count">播放队列 (%1$d 首)</string>
+
+    <!-- Lrc Search -->
+    <string name="lyrics_title">搜索歌词</string>
+    <string name="artist_hint">歌手</string>
+    <string name="title_hint">歌名</string>
+    <string name="search">搜索</string>
+
+    <!-- Multi-choice -->
+    <string name="multi_delete_content_desc">删除</string>
+    <string name="multi_add_to_playlist_content_desc">添加到歌单</string>
+    <string name="multi_export_content_desc">导出</string>
+
+    <!-- Player fragment content descriptions -->
+    <string name="album_cover">专辑封面</string>
+    <string name="player_pause_playing">播放/暂停</string>
+    <string name="player_prev">上一首</string>
+    <string name="player_next">下一首</string>
+    <string name="player_collapse">收起</string>
+    <string name="song_title_label">歌曲标题</string>
+    <string name="artist_label">艺术家</string>
+    <string name="album_label">专辑</string>
+
+    <!-- Fragment counts & empty states -->
+    <string name="songs_count">共 %1$d 首歌曲</string>
+    <string name="albums_count">共 %1$d 张专辑</string>
+    <string name="artists_count">共 %1$d 位歌手</string>
+    <string name="scan_now">立即扫描</string>
+    <string name="coming_soon">敬请期待</string>
+    <string name="artist_label_list">歌手</string>
+    <string name="artist_song_count_format">%1$s - %2$d 首</string>
+    <string name="title_count_format">%1$s (%2$d 首)</string>
+    <string name="playlist_add">添加</string>
+    <string name="no_dirs_available">暂无可选择的目录</string>
+
+    <!-- Feedback -->
+    <string name="feedback_problem_title">问题描述：</string>
+    <string name="feedback_problem_hint">简要描述问题</string>
+    <string name="feedback_detail_title">问题详情：</string>
+    <string name="feedback_detail_hint">描述您遇到的问题，或分享改进建议。</string>
+    <string name="feedback_contact_title">联系方式：</string>
+    <string name="feedback_contact_hint">输入您的QQ或邮箱</string>
+    <string name="feedback_submit">提交</string>
+    <string name="feedback_problem_required">请输入问题描述</string>
+    <string name="feedback_content_required">请输入反馈内容</string>
+    <string name="feedback_too_long">反馈内容不能超过500字</string>
+    <string name="feedback_contact_required">请输入联系方式</string>
+    <string name="feedback_success">反馈成功</string>
+    <string name="feedback_failed_with_msg">反馈失败: %1$s</string>
+
+    <!-- Artist / Album info dialogs -->
+    <string name="album_info">专辑信息</string>
+    <string name="artist_info">歌手信息</string>
+
+    <!-- Cover editor -->
+    <string name="album_ad_content_desc">广告图片</string>
+    <string name="album_ad_text">🎵 发现更多精彩音乐内容</string>
+    <string name="close_ad_content_desc">关闭广告</string>
+
+    <!-- MainActivity tabs -->
+    <string name="tab_songs">歌曲</string>
+    <string name="tab_artists">歌手</string>
+    <string name="tab_albums">专辑</string>
+    <string name="tab_playlists">歌单</string>
+
+    <!-- MainActivity search hint override -->
+    <string name="search_hint_full">输入歌曲、歌手、专辑关键字</string>
+
+    <!-- Play mode -->
+    <string name="playmode_all_loop">全部循环</string>
+    <string name="playmode_single_loop">单曲循环</string>
+    <string name="playmode_random">随机播放</string>
+    <string name="playmode_sequence">顺序播放</string>
+
+    <!-- Equalizer toggle -->
+    <string name="equalizer_on">已打开均衡器</string>
+    <string name="equalizer_off">已关闭均衡器</string>
+
+    <!-- Bluetooth -->
+    <string name="bluetooth_permission_missing">禁止蓝牙连接(附近设备)无法监听蓝牙事件</string>
+
+    <!-- Export results -->
+    <string name="export_limit_reached">导出文件已达上限 %1$s 个，请先清理</string>
+    <string name="exported_playlists_count">已导出 %1$s 个歌单</string>
+    <string name="export_result_summary">成功 %1$s 个，失败 %2$s 个</string>
+
+    <!-- Add to playlists -->
+    <string name="added_to_playlists">已添加到 %1$s 个歌单</string>
+
+    <!-- Lyrics save -->
+    <string name="lyrics_save_success">保存成功</string>
+    <string name="lyrics_delete_success">已删除歌词文件</string>
+    <string name="lyrics_save_fail">保存失败</string>
+    <string name="lyrics_delete_fail">删除失败</string>
+    <string name="cannot_open_audio">无法打开此音频文件</string>
+
+    <!-- LyricsOptionsActivity additional -->
+    <string name="lyrics_dir_default">主存储卡/Download/Unicorn/Lyrics</string>
+
+    <!-- ScanFilterActivity additional -->
+    <string name="scan_filter_no_unsupported_formats">当前设备没有不支持的已知格式</string>
+    <string name="scan_filter_excluded_dirs_title">不扫描的目录</string>
+    <string name="scan_filter_included_dirs_title">指定扫描目录</string>
+
+    <!-- Generic item template text (used by Adapter, not for display) -->
+    <string name="template_title">标题</string>
+    <string name="template_subtitle">副标题</string>
+    <string name="template_subtitle2">副标题2</string>
+    <string name="template_config_name">配置名</string>
+    <string name="template_song_count_0">0 首</string>
+    <string name="template_song_count_format">%1$s - %2$d 首</string>
+
+    <!-- Lrc preview editor -->
+    <string name="edit">编辑</string>
+    <string name="save_label">保存</string>
+
+    <!-- Activity titles (for titleBar app:title) -->
+    <string name="title_settings">设置</string>
+    <string name="title_privacy">隐私协议</string>
+    <string name="title_album_songs">专辑歌曲</string>
+    <string name="title_artist_songs">歌手歌曲</string>
+    <string name="title_playlist_songs">歌单歌曲</string>
+    <string name="title_choose_dir">选择目录</string>
+    <string name="title_choose_scan_dir">选择扫描目录</string>
+    <string name="title_choose_exclude_dir">选择不扫描目录</string>
+    <string name="title_equalizer">均衡器</string>
+    <string name="title_feedback">意见反馈</string>
+    <string name="title_genre_select">选择流派</string>
+    <string name="title_highlight_color">高亮色</string>
+    <string name="title_icon_setting">图标外观</string>
+    <string name="title_lrc_search">搜索歌词</string>
+    <string name="title_lyrics_options">歌词显示</string>
+    <string name="title_manual">使用指南</string>
+    <string name="title_scan_filter">扫描过滤</string>
+    <string name="title_theme_color">主题色</string>
+    <string name="title_theme_setting">主题样式</string>
+
+    <!-- Lrc search button text -->
+    <string name="btn_search">搜索</string>
+    <string name="btn_searching">正在搜索</string>
+
+    <!-- Song info dialog labels -->
+    <string name="info_artist">歌手</string>
+    <string name="info_album">专辑</string>
+    <string name="info_genre">流派</string>
+    <string name="info_duration">时长</string>
+    <string name="info_quality">音质</string>
+    <string name="info_file_size">文件大小</string>
+    <string name="info_file_path">文件路径</string>
+    <string name="main_storage">主存储卡</string>
+
+    <!-- Shortcut labels -->
+    <string name="shortcut_toggle_eq">开/关均衡器</string>
+    <string name="shortcut_eq_on">打开均衡器</string>
+    <string name="shortcut_eq_off">关闭均衡器</string>
+
+    <!-- Done button (compile/save) - localized -->
+    <string name="compile_done">确定</string>
+    <string name="genre_unknown">未知流派</string>
+
+    <!-- Song info dialog clickable items -->
+    <string name="info_add_to_playlist">添加到歌单</string>
+    <string name="info_share_local_file">分享本地文件</string>
+
+    <!-- Artist/Album info dialog items -->
+    <string name="info_count">歌曲数量</string>
+    <string name="info_play">播放</string>
+    <string name="info_edit_cover">修改封面</string>
+    <string name="info_edit_avatar">修改头像</string>
+    <string name="info_default_cover">默认封面</string>
+    <string name="info_default_avatar">默认头像</string>
+
+    <!-- Quality labels -->
+    <string name="quality_sq_full">SQ (超品质)</string>
+    <string name="quality_hq_full">HQ (高品质)</string>
+    <string name="quality_std_full">STD (标准)</string>
+    <string name="quality_ord_full">ORD (普通)</string>
+    <string name="quality_unk_full">UNK (未知)</string>
+
+    <!-- File size unknown -->
+    <string name="file_size_unknown">未知</string>
+
+    <!-- Share chooser title -->
+    <string name="share_song">分享歌曲</string>
+
+    <!-- Song count plain format for Artist/Album info dialogs -->
+    <string name="song_count_plain">%1$d 首</string>
+
+    <plurals name="song_count">
+        <item quantity="one">%1$d 首</item>
+        <item quantity="other">%1$d 首</item>
+    </plurals>
 </resources>

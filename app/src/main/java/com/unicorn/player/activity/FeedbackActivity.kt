@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ActivityFeedbackBinding
 import com.unicorn.player.util.FeedbackHelper
 
@@ -52,22 +53,22 @@ class FeedbackActivity : BaseActivity() {
             val title = etTitle.text.toString().trim()
 
             if (title.isEmpty()) {
-                Toast.makeText(this, "请输入问题描述", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.feedback_problem_required), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
             if (feedbackContent.isEmpty()) {
-                Toast.makeText(this, "请输入反馈内容", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.feedback_content_required), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
             if (feedbackContent.length > 500) {
-                Toast.makeText(this, "反馈内容不能超过500字", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.feedback_too_long), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
             if (contact.isEmpty()) {
-                Toast.makeText(this, "请输入联系方式", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.feedback_contact_required), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
@@ -80,7 +81,7 @@ class FeedbackActivity : BaseActivity() {
                 contact = contact,
                 deviceInfo = deviceInfo,
                 onSuccess = { _ ->
-                    Toast.makeText(this, "反馈成功", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.feedback_success), Toast.LENGTH_SHORT).show()
                     etFeedbackContent.text.clear()
                     etContact.text.clear()
                     etTitle.text.clear()
@@ -91,7 +92,7 @@ class FeedbackActivity : BaseActivity() {
                 },
                 onError = { errorMsg ->
                     Log.e(TAG, "errorMsg=$errorMsg")
-                    Toast.makeText(this, "反馈失败: $errorMsg", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.feedback_failed_with_msg, errorMsg), Toast.LENGTH_LONG).show()
                     isSubmitting = false
                     checkInputs()
                 }

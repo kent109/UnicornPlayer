@@ -212,7 +212,7 @@ class PlaylistAdapter(
             isSwiped: Boolean
         ) {
             binding.tvPlaylistName.text = playlist.name
-            binding.tvSongCount.text = "${playlist.songCount} 首"
+            binding.tvSongCount.text = itemView.context.resources.getQuantityString(R.plurals.song_count, playlist.songCount, playlist.songCount)
 
             // 仅当歌单正在播放时高亮（通过观察当前正在播放的歌单ID）
             val isPlaying = playlist.id == currentPlayingPlaylistId

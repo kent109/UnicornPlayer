@@ -46,21 +46,21 @@ class GenreSelectActivity : BaseActivity() {
 
     /**
      * 在卡片容器内逐个添加流派条目，条目间插入分隔线，样式对齐主题色的色块条目（对钩）。
+     * options = 内置流派（genre_options）+ "<unknown>"（清空流派）
      */
     private fun buildGenreList(current: String) {
         val container = binding.genreContainer
         container.removeAllViews()
 
-        // 完整选项 = 内置流派（定义在 arrays.xml 的 genre_options）+ "<unknown>"（用于清空流派）
         val options = resources.getStringArray(R.array.genre_options).toList() + UNKNOWN_GENRE
-        // 预选：命中则勾该项，否则勾 "<unknown>"（兼容文件里出现但不在列表内的自定义流派）
-        val selected = options.firstOrNull { it == current } ?: UNKNOWN_GENRE
+        val displayLabels = options.map { if (it == UNKNOWN_GENRE) getString(R.string.genre_unknown) else it }
+
+        val selectedIndex = options.indexOfFirst { it == current }.let { if (it >= 0) it else options.size - 1 }
 
         options.forEachIndexed { index, genre ->
-            container.addView(createGenreItem(genre, genre == selected))
+            container.addView(createGenreItem(genre, displayLabels[index], index == selectedIndex))
             if (index < options.size - 1) {
-                val divider =
-                    layoutInflater.inflate(R.layout.item_setting_divider, container, false)
+                val divider = layoutInflater.inflate(R.layout.item_setting_divider, container, false)
                 container.addView(divider)
             }
         }
@@ -68,9 +68,9 @@ class GenreSelectActivity : BaseActivity() {
 
     /**
      * 单条流派：左侧名称撑满、右侧对钩；仅当前选中项显示对钩。点击整行即选择并回传。
+     * genre：内部值（回传给弹窗）；label：显示文本
      */
-    private fun createGenreItem(genre: String, isSelected: Boolean): View {
-        val label = if (genre == UNKNOWN_GENRE) "未知流派" else genre
+    private fun createGenreItem(genre: String, label: String, isSelected: Boolean): View {
         val highlightColor = ThemeSettingActivity.resolveHighlightColor(this)
 
         val container = LinearLayout(this).apply {

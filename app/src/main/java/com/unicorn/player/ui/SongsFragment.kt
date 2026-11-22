@@ -316,7 +316,7 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
     }
 
     private fun updateSongCount(count: Int) {
-        binding.tvSongCount.text = "共 $count 首歌曲"
+        binding.tvSongCount.text = getString(R.string.songs_count, count)
     }
 
     /**

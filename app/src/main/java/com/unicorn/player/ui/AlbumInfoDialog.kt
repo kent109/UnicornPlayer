@@ -41,30 +41,30 @@ class AlbumInfoDialog(
         bottomSheetDialog.setContentView(dialogBinding.root)
 
         dialogBinding.apply {
-            tvSongTitle.text = "专辑信息"
+            tvSongTitle.text = context.getString(R.string.album_info)
             tvSongTitle.isSelected = true
 
             val fileSize = calculateTotalFileSize(album.songList)
             val songCount = album.songCount
 
             val infoItems = listOf(
-                Pair("专辑", album.name),
-                Pair("歌曲数量", "$songCount 首"),
-                Pair("文件大小", fileSize)
+                Triple(context.getString(R.string.info_album), album.name, R.drawable.ic_album_s),
+                Triple(context.getString(R.string.info_count), context.resources.getQuantityString(R.plurals.song_count, songCount, songCount), R.drawable.ic_count_s),
+                Triple(context.getString(R.string.info_file_size), fileSize, R.drawable.ic_filesize_s)
             )
 
-            infoItems.forEach { (label, value) ->
+            infoItems.forEach { (label, value, iconRes) ->
                 val itemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context))
                 itemBinding.tvLabel.text = label
                 itemBinding.tvValue.text = value
                 itemBinding.root.background = null
-                setIconForLabel(itemBinding.ivIcon, label)
+                setIconForLabel(itemBinding.ivIcon, iconRes)
                 infoContainer.addView(itemBinding.root)
             }
 
             if (onPlay != null) {
                 addClickableItem(
-                    infoContainer, "播放", R.color.blue_500
+                    infoContainer, context.getString(R.string.info_play), R.color.blue_500, R.drawable.ic_play2
                 ) {
                     bottomSheetDialog.dismiss()
                     onPlay()
@@ -72,7 +72,7 @@ class AlbumInfoDialog(
             }
 
             addClickableItem(
-                infoContainer, "添加到歌单", R.color.disc_playing_color_4
+                infoContainer, context.getString(R.string.info_add_to_playlist), R.color.disc_playing_color_4, R.drawable.ic_add_to_play
             ) {
                 bottomSheetDialog.dismiss()
                 onAddToPlaylist()
@@ -80,7 +80,7 @@ class AlbumInfoDialog(
 
             if (onEditCover != null) {
                 addClickableItem(
-                    infoContainer, "修改封面", R.color.disc_playing_color_2
+                    infoContainer, context.getString(R.string.info_edit_cover), R.color.disc_playing_color_2, R.drawable.ic_edit2
                 ) {
                     bottomSheetDialog.dismiss()
                     onEditCover()
@@ -90,7 +90,7 @@ class AlbumInfoDialog(
             // 仅当前为自定义图片时才提供「默认封面」
             if (onResetCover != null && album.coverPath.isNotEmpty()) {
                 addClickableItem(
-                    infoContainer, "默认封面", R.color.primary
+                    infoContainer, context.getString(R.string.info_default_cover), R.color.primary, R.drawable.ic_reset
                 ) {
                     bottomSheetDialog.dismiss()
                     onResetCover()
@@ -157,14 +157,15 @@ class AlbumInfoDialog(
 
     /**
      * 添加可点击的操作项
+     * @param iconRes 左侧图标资源 ID，0 表示不显示
      */
     private fun addClickableItem(
-        container: android.view.ViewGroup, text: String, textColor: Int, onClick: () -> Unit
+        container: android.view.ViewGroup, text: String, textColor: Int, iconRes: Int = 0, onClick: () -> Unit
     ) {
         val itemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context))
         itemBinding.tvLabel.visibility = android.view.View.GONE
         itemBinding.tvValue.text = text
-        setIconForLabel(itemBinding.ivIcon, text)
+        setIconForLabel(itemBinding.ivIcon, iconRes)
         itemBinding.tvValue.textSize = 16f
         itemBinding.tvValue.setTypeface(
             itemBinding.tvValue.typeface, android.graphics.Typeface.BOLD
@@ -181,29 +182,11 @@ class AlbumInfoDialog(
     }
 
     /**
-     * 按标题为 item 左侧图标设置对应 drawable，无匹配则隐藏
+     * 为 item 左侧图标设置对应 drawable，resId 为 0 则隐藏
      */
-    private fun setIconForLabel(icon: android.widget.ImageView, label: String) {
-        val res = when (label) {
-            "歌手" -> R.drawable.ic_artist_s
-            "专辑" -> R.drawable.ic_album_s
-            "时长" -> R.drawable.ic_duration_s
-            "音质" -> R.drawable.ic_quality_s
-            "文件大小" -> R.drawable.ic_filesize_s
-            "文件路径" -> R.drawable.ic_filepath_s
-            "添加到歌单" -> R.drawable.ic_add_to_play
-            "分享本地文件" -> R.drawable.ic_share
-            "删除" -> R.drawable.ic_delete
-            "播放" -> R.drawable.ic_play2
-            "歌曲数量" -> R.drawable.ic_count_s
-            "修改头像" -> R.drawable.ic_edit2
-            "修改封面" -> R.drawable.ic_edit2
-            "默认头像" -> R.drawable.ic_reset
-            "默认封面" -> R.drawable.ic_reset
-            else -> null
-        }
-        if (res != null) {
-            icon.setImageResource(res)
+    private fun setIconForLabel(icon: android.widget.ImageView, resId: Int) {
+        if (resId != 0) {
+            icon.setImageResource(resId)
             icon.visibility = View.VISIBLE
         } else {
             icon.visibility = View.GONE

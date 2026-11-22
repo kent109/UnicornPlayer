@@ -18,7 +18,7 @@
         android:paddingTop="10dp"
         android:paddingEnd="16dp"
         android:paddingBottom="10dp"
-        android:text="系统默认"
+        android:text="@string/dialog_bg_system"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 
@@ -42,7 +42,7 @@
         android:paddingTop="10dp"
         android:paddingEnd="16dp"
         android:paddingBottom="10dp"
-        android:text="跟随主题"
+        android:text="@string/dialog_bg_theme"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 

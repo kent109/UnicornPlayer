@@ -15,7 +15,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:title="歌手歌曲" />
+        app:title="@string/title_artist_songs" />
 
     <com.scwang.smart.refresh.layout.SmartRefreshLayout
         android:id="@+id/smartRefreshLayout"

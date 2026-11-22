@@ -63,7 +63,7 @@ class LrcSearchActivity : BaseActivity(),
                             pendingSaveFileName = null
                             Toast.makeText(
                                 this@LrcSearchActivity,
-                                "保存目录创建失败",
+                                getString(R.string.save_dir_create_failed),
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
@@ -95,7 +95,7 @@ class LrcSearchActivity : BaseActivity(),
 
         // 初始化 TitleBar 返回按钮
         binding.titleBar.findViewById<View>(R.id.ivBack).setOnClickListener { finish() }
-        binding.titleBar.findViewById<android.widget.TextView>(R.id.tvTitle).text = "搜索歌词"
+        binding.titleBar.findViewById<android.widget.TextView>(R.id.tvTitle).text = getString(R.string.lyrics_title)
 
         // 预填输入框
         binding.etArtist.setText(artist)
@@ -126,7 +126,7 @@ class LrcSearchActivity : BaseActivity(),
 
         when {
             artist.isBlank() && title.isBlank() -> {
-                Toast.makeText(this, "请填写歌手和歌名", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.artist_and_title_required), Toast.LENGTH_SHORT).show()
                 return
             }
         }
@@ -148,7 +148,7 @@ class LrcSearchActivity : BaseActivity(),
                     binding.progressBar.visibility = View.GONE
                     setSearchingState(false)
                     if (results.isEmpty()) {
-                        Toast.makeText(this@LrcSearchActivity, "未搜索到歌词", Toast.LENGTH_SHORT)
+                        Toast.makeText(this@LrcSearchActivity, getString(R.string.no_lyrics_found), Toast.LENGTH_SHORT)
                             .show()
                     } else {
                         adapter.submitList(results)
@@ -161,7 +161,7 @@ class LrcSearchActivity : BaseActivity(),
                 runOnUiThread {
                     binding.progressBar.visibility = View.GONE
                     setSearchingState(false)
-                    Toast.makeText(this@LrcSearchActivity, "搜索失败: $message", Toast.LENGTH_SHORT)
+                    Toast.makeText(this@LrcSearchActivity, getString(R.string.search_failed_with_msg, message), Toast.LENGTH_SHORT)
                         .show()
                     Log.e(TAG, "搜索失败: $message")
                 }
@@ -178,12 +178,12 @@ class LrcSearchActivity : BaseActivity(),
     override fun onResultClick(result: LrcSearchResult) {
         val secondaryColor = this.getColor(R.color.secondary)
         val dialog = AlertDialog.Builder(this)
-            .setTitle("使用歌词")
-            .setMessage("确定要使用「${result.trackName} - ${result.artistName}」的歌词吗？")
-            .setPositiveButton("确定") { _, _ ->
+            .setTitle(getString(R.string.use_lyrics))
+            .setMessage(getString(R.string.use_lyrics_message, "${result.trackName} - ${result.artistName}"))
+            .setPositiveButton(getString(R.string.confirm)) { _, _ ->
                 saveSelectedLyrics(result)
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
         dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
     }
@@ -258,7 +258,7 @@ class LrcSearchActivity : BaseActivity(),
         } else {
             pendingSaveContent = simplifiedContent
             pendingSaveFileName = lrcFileName
-            Toast.makeText(this, "请选择 Download 目录以授权保存", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.choose_download_dir_to_save), Toast.LENGTH_LONG).show()
             openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri(this))
         }
     }
@@ -271,7 +271,7 @@ class LrcSearchActivity : BaseActivity(),
             val dirReady = LyricsSaveManager.ensureSaveDirExists(this@LrcSearchActivity)
             if (!dirReady) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@LrcSearchActivity, "保存目录创建失败", Toast.LENGTH_SHORT)
+                    Toast.makeText(this@LrcSearchActivity, getString(R.string.save_dir_create_failed), Toast.LENGTH_SHORT)
                         .show()
                 }
                 return@launch
@@ -279,10 +279,10 @@ class LrcSearchActivity : BaseActivity(),
             val success = LyricsSaveManager.writeLrcFile(this@LrcSearchActivity, fileName, content)
             withContext(Dispatchers.Main) {
                 if (success) {
-                    Toast.makeText(this@LrcSearchActivity, "歌词已保存", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@LrcSearchActivity, getString(R.string.lyrics_saved), Toast.LENGTH_SHORT).show()
                     finish()
                 } else {
-                    Toast.makeText(this@LrcSearchActivity, "保存失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@LrcSearchActivity, getString(R.string.save_failed), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -307,7 +307,7 @@ class LrcSearchActivity : BaseActivity(),
         binding.etArtist.isEnabled = !searching
         binding.etTitle.isEnabled = !searching
         binding.btnSearch.isEnabled = !searching
-        binding.btnSearch.text = if (searching) "正在搜索" else "搜索"
+        binding.btnSearch.text = if (searching) getString(R.string.btn_searching) else getString(R.string.btn_search)
         // 搜索中使用禁用色
         val typedValue = TypedValue()
         theme.resolveAttribute(

@@ -25,7 +25,7 @@
             android:id="@+id/btnPlay"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:contentDescription="播放"
+            android:contentDescription="@string/play"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
             android:src="@drawable/ic_play2" />
@@ -47,7 +47,7 @@
             android:layout_marginStart="4dp"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
-            android:contentDescription="删除"
+            android:contentDescription="@string/multi_delete_content_desc"
             android:src="@drawable/ic_delete" />
 
         <ImageView
@@ -57,7 +57,7 @@
             android:layout_marginStart="4dp"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
-            android:contentDescription="导出"
+            android:contentDescription="@string/multi_export_content_desc"
             android:src="@drawable/ic_export" />
 
     </LinearLayout>
@@ -94,7 +94,7 @@
             android:layout_marginEnd="12dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:text="歌单名称"
+            android:text="@string/playlist_name_hint"
             android:textColor="@color/onSurface"
             android:textSize="16sp"
             android:textStyle="bold"

@@ -125,7 +125,7 @@ class ScanFilterActivity : BaseActivity() {
                 }
             }
             tv.text = if (exts.isEmpty()) {
-                "当前设备没有不支持的已知格式"
+                getString(R.string.scan_filter_no_unsupported_formats)
             } else {
                 exts.joinToString("|") { it.lowercase() }
             }
@@ -146,7 +146,7 @@ class ScanFilterActivity : BaseActivity() {
             items = listOf(
                 SettingItem(
                     key = "skip_short_audio",
-                    title = "不扫描少于30秒",
+                    title = getString(R.string.scan_filter_short_duration),
                     hasChevron = false,
                     isFirst = true,
                     isLast = false,
@@ -154,7 +154,7 @@ class ScanFilterActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "skip_small_files",
-                    title = "不扫描小于100K",
+                    title = getString(R.string.scan_filter_small_file),
                     hasChevron = false,
                     isFirst = false,
                     isLast = false,
@@ -162,8 +162,8 @@ class ScanFilterActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "skip_unsupported_formats",
-                    title = "不扫描不支持的格式",
-                    summary = "过滤设备无法解码或播放失败的格式",
+                    title = getString(R.string.scan_filter_unsupported_format),
+                    summary = getString(R.string.scan_filter_unsupported_format_summary),
                     hasChevron = false,
                     isFirst = false,
                     isLast = false,
@@ -171,8 +171,8 @@ class ScanFilterActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "scan_deleted_songs",
-                    title = "扫描删除的歌曲",
-                    summary = "关闭时不扫描已删除的歌曲",
+                    title = getString(R.string.scan_filter_deleted_songs),
+                    summary = getString(R.string.scan_filter_deleted_songs_summary),
                     hasChevron = false,
                     isFirst = false,
                     isLast = false,
@@ -180,8 +180,8 @@ class ScanFilterActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "excluded_dirs",
-                    title = getDirsTitle("excluded_dirs", "不扫描的目录"),
-                    summary = "选择的目录不扫描",
+                    title = getDirsTitle("excluded_dirs", getString(R.string.scan_filter_excluded_dirs_title)),
+                    summary = getString(R.string.scan_filter_excluded_dirs_summary),
                     hasChevron = true,
                     isFirst = false,
                     isLast = false,
@@ -190,8 +190,8 @@ class ScanFilterActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "included_dirs",
-                    title = getDirsTitle("included_dirs", "指定扫描目录"),
-                    summary = "不指定时全部扫描",
+                    title = getDirsTitle("included_dirs", getString(R.string.scan_filter_included_dirs_title)),
+                    summary = getString(R.string.scan_filter_included_dirs_summary),
                     hasChevron = true,
                     isFirst = false,
                     isLast = true,
@@ -243,9 +243,9 @@ class ScanFilterActivity : BaseActivity() {
      */
     private fun updateDirsTitle() {
         binding.settingsContainer.findViewWithTag<android.widget.TextView>("excluded_dirs_title")?.text =
-            getDirsTitle("excluded_dirs", "不扫描的目录")
+            getDirsTitle("excluded_dirs", getString(R.string.scan_filter_excluded_dirs_title))
         binding.settingsContainer.findViewWithTag<android.widget.TextView>("included_dirs_title")?.text =
-            getDirsTitle("included_dirs", "指定扫描目录")
+            getDirsTitle("included_dirs", getString(R.string.scan_filter_included_dirs_title))
     }
 
     /**

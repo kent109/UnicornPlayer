@@ -38,8 +38,8 @@ class DirectoryPickerActivity : BaseActivity() {
 
         // 根据模式设置标题
         val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_EXCLUDE
-        val title = if (mode == MODE_INCLUDE) "选择扫描目录" else "选择不扫描目录"
-        binding.titleBar.setTitle(title)
+        val titleRes = if (mode == MODE_INCLUDE) R.string.title_choose_scan_dir else R.string.title_choose_exclude_dir
+        binding.titleBar.setTitle(getString(titleRes))
 
         // 恢复已选目录
         intent.getStringArrayListExtra(EXTRA_SELECTED)?.let {

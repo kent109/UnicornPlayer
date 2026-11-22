@@ -14,7 +14,7 @@
         android:id="@+id/tvTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="创建歌单"
+        android:text="@string/create_playlist"
         android:textColor="@color/onSurface"
         android:textSize="18sp"
         android:textStyle="bold" />
@@ -41,7 +41,7 @@
             style="@style/Widget.UnicornPlayer.Button.TextButton.Secondary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="取消" />
+            android:text="@string/cancel" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCreate"
@@ -49,7 +49,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
-            android:text="创建" />
+            android:text="@string/create" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnImport"
@@ -58,7 +58,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
             android:textColor="@color/disc_playing_color_4"
-            android:text="导入"
+            android:text="@string/import_action"
             android:visibility="gone" />
 
     </LinearLayout>

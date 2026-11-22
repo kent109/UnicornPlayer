@@ -132,8 +132,8 @@ class LyricsOptionsActivity : BaseActivity() {
             items = listOf(
                 SettingItem(
                     key = "lyrics_enable",
-                    title = "显示歌词",
-                    summary = "在播放界面显示歌词",
+                    title = getString(R.string.lyrics_enabled),
+                    summary = getString(R.string.lyrics_enabled_summary),
                     hasChevron = false,
                     isFirst = true,
                     isLast = false,
@@ -141,8 +141,8 @@ class LyricsOptionsActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "time_label",
-                    title = "显示时间标签",
-                    summary = "在歌词左侧显示时间",
+                    title = getString(R.string.time_label_visible),
+                    summary = getString(R.string.time_label_visible_summary),
                     hasChevron = false,
                     isFirst = false,
                     isLast = false,
@@ -150,7 +150,7 @@ class LyricsOptionsActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "font_size",
-                    title = "字体大小",
+                    title = getString(R.string.font_size),
                     summary = getFontSizeSummary(),
                     hasChevron = true,
                     isFirst = false,
@@ -160,8 +160,8 @@ class LyricsOptionsActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "search_lyrics",
-                    title = "歌词目录",
-                    summary = "主存储卡/Download/Unicorn/Lyrics",
+                    title = getString(R.string.lyrics_directory),
+                    summary = getString(R.string.lyrics_dir_default),
                     hasChevron = false,
                     isFirst = false,
                     isLast = true,
@@ -361,9 +361,9 @@ class LyricsOptionsActivity : BaseActivity() {
             }
         }
         return when (size) {
-            FONT_SIZE_SMALL -> "小"
-            FONT_SIZE_LARGE -> "大"
-            else -> "中"
+            FONT_SIZE_SMALL -> getString(R.string.font_size_small)
+            FONT_SIZE_LARGE -> getString(R.string.font_size_large)
+            else -> getString(R.string.font_size_medium)
         }
     }
 
@@ -483,9 +483,9 @@ class LyricsOptionsActivity : BaseActivity() {
      */
     private fun updateFontSizeSummary(size: Int) {
         val summary = when (size) {
-            FONT_SIZE_SMALL -> "小"
-            FONT_SIZE_LARGE -> "大"
-            else -> "中"
+            FONT_SIZE_SMALL -> getString(R.string.font_size_small)
+            FONT_SIZE_LARGE -> getString(R.string.font_size_large)
+            else -> getString(R.string.font_size_medium)
         }
         // 通过 tag 定位"字体大小"行的 summary（tag 在 createSettingItem 里赋值为 "${item.key}_summary"）
         binding.settingsContainer

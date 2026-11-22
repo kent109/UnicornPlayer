@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ItemPlaylistSelectBinding
 import com.unicorn.player.model.Playlist
 
@@ -70,7 +71,7 @@ class SelectablePlaylistAdapter(
         fun bind(playlist: Playlist) {
             binding.tvPlaylistName.text = playlist.name
             val count = songCountMap[playlist.id] ?: 0
-            binding.tvSongCount.text = "$count 首"
+            binding.tvSongCount.text = itemView.context.resources.getQuantityString(R.plurals.song_count, count, count)
             binding.checkBox.isChecked = selectedIds.contains(playlist.id)
         }
     }

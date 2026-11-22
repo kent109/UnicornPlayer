@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:gravity="center"
         android:padding="12dp"
-        android:text="共 0 首歌曲"
+        android:text="@string/songs_count"
         android:textColor="@color/onSurfaceVariant"
         android:textSize="14sp"
         android:visibility="gone"
@@ -75,7 +75,7 @@
             android:paddingTop="6dp"
             android:paddingEnd="8dp"
             android:paddingBottom="6dp"
-            android:text="立即扫描"
+            android:text="@string/scan_now"
             android:textColor="@android:color/white"
             android:textSize="13sp" />
 

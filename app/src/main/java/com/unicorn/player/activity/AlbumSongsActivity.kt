@@ -203,7 +203,7 @@ class AlbumSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener,
     }
 
     private fun updateSongCount(count: Int) {
-        binding.titleBar.setTitle("$albumName ($count 首)")
+        binding.titleBar.setTitle(getString(R.string.title_count_format, albumName, count))
     }
 
     private fun setupRecyclerView() {

@@ -15,7 +15,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:title="歌单歌曲" />
+        app:title="@string/title_playlist_songs" />
 
     <com.scwang.smart.refresh.layout.SmartRefreshLayout
         android:id="@+id/smartRefreshLayout"
@@ -43,7 +43,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="4dp"
-        android:text="添加"
+        android:text="@string/playlist_add"
         android:textColor="@android:color/white"
         app:icon="@drawable/ic_add"
         app:iconTint="@android:color/white"

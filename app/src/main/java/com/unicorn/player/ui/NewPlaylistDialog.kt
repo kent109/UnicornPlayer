@@ -43,11 +43,11 @@ class NewPlaylistDialog(
         coverPath = initialCoverPath
 
         if (initialName.isNotEmpty()) {
-            binding.tvTitle.text = "编辑歌单"
+            binding.tvTitle.text = context.getString(R.string.edit_playlist)
             binding.etName.setText(initialName)
             binding.etName.setSelection(initialName.length)
         } else {
-            binding.tvTitle.text = "新建歌单"
+            binding.tvTitle.text = context.getString(R.string.new_playlist)
         }
 
         binding.etName.doAfterTextChanged { text ->

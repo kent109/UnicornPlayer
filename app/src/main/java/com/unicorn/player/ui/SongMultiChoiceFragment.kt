@@ -56,10 +56,10 @@ class SongMultiChoiceFragment : Fragment(), SongMultiChoiceFragmentAdapter.OnChe
     private fun updateSelectUI(allSelected: Boolean) {
         if (allSelected) {
             binding.tvSelectAll.tag = '1'
-            binding.tvSelectAll.text = "取消全选"
+            binding.tvSelectAll.text = getString(R.string.deselect_all)
         } else {
             binding.tvSelectAll.tag = null
-            binding.tvSelectAll.text = "全选"
+            binding.tvSelectAll.text = getString(R.string.select_all)
         }
         binding.tvSelectedCount.text = getString(R.string.selected_count, selectedSongIds.size)
     }

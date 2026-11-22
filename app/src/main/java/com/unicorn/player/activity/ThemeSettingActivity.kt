@@ -161,8 +161,8 @@ class ThemeSettingActivity : BaseActivity() {
         fun getIconModeSummary(context: Context): String {
             val mode = resolveIconMode(context)
             return when (mode) {
-                SONG_ICON_MODE_CASSETTE -> "磁带"
-                else -> "唱片"
+                SONG_ICON_MODE_CASSETTE -> context.getString(R.string.icon_cassette)
+                else -> context.getString(R.string.icon_disc)
             }
         }
 
@@ -180,8 +180,8 @@ class ThemeSettingActivity : BaseActivity() {
         fun getBottomPanelSummary(context: Context): String {
             val mode = resolveBottomPanelMode(context)
             return when (mode) {
-                BOTTOM_PANEL_MODE_BANNER -> "横幅"
-                else -> "卡片"
+                BOTTOM_PANEL_MODE_BANNER -> context.getString(R.string.panel_banner)
+                else -> context.getString(R.string.panel_card)
             }
         }
 
@@ -209,8 +209,8 @@ class ThemeSettingActivity : BaseActivity() {
         fun getDialogBgSummary(context: Context): String {
             val mode = resolveDialogBgMode(context)
             return when (mode) {
-                DIALOG_BG_MODE_THEME -> "跟随主题"
-                else -> "系统默认"
+                DIALOG_BG_MODE_THEME -> context.getString(R.string.dialog_bg_theme)
+                else -> context.getString(R.string.dialog_bg_system)
             }
         }
 
@@ -269,8 +269,8 @@ class ThemeSettingActivity : BaseActivity() {
                 }
             }
             return when (mode) {
-                HIGHLIGHT_MODE_FIXED -> "固定使用"
-                else -> "系统默认"
+                HIGHLIGHT_MODE_FIXED -> context.getString(R.string.highlight_fixed)
+                else -> context.getString(R.string.highlight_system)
             }
         }
 
@@ -293,9 +293,9 @@ class ThemeSettingActivity : BaseActivity() {
                 }
             }
             return when (mode) {
-                MODE_LIGHT -> "白天模式"
-                MODE_DARK -> "黑夜模式"
-                else -> "跟随系统"
+                MODE_LIGHT -> context.getString(R.string.theme_mode_light)
+                MODE_DARK -> context.getString(R.string.theme_mode_dark)
+                else -> context.getString(R.string.theme_mode_follow_system)
             }
         }
     }
@@ -351,7 +351,7 @@ class ThemeSettingActivity : BaseActivity() {
             items = listOf(
                 SettingItem(
                     key = "theme_mode",
-                    title = "深色模式",
+                    title = getString(R.string.theme_mode),
                     summary = getThemeSummary(),
                     hasChevron = true,
                     isFirst = true,
@@ -361,7 +361,7 @@ class ThemeSettingActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "theme_color",
-                    title = "主题色",
+                    title = getString(R.string.theme_color),
                     summary = ThemeColorActivity.getColorModeSummary(this),
                     hasChevron = true,
                     isFirst = false,
@@ -373,7 +373,7 @@ class ThemeSettingActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "highlight_color",
-                    title = "高亮色",
+                    title = getString(R.string.highlight_color),
                     summary = HighlightColorActivity.getHighlightColorSummary(this),
                     hasChevron = true,
                     isFirst = false,
@@ -390,7 +390,7 @@ class ThemeSettingActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "icon_mode",
-                    title = "图标外观",
+                    title = getString(R.string.icon_appearance),
                     hasChevron = true,
                     isFirst = false,
                     isLast = false,
@@ -401,7 +401,7 @@ class ThemeSettingActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "bottom_panel",
-                    title = "底部面板",
+                    title = getString(R.string.bottom_panel),
                     summary = getBottomPanelSummary(this),
                     hasChevron = true,
                     isFirst = false,
@@ -411,7 +411,7 @@ class ThemeSettingActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "dialog_bg",
-                    title = "弹窗背景",
+                    title = getString(R.string.dialog_background),
                     summary = getDialogBgSummary(this),
                     hasChevron = true,
                     isFirst = false,
@@ -646,7 +646,7 @@ class ThemeSettingActivity : BaseActivity() {
         }
         binding.settingsContainer
             .findViewWithTag<android.widget.TextView>("bottom_panel_summary")
-            ?.text = if (mode == BOTTOM_PANEL_MODE_BANNER) "横幅" else "卡片"
+            ?.text = if (mode == BOTTOM_PANEL_MODE_BANNER) getString(R.string.panel_banner) else getString(R.string.panel_card)
         bottomPanelPopup?.dismiss()
         bottomPanelPopup = null
     }
@@ -705,7 +705,7 @@ class ThemeSettingActivity : BaseActivity() {
         }
         binding.settingsContainer
             .findViewWithTag<android.widget.TextView>("dialog_bg_summary")
-            ?.text = if (mode == DIALOG_BG_MODE_THEME) "跟随主题" else "系统默认"
+            ?.text = if (mode == DIALOG_BG_MODE_THEME) getString(R.string.dialog_bg_theme) else getString(R.string.dialog_bg_system)
         dialogBgPopup?.dismiss()
         dialogBgPopup = null
     }
@@ -743,9 +743,9 @@ class ThemeSettingActivity : BaseActivity() {
 
     private fun updateThemeModeSummary(mode: Int) {
         val summary = when (mode) {
-            MODE_LIGHT -> "白天模式"
-            MODE_DARK -> "黑夜模式"
-            else -> "跟随系统"
+            MODE_LIGHT -> getString(R.string.theme_mode_light)
+            MODE_DARK -> getString(R.string.theme_mode_dark)
+            else -> getString(R.string.theme_mode_follow_system)
         }
         binding.settingsContainer
             .findViewWithTag<android.widget.TextView>("theme_mode_summary")

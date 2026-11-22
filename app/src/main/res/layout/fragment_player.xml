@@ -21,7 +21,7 @@
             android:id="@+id/albumArt"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:contentDescription="专辑封面"
+            android:contentDescription="@string/album_cover"
             android:scaleType="centerCrop"
             android:src="@drawable/ic_music_note"
             app:layout_constraintDimensionRatio="1:1"
@@ -38,7 +38,7 @@
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="1"
-        android:text="歌曲标题"
+        android:text="@string/song_title_label"
         android:textColor="@color/onBackground"
         android:textSize="24sp"
         android:textStyle="bold"
@@ -54,7 +54,7 @@
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="1"
-        android:text="艺术家"
+        android:text="@string/artist_label"
         android:textColor="@color/onSurfaceVariant"
         android:textSize="17sp"
         app:layout_constraintEnd_toEndOf="parent"
@@ -69,7 +69,7 @@
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="1"
-        android:text="专辑"
+        android:text="@string/album_label"
         android:textColor="@color/onSurfaceVariant"
         android:textSize="17sp"
         app:layout_constraintEnd_toEndOf="parent"
@@ -179,7 +179,7 @@
             android:layout_width="72dp"
             android:layout_height="72dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="播放/暂停"
+            android:contentDescription="@string/player_pause_playing"
             android:src="@drawable/ic_play"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
@@ -206,7 +206,7 @@
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="上一首"
+            android:contentDescription="@string/player_prev"
             android:src="@drawable/ic_previous" />
 
         <ImageButton
@@ -229,7 +229,7 @@
             android:layout_width="56dp"
             android:layout_height="56dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="下一首"
+            android:contentDescription="@string/player_next"
             android:src="@drawable/ic_next" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 

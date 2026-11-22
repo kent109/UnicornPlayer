@@ -81,19 +81,19 @@ class MultiChoiceFragmentAdapter(
                 is Artist -> {
                     binding.ivIcon.setImageResource(R.drawable.ic_artist)
                     binding.tvTitle.text = item.name
-                    binding.tvSubtitle.text = "${item.songCount} 首"
+                    binding.tvSubtitle.text = itemView.context.resources.getQuantityString(R.plurals.song_count, item.songCount, item.songCount)
                 }
 
                 is Album -> {
                     binding.ivIcon.setImageResource(R.drawable.ic_album)
                     binding.tvTitle.text = item.name
-                    binding.tvSubtitle.text = "${item.artist} - ${"${item.songCount} 首"}"
+                    binding.tvSubtitle.text = "${item.artist} - " + itemView.context.resources.getQuantityString(R.plurals.song_count, item.songCount, item.songCount)
                 }
 
                 is PlaylistInfo -> {
                     binding.ivIcon.setImageResource(R.drawable.ic_playlist)
                     binding.tvTitle.text = item.name
-                    binding.tvSubtitle.text = "${item.songCount} 首"
+                    binding.tvSubtitle.text = itemView.context.resources.getQuantityString(R.plurals.song_count, item.songCount, item.songCount)
                 }
             }
 

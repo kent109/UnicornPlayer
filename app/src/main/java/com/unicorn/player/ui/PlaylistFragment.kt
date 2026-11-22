@@ -430,7 +430,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
                         PendingAction.NONE -> {}
                     }
                 } else {
-                    Toast.makeText(requireContext(), "授权目录创建失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.auth_dir_create_failed), Toast.LENGTH_SHORT).show()
                     restoreImportFab()
                 }
                 pendingAction = PendingAction.NONE
@@ -506,7 +506,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
                         ).show()
                     }
                 } else {
-                    Toast.makeText(requireContext(), "导入失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(requireContext(), getString(R.string.import_failed), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -555,9 +555,9 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         ) { success, failed ->
             if (view == null) return@exportPlaylists
             if (success > 0) {
-                Toast.makeText(requireContext(), "已导出", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.exported), Toast.LENGTH_SHORT).show()
             } else if (failed > 0) {
-                Toast.makeText(requireContext(), "导出失败", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.export_failed), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -641,7 +641,7 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
                 requireContext(), uri, COVER_TYPE_PLAYLIST, "p$editId"
             )
             if (saved == null) {
-                Toast.makeText(requireContext(), "图片读取失败，请重试", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.image_read_failed_retry), Toast.LENGTH_SHORT).show()
                 return@registerForActivityResult
             }
             val (_, path) = saved
@@ -687,10 +687,10 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         val dangerColor = requireContext().getColor(R.color.danger_text)
         val secondaryColor = requireContext().getColor(R.color.secondary)
         val dialog = AlertDialog.Builder(requireContext())
-            .setTitle("删除歌单")
-            .setMessage("确定要删除歌单「${playlist.name}」吗？此操作不可恢复。")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("删除") { _, _ ->
+            .setTitle(getString(R.string.delete_playlist_title))
+            .setMessage(getString(R.string.delete_playlist_message, playlist.name))
+            .setNegativeButton(getString(R.string.cancel), null)
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 val service = (activity as? MainActivity)?.musicService
                 viewModel.deletePlaylist(playlist.id) { deletedId ->
                     service?.handlePlaylistDeleted(setOf(deletedId))

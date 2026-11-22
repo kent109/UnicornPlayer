@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.unicorn.player.R
 import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.util.ShortcutUtil
 
@@ -33,7 +34,7 @@ class ShortcutBridgeActivity : AppCompatActivity() {
             ShortcutUtil.updateEqualizerShortcut(this, enabled)
             Toast.makeText(
                 this,
-                if (enabled) "已打开均衡器" else "已关闭均衡器",
+                if (enabled) getString(R.string.equalizer_on) else getString(R.string.equalizer_off),
                 Toast.LENGTH_SHORT
             ).show()
         }

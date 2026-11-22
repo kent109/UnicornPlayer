@@ -15,7 +15,7 @@
             android:paddingHorizontal="12dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:title="搜索歌词" />
+            app:title="@string/title_lrc_search" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -31,7 +31,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:hint="歌手">
+                android:hint="@string/artist_hint">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etArtist"
@@ -48,7 +48,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="歌名">
+                android:hint="@string/title_hint">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etTitle"
@@ -69,7 +69,7 @@
             android:layout_marginStart="16dp"
             android:layout_marginTop="8dp"
             android:layout_marginEnd="16dp"
-            android:text="搜索"
+            android:text="@string/search"
             android:textColor="?attr/colorOnPrimary" />
 
         <com.scwang.smart.refresh.layout.SmartRefreshLayout

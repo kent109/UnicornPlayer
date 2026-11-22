@@ -18,7 +18,7 @@
         android:paddingTop="10dp"
         android:paddingEnd="16dp"
         android:paddingBottom="10dp"
-        android:text="按添加时间排序"
+        android:text="@string/sort_by_add_time"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 
@@ -42,7 +42,7 @@
         android:paddingTop="10dp"
         android:paddingEnd="16dp"
         android:paddingBottom="10dp"
-        android:text="按首字母排序"
+        android:text="@string/sort_by_letter"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 
@@ -66,7 +66,7 @@
         android:paddingTop="10dp"
         android:paddingEnd="16dp"
         android:paddingBottom="10dp"
-        android:text="按歌手首字母"
+        android:text="@string/sort_by_artist_letter"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 
@@ -90,7 +90,7 @@
         android:paddingTop="10dp"
         android:paddingEnd="16dp"
         android:paddingBottom="10dp"
-        android:text="自定义排序"
+        android:text="@string/sort_custom"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 

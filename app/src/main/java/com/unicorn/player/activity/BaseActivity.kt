@@ -1,7 +1,9 @@
 package com.unicorn.player.activity
 
 import com.unicorn.player.util.datastore.themeDataStore
+import com.unicorn.player.util.lang.LanguageManager
 import com.unicorn.player.R
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -122,6 +124,16 @@ abstract class BaseActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
+        // 语言变化检测：两个条件任一为 true 就 recreate
+        //   1. needsRecreateFlag — LanguageChooseActivity 设置的显式标志
+        //   2. AppCompatDelegate Locale vs Activity Resources Locale 不一致
+        //      — 覆盖 back stack 里旧 Activity 没被 recreate 的情况
+        if (LanguageManager.shouldRecreate(this)) {
+            recreate()
+            return
+        }
+
         val newThemeRes = resolveColorTheme()
         if (newThemeRes != currentThemeRes) {
             LogWriter.writeDiag(

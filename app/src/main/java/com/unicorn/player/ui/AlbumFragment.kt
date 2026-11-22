@@ -23,6 +23,7 @@ import com.unicorn.player.activity.AlbumSongsActivity
 import com.unicorn.player.activity.MainActivity
 import com.unicorn.player.adapter.AlbumAdapter
 import com.unicorn.player.adapter.HeaderSpacerAdapter
+import com.unicorn.player.R
 import com.unicorn.player.databinding.FragmentAlbumBinding
 import com.unicorn.player.model.Album
 import com.unicorn.player.model.Cover
@@ -200,7 +201,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
                 requireContext(), uri, Cover.TYPE_ALBUM, key
             )
             if (saved == null) {
-                Toast.makeText(requireContext(), "图片读取失败，请重试", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.image_read_failed_retry), Toast.LENGTH_SHORT).show()
                 return@registerForActivityResult
             }
             val (prefix, path) = saved
@@ -311,7 +312,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
     }
 
     private fun updateAlbumCount(count: Int) {
-        binding.tvAlbumCount.text = "共 $count 张专辑"
+        binding.tvAlbumCount.text = getString(R.string.albums_count, count)
     }
 
     override fun onAlbumClick(album: Album, position: Int) {
@@ -333,7 +334,7 @@ class AlbumFragment : Fragment(), AlbumAdapter.OnAlbumClickListener {
                         songIds, requireActivity() as AppCompatActivity, viewModel, service
                     )
                 } else {
-                    Toast.makeText(context, "音乐服务没有运行", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, getString(R.string.music_service_not_running), Toast.LENGTH_SHORT).show()
                 }
             },
             onPlay = {

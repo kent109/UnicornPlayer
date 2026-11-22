@@ -16,7 +16,7 @@
         style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="歌单名称"
+        android:hint="@string/playlist_name_hint"
         app:counterEnabled="true"
         app:counterMaxLength="30"
         tools:ignore="HardcodedText">
@@ -52,7 +52,7 @@
             style="@style/Widget.UnicornPlayer.Button.TextButton.Secondary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="取消" />
+            android:text="@string/cancel" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnConfirm"
@@ -60,7 +60,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:text="确定" />
+            android:text="@string/confirm" />
 
     </LinearLayout>
 

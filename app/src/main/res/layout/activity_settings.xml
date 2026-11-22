@@ -13,7 +13,7 @@
         android:id="@+id/titleBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:title="设置" />
+        app:title="@string/title_settings" />
 
     <!-- 内容容器 -->
     <com.scwang.smart.refresh.layout.SmartRefreshLayout
@@ -32,6 +32,7 @@
         <ScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:scrollbars="none"
             android:overScrollMode="always">
 
             <LinearLayout

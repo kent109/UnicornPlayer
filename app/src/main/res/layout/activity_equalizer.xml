@@ -13,7 +13,7 @@
         android:id="@+id/titleBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:title="均衡器" />
+        app:title="@string/title_equalizer" />
 
     <!-- 内容容器 -->
     <androidx.constraintlayout.widget.ConstraintLayout

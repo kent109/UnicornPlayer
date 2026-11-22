@@ -173,13 +173,14 @@ class PlayerFragment : Fragment() {
                 MusicService.PlayMode.SEQUENCE -> MusicService.PlayMode.ALL_LOOP
             }
             service.setPlayMode(nextMode)
+            val ctx = requireContext()
             val modeText = when (nextMode) {
-                MusicService.PlayMode.ALL_LOOP -> "全部循环"
-                MusicService.PlayMode.SINGLE_LOOP -> "单曲循环"
-                MusicService.PlayMode.RANDOM -> "随机播放"
-                MusicService.PlayMode.SEQUENCE -> "顺序播放"
+                MusicService.PlayMode.ALL_LOOP -> ctx.getString(R.string.playmode_all_loop)
+                MusicService.PlayMode.SINGLE_LOOP -> ctx.getString(R.string.playmode_single_loop)
+                MusicService.PlayMode.RANDOM -> ctx.getString(R.string.playmode_random)
+                MusicService.PlayMode.SEQUENCE -> ctx.getString(R.string.playmode_sequence)
             }
-            Toast.makeText(requireContext(), modeText, Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, modeText, Toast.LENGTH_SHORT).show()
         }
 
         // 播放队列按钮：弹出 BottomSheetDialog 展示 MusicService 当前歌曲列表
@@ -295,13 +296,13 @@ class PlayerFragment : Fragment() {
         // 拖动排序就地重排这份副本，因此用可变列表
         val songs = service.getSongList().toMutableList()
         if (songs.isEmpty()) {
-            Toast.makeText(requireContext(), "当前播放队列为空", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), getString(R.string.empty_queue), Toast.LENGTH_SHORT).show()
             return
         }
 
         val bottomSheetDialog = BottomSheetDialog(requireContext(), R.style.BottomSheetDialogTheme)
         val dialogBinding = DialogPlayQueueBinding.inflate(LayoutInflater.from(requireContext()))
-        dialogBinding.tvQueueTitle.text = "播放队列 (${songs.size} 首)"
+        dialogBinding.tvQueueTitle.text = getString(R.string.play_queue_count, songs.size)
         bottomSheetDialog.setContentView(dialogBinding.root)
 
         val adapter = PlayQueueAdapter { _, position ->

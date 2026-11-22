@@ -141,7 +141,7 @@ object ShortcutUtil {
     }
 
     private fun buildToggleEqShortcut(context: Context, enabled: Boolean): ShortcutInfo {
-        val label = if (enabled) "关闭均衡器" else "打开均衡器"
+        val label = if (enabled) context.getString(R.string.shortcut_eq_off) else context.getString(R.string.shortcut_eq_on)
 
         // 透明 Activity，和 MainActivity 共用同一个 taskAffinity
         // onCreate 里完成切换后先 startActivity Launcher 再 finish
@@ -152,7 +152,7 @@ object ShortcutUtil {
 
         return ShortcutInfo.Builder(context, SHORTCUT_ID_TOGGLE_EQ)
             .setShortLabel(label)
-            .setLongLabel("开/关均衡器")
+            .setLongLabel(context.getString(R.string.shortcut_toggle_eq))
             .setIcon(Icon.createWithResource(context, R.drawable.ic_equalizer))
             .setIntent(intent)
             .build()

@@ -13,7 +13,7 @@
         android:id="@+id/titleBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:title="歌词显示" />
+        app:title="@string/title_lyrics_options" />
 
     <!-- 内容容器 -->
     <com.scwang.smart.refresh.layout.SmartRefreshLayout

@@ -98,28 +98,28 @@ class SongInfoHelper(private val context: Context) {
         val qualityText = getQualityText(song.quality)
 
         // 文件路径显示：将主存储前缀替换为"主存储卡"
-        val pathText = song.path.replaceFirst("^/storage/emulated/0/".toRegex(), "主存储卡/")
+        val pathText = song.path.replaceFirst("^/storage/emulated/0/".toRegex(), context.getString(R.string.main_storage) + "/")
 
         // 歌手、专辑为可编辑字段，单独保留 binding 引用
         val artistItemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context)).apply {
-            tvLabel.text = "歌手"
+            tvLabel.text = context.getString(R.string.info_artist)
             tvValue.text = song.artist
             root.background = null
-            setIconForLabel(ivIcon, "歌手")
+            setIconForLabel(ivIcon, R.drawable.ic_artist_s)
         }
         val albumItemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context)).apply {
-            tvLabel.text = "专辑"
+            tvLabel.text = context.getString(R.string.info_album)
             tvValue.text = song.album
             root.background = null
-            setIconForLabel(ivIcon, "专辑")
+            setIconForLabel(ivIcon, R.drawable.ic_album_s)
         }
         // 流派：初始值以曲库记录为准，缺失时回退到直接读取音频文件的 GENRE 标签
         val initialGenre = resolveInitialGenre(song)
         val genreItemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context)).apply {
-            tvLabel.text = "流派"
+            tvLabel.text = context.getString(R.string.info_genre)
             tvValue.text = initialGenre
             root.background = null
-            setIconForLabel(ivIcon, "流派")
+            setIconForLabel(ivIcon, R.drawable.ic_genre)
         }
         dialogBinding.infoContainer.addView(artistItemBinding.root)
         dialogBinding.infoContainer.addView(albumItemBinding.root)
@@ -127,23 +127,23 @@ class SongInfoHelper(private val context: Context) {
 
         // 其余不可编辑的信息项
         val infoItems = listOf(
-            Pair("时长", durationText),
-            Pair("音质", qualityText),
-            Pair("文件大小", fileSize),
-            Pair("文件路径", pathText)
+            Triple(context.getString(R.string.info_duration), durationText, R.drawable.ic_duration_s),
+            Triple(context.getString(R.string.info_quality), qualityText, R.drawable.ic_quality_s),
+            Triple(context.getString(R.string.info_file_size), fileSize, R.drawable.ic_filesize_s),
+            Triple(context.getString(R.string.info_file_path), pathText, R.drawable.ic_filepath_s)
         )
 
-        infoItems.forEach { (label, value) ->
+        infoItems.forEach { (label, value, iconRes) ->
             val itemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context))
             itemBinding.tvLabel.text = label
             itemBinding.tvValue.text = value
-            if (label == "文件路径") {
+            if (label == context.getString(R.string.info_file_path)) {
                 // 路径长且关键信息在中间：中间截断、放宽到两行
                 itemBinding.tvValue.ellipsize = TextUtils.TruncateAt.MIDDLE
                 itemBinding.tvValue.maxLines = 2
             }
             itemBinding.root.background = null
-            setIconForLabel(itemBinding.ivIcon, label)
+            setIconForLabel(itemBinding.ivIcon, iconRes)
             dialogBinding.infoContainer.addView(itemBinding.root)
         }
 
@@ -337,8 +337,9 @@ class SongInfoHelper(private val context: Context) {
         if (showAddToPlaylist) {
             addClickableItem(
                 dialogBinding.infoContainer,
-                "添加到歌单",
-                R.color.disc_playing_color_4
+                context.getString(R.string.info_add_to_playlist),
+                R.color.disc_playing_color_4,
+                iconRes = R.drawable.ic_add_to_play
             ) {
                 bottomSheetDialog.dismiss()
                 onAddToPlaylistListener?.onAddToPlaylist(song)
@@ -348,8 +349,9 @@ class SongInfoHelper(private val context: Context) {
         // 添加可点击的操作项（分享本地文件使用默认颜色）
         addClickableItem(
             dialogBinding.infoContainer,
-            "分享本地文件",
-            R.color.quality_sq
+            context.getString(R.string.info_share_local_file),
+            R.color.quality_sq,
+            iconRes = R.drawable.ic_share
         ) {
             bottomSheetDialog.dismiss()
             shareLocalFile(song)
@@ -359,8 +361,9 @@ class SongInfoHelper(private val context: Context) {
         if (showDeleteOption) {
             addClickableItem(
                 dialogBinding.infoContainer,
-                "删除",
-                R.color.danger_text
+                context.getString(R.string.delete),
+                R.color.danger_text,
+                iconRes = R.drawable.ic_delete
             ) {
                 bottomSheetDialog.dismiss()
                 showDeleteConfirmDialog(song)
@@ -535,11 +538,11 @@ class SongInfoHelper(private val context: Context) {
                     else -> "$sizeInBytes B"
                 }
             } else {
-                "未知"
+                context.getString(R.string.file_size_unknown)
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            "未知"
+            context.getString(R.string.file_size_unknown)
         }
     }
 
@@ -558,11 +561,11 @@ class SongInfoHelper(private val context: Context) {
      */
     private fun getQualityText(quality: String): String {
         return when (quality) {
-            "SQ" -> "SQ (超品质)"
-            "HQ" -> "HQ (高品质)"
-            "STD" -> "STD (标准)"
-            "ORD" -> "ORD (普通)"
-            else -> "UNK (未知)"
+            "SQ" -> context.getString(R.string.quality_sq_full)
+            "HQ" -> context.getString(R.string.quality_hq_full)
+            "STD" -> context.getString(R.string.quality_std_full)
+            "ORD" -> context.getString(R.string.quality_ord_full)
+            else -> context.getString(R.string.quality_unk_full)
         }
     }
 
@@ -586,18 +589,19 @@ class SongInfoHelper(private val context: Context) {
     /**
      * 添加可点击的信息项
      * @param textColor 文字颜色
+     * @param iconRes 左侧图标资源 ID，0 表示不显示
      */
     private fun addClickableItem(
         container: android.view.ViewGroup,
         text: String,
         textColor: Int?,
-        label: String = text,
+        iconRes: Int = 0,
         onClick: () -> Unit
     ) {
         val itemBinding = ItemSongInfoBinding.inflate(LayoutInflater.from(context))
         itemBinding.tvLabel.visibility = android.view.View.GONE
         itemBinding.tvValue.text = text
-        setIconForLabel(itemBinding.ivIcon, label)
+        setIconForLabel(itemBinding.ivIcon, iconRes)
         // 设置文字大小和样式与 tvLabel 一致
         itemBinding.tvValue.textSize = 16f
         itemBinding.tvValue.setTypeface(
@@ -625,26 +629,11 @@ class SongInfoHelper(private val context: Context) {
     }
 
     /**
-     * 按标题为 item 左侧图标设置对应 drawable，无匹配则隐藏
+     * 为 item 左侧图标设置对应 drawable，resId 为 0 则隐藏
      */
-    private fun setIconForLabel(icon: android.widget.ImageView, label: String) {
-        val res = when (label) {
-            "歌手" -> R.drawable.ic_artist_s
-            "专辑" -> R.drawable.ic_album_s
-            "流派" -> R.drawable.ic_genre
-            "时长" -> R.drawable.ic_duration_s
-            "音质" -> R.drawable.ic_quality_s
-            "文件大小" -> R.drawable.ic_filesize_s
-            "文件路径" -> R.drawable.ic_filepath_s
-            "添加到歌单" -> R.drawable.ic_add_to_play
-            "分享本地文件" -> R.drawable.ic_share
-            "删除" -> R.drawable.ic_delete
-            "播放" -> R.drawable.ic_play2
-            "歌曲数量" -> R.drawable.ic_count_s
-            else -> null
-        }
-        if (res != null) {
-            icon.setImageResource(res)
+    private fun setIconForLabel(icon: android.widget.ImageView, resId: Int) {
+        if (resId != 0) {
+            icon.setImageResource(resId)
             icon.visibility = View.VISIBLE
         } else {
             icon.visibility = View.GONE
@@ -658,7 +647,7 @@ class SongInfoHelper(private val context: Context) {
         try {
             val file = File(song.path)
             if (!file.exists()) {
-                Toast.makeText(context, "文件不存在", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, R.string.file_not_found, Toast.LENGTH_SHORT).show()
                 return
             }
 
@@ -674,10 +663,10 @@ class SongInfoHelper(private val context: Context) {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            context.startActivity(Intent.createChooser(shareIntent, "分享歌曲"))
+            context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.share_song)))
         } catch (e: Exception) {
             LogWriter.writeError(TAG, "分享文件失败: ${e.message}", e)
-            Toast.makeText(context, "分享失败", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.share_failed, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -688,14 +677,14 @@ class SongInfoHelper(private val context: Context) {
         val dangerColor = context.getColor(R.color.danger_text)
         val secondaryColor = context.getColor(R.color.secondary)
         val dialog = AlertDialog.Builder(context)
-            .setTitle("删除歌曲")
-            .setMessage("确定要从列表中删除「${song.title}」吗？\n\n注意：这不会删除本地文件。")
-            .setPositiveButton("删除") { _, _ ->
+            .setTitle(context.getString(R.string.delete_song_title))
+            .setMessage(context.getString(R.string.delete_song_message, song.title))
+            .setPositiveButton(context.getString(R.string.delete)) { _, _ ->
                 // 通过回调通知外部处理删除
                 onDeleteListener?.onDelete(song)
-                Toast.makeText(context, "已从列表中删除", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, R.string.deleted_from_list, Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(context.getString(R.string.cancel), null)
             .show()
         // 设置删除按钮文字颜色为危险操作红（danger_text），取消按钮为 secondary 色
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(dangerColor)

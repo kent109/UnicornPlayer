@@ -13,7 +13,7 @@
         android:id="@+id/tvTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="清理配置文件"
+        android:text="@string/cleanup_configs"
         android:textColor="@color/onSurface"
         android:textSize="18sp"
         android:textStyle="bold" />
@@ -23,7 +23,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="最多保存 10 个配置，请先删除一些后再导出"
+        android:text="@string/cleanup_configs_desc"
         android:textColor="@color/onSurfaceVariant"
         android:textSize="13sp" />
 
@@ -43,7 +43,7 @@
         android:gravity="center"
         android:paddingTop="24dp"
         android:paddingBottom="24dp"
-        android:text="暂无配置文件"
+        android:text="@string/no_config_files"
         android:textColor="@color/onSurfaceVariant"
         android:textSize="14sp"
         android:visibility="gone" />
@@ -60,7 +60,7 @@
             style="@style/Widget.UnicornPlayer.Button.TextButton.Secondary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="取消" />
+            android:text="@string/cancel" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnDelete"
@@ -69,7 +69,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:enabled="false"
-            android:text="删除"
+            android:text="@string/delete"
             android:textColor="@color/red_500" />
 
     </LinearLayout>

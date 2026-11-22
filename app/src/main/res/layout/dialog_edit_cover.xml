@@ -16,7 +16,7 @@
         android:id="@+id/tvTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="修改封面"
+        android:text="@string/modify_cover"
         android:textColor="@color/onSurface"
         android:textSize="18sp"
         android:textStyle="bold" />
@@ -27,7 +27,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:lineSpacingExtra="2dp"
-        android:text="封面图片保存在应用数据中，不会修改音频文件本身。"
+        android:text="@string/cover_save_note"
         android:textColor="@color/onSurfaceVariant"
         android:textSize="14sp" />
 
@@ -55,7 +55,7 @@
             style="@style/Widget.UnicornPlayer.Button.TextButton.Secondary"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="取消" />
+            android:text="@string/cancel" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnDefaultCover"
@@ -63,7 +63,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
-            android:text="默认封面"
+            android:text="@string/default_cover"
             android:textColor="@color/danger_text"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -74,7 +74,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
-            android:text="选择封面" />
+            android:text="@string/select_cover" />
 
     </LinearLayout>
 

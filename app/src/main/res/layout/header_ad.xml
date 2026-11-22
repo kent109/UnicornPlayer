@@ -13,7 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:alpha="0"
-        android:contentDescription="广告图片"
+        android:contentDescription="@string/album_ad_content_desc"
         android:scaleType="centerCrop"
         android:src="@drawable/ic_music_note" />
 
@@ -26,7 +26,7 @@
         android:background="#80000000"
         android:gravity="center"
         android:padding="8dp"
-        android:text="🎵 发现更多精彩音乐内容"
+        android:text="@string/album_ad_text"
         android:textColor="@android:color/white"
         android:textSize="14sp" />
 
@@ -38,7 +38,7 @@
         android:layout_gravity="top|end"
         android:layout_margin="8dp"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="关闭广告"
+        android:contentDescription="@string/close_ad_content_desc"
         android:src="@android:drawable/ic_menu_close_clear_cancel"
         app:tint="@color/onSurface" />
 

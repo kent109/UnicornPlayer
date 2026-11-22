@@ -1,0 +1,381 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Unicorn</string>
+    <string name="search_hint">Search music...</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="next">Next</string>
+    <string name="previous">Prev</string>
+    <string name="unknown_artist">Unknown artist</string>
+    <string name="unknown_album">Unknown album</string>
+    <string name="unknown_title">Unknown title</string>
+    <string name="unknown_genre">Unknown genre</string>
+    <string name="unknown">Unknown</string>
+    <string name="permission_required">Storage permission required to access music</string>
+    <string name="notification_permission_denied">Notification denied, limited features</string>
+    <string name="notification_channel_name">Music playback</string>
+    <string name="notification_channel_description">Music playback notifications</string>
+
+    <string name="create_new_lyrics">New lyrics</string>
+    <string name="enable_lyrics">Enable lyrics</string>
+    <string name="lyrics_searching">Searching lyrics</string>
+
+    <string name="lyrics_settings">Lyrics</string>
+    <string name="lyrics_enabled">Show lyrics</string>
+    <string name="lyrics_enabled_summary">Show lyrics on player</string>
+    <string name="time_label_visible">Time labels</string>
+    <string name="time_label_visible_summary">Show time next to lyrics</string>
+    <string name="font_size">Font size</string>
+    <string name="font_size_small">S</string>
+    <string name="font_size_medium">M</string>
+    <string name="font_size_large">L</string>
+    <string name="lyrics_directory">Lyrics dir</string>
+    <string name="lyrics_directory_summary">Download/Unicorn/Lyrics</string>
+
+    <string name="color_theme">Theme</string>
+    <string name="color_theme_system">System</string>
+    <string name="color_theme_light">Light</string>
+    <string name="color_theme_dark">Dark</string>
+    <string name="theme_style">Theme style</string>
+    <string name="theme_mode">Dark mode</string>
+    <string name="theme_mode_follow_system">System</string>
+    <string name="theme_mode_light">Light</string>
+    <string name="theme_mode_dark">Dark</string>
+    <string name="theme_color">Accent</string>
+    <string name="highlight_color">Highlight</string>
+    <string name="icon_appearance">Icon style</string>
+    <string name="bottom_panel">Bottom bar</string>
+    <string name="dialog_background">Dialog bg</string>
+    <string name="panel_card">Card</string>
+    <string name="panel_banner">Banner</string>
+    <string name="dialog_bg_system">System</string>
+    <string name="dialog_bg_theme">Theme</string>
+    <string name="highlight_system">System</string>
+    <string name="highlight_fixed">Fixed</string>
+    <string name="icon_disc">Disc</string>
+    <string name="icon_cassette">Cassette</string>
+    <string name="color_mode_system">System</string>
+    <string name="color_mode_random">Random</string>
+    <string name="color_mode_fixed">Fixed</string>
+
+    <string name="scan_filter">Scan filter</string>
+    <string name="scan_filter_short_duration">Skip less than 30s</string>
+    <string name="scan_filter_small_file">Skip less than 100KB</string>
+    <string name="scan_filter_unsupported_format">Skip unsupported</string>
+    <string name="scan_filter_unsupported_format_summary">Filter formats device cannot decode</string>
+    <string name="scan_filter_deleted_songs">Scan deleted files</string>
+    <string name="scan_filter_deleted_songs_summary">Off: skip deleted songs</string>
+    <string name="scan_filter_excluded_dirs_summary">Excluded dirs</string>
+    <string name="scan_filter_included_dirs_summary">All dirs by default</string>
+
+    <string name="language_title">Language</string>
+    <string name="language_zh_cn">简体中文</string>
+    <string name="language_en">English</string>
+
+    <string name="equalizer">Equalizer</string>
+    <string name="clear_storage">Clear storage</string>
+    <string name="auto_check_update">Auto check update</string>
+    <string name="version_name">Version</string>
+    <string name="share_friends">Share</string>
+    <string name="feedback">Feedback</string>
+    <string name="manual">Guide</string>
+    <string name="privacy_policy">Privacy</string>
+
+    <string name="playlist_name_exists">Playlist %1$s exists</string>
+    <string name="new_playlist">New playlist</string>
+    <string name="edit_playlist">Edit playlist</string>
+    <string name="playlist_name_hint">Playlist name</string>
+    <string name="same_name_playlist">Same name</string>
+    <string name="overwrite">Overwrite</string>
+    <string name="merge">Merge</string>
+    <string name="delete_playlist_title">Delete playlist</string>
+    <string name="delete_playlist_message">Delete playlist %1$s. Cannot undo.</string>
+    <string name="add_to_playlist">Add to playlist</string>
+    <string name="no_songs_to_add">No songs to add</string>
+
+    <string name="selected_count">%1$d selected</string>
+    <string name="select_all">Select all</string>
+    <string name="deselect_all">Deselect</string>
+    <string name="cancel">Cancel</string>
+    <string name="confirm">OK</string>
+    <string name="delete">Delete</string>
+    <string name="done">Done</string>
+    <string name="create">Create</string>
+    <string name="import_action">Import</string>
+    <string name="export">Export</string>
+
+    <string name="clear_cache">Clear storage</string>
+    <string name="clear_cache_title">Clear storage</string>
+    <string name="clear_cache_message">Clear app cache and update files?</string>
+    <string name="clear_cache_confirm">OK</string>
+    <string name="clear_cache_cancel">Cancel</string>
+    <string name="clear_cache_success">Cache cleared</string>
+
+    <string name="update_new_version">New version</string>
+    <string name="update_version_label">v%1$s</string>
+    <string name="update_download">Update</string>
+    <string name="update_cancel">Cancel</string>
+    <string name="update_downloading">Downloading</string>
+    <string name="update_downloaded">%1$d%%</string>
+    <string name="update_install_permission_denied">Install permission denied</string>
+    <string name="update_already_latest">Already latest</string>
+    <string name="update_check_failed">Check failed, retry later</string>
+    <string name="update_download_failed">Download failed, retry</string>
+    <string name="update_checking">Checking update...</string>
+    <string name="no_update_notes">No release notes</string>
+    <string name="share_app_image">Share Unicorn</string>
+    <string name="share_failed">Share failed</string>
+    <string name="share_failed_with_msg">Share failed: %1$s</string>
+    <string name="share_text">Try Unicorn - a nice music player</string>
+
+    <string name="edit_song_info">Edit song info</string>
+    <string name="tag_edit_success">Tags saved</string>
+    <string name="tag_edit_failed">Tags failed</string>
+    <string name="tag_edit_permission_pending">Grant permission first</string>
+    <string name="tag_no_changes">No changes</string>
+    <string name="artist">Artist</string>
+    <string name="album">Album</string>
+    <string name="genre">Genre</string>
+
+    <string name="no_playing_song">No playing song</string>
+    <string name="lyrics_empty_not_saved">Lyrics empty, not saved</string>
+    <string name="local_lyrics_not_found">Lyrics file missing</string>
+    <string name="choose_download_dir_to_save">Pick Download folder</string>
+    <string name="save_dir_create_failed">Dir create failed</string>
+    <string name="save_failed_with_msg">Save failed: %1$s</string>
+    <string name="save_failed">Save failed</string>
+    <string name="file_not_found">File missing</string>
+    <string name="artist_and_title_required">Artist + title required</string>
+    <string name="no_lyrics_found">No lyrics found</string>
+    <string name="search_failed_with_msg">Search failed: %1$s</string>
+    <string name="lyrics_saved">Lyrics saved</string>
+    <string name="dir_create_failed">Dir create failed</string>
+    <string name="input_filename_required">Enter filename</string>
+    <string name="serialization_failed">Serial failed</string>
+    <string name="choose_a_config">Pick a config</string>
+    <string name="read_failed">Read failed</string>
+    <string name="equalizer_not_ready">EQ not ready</string>
+    <string name="image_read_failed_retry">Image failed, retry</string>
+    <string name="music_service_not_running">Service not running</string>
+    <string name="unsupported_format">Format not supported</string>
+    <string name="play_failed_retrying">Play failed, retrying</string>
+    <string name="empty_queue">Queue empty</string>
+    <string name="auth_dir_create_failed">Auth dir failed</string>
+    <string name="deleted_from_list">Deleted</string>
+    <string name="import_failed">Import failed</string>
+    <string name="exported">Exported</string>
+    <string name="export_failed">Export failed</string>
+
+    <string name="delete_song_title">Delete song</string>
+    <string name="delete_song_message">Delete %1$s? Local file kept.</string>
+    <string name="delete_songs_title">Delete songs</string>
+    <string name="delete_songs_message">Delete selected songs? Local files kept.</string>
+    <string name="delete_playlist_songs_title">Delete playlist songs</string>
+
+    <string name="use_lyrics">Use lyrics</string>
+    <string name="use_lyrics_message">Use lyrics for %1$s?</string>
+    <string name="storage_migration_title">Storage upgrade</string>
+    <string name="storage_migration_message">Files moved from Documents/Unicorn to Download/Unicorn.\n\nTap Start migration, then pick Download/Unicorn in the file picker.\n\nRe-authorize previously granted dirs later.</string>
+    <string name="migration_start">Start migration</string>
+    <string name="remind_later">Remind later</string>
+    <string name="migrating_dir">Migrating...</string>
+
+    <string name="playlist_cover">Cover</string>
+    <string name="modify">Modify</string>
+    <string name="default_cover_label">Default</string>
+
+    <string name="sort_options">Sort</string>
+    <string name="sort_by_add_time">By add time</string>
+    <string name="sort_by_letter">By title</string>
+    <string name="sort_by_artist_letter">By artist</string>
+    <string name="sort_custom">Custom</string>
+
+    <string name="modify_cover">Edit cover</string>
+    <string name="cover_save_note">Cover saved in app data, original file untouched.</string>
+    <string name="default_cover">Default cover</string>
+    <string name="select_cover">Select cover</string>
+    <string name="confirm_replace_cover">Replace</string>
+
+    <string name="export_config">Export config</string>
+    <string name="eq_filename_desc">Config filename (no ext)</string>
+    <string name="custom_config_name_hint">Config name</string>
+    <string name="overwrite_same_name">Overwrite same</string>
+    <string name="cleanup_configs">Cleanup configs</string>
+    <string name="cleanup_configs_desc">Max 10, delete some first</string>
+    <string name="no_config_files">No configs</string>
+    <string name="import_config">Import config</string>
+    <string name="import_error">Import error</string>
+
+    <string name="cleanup_playlist_exports">Cleanup exports</string>
+    <string name="cleanup_playlist_exports_desc">Max 10 exports, delete some first</string>
+    <string name="no_export_files">No exports</string>
+    <string name="import_playlist">Import playlist</string>
+
+    <string name="create_playlist">New playlist</string>
+    <string name="can_create_or_import">Create or import a playlist.</string>
+    <string name="create_new_playlist_prompt">Create new playlist?</string>
+
+    <string name="play_queue">Queue</string>
+    <string name="play_queue_count">Queue (%1$d)</string>
+
+    <string name="lyrics_title">Search lyrics</string>
+    <string name="artist_hint">Artist</string>
+    <string name="title_hint">Title</string>
+    <string name="search">Search</string>
+
+    <string name="multi_delete_content_desc">Delete</string>
+    <string name="multi_add_to_playlist_content_desc">Add to playlist</string>
+    <string name="multi_export_content_desc">Export</string>
+
+    <string name="album_cover">Cover</string>
+    <string name="player_pause_playing">Play/Pause</string>
+    <string name="player_prev">Previous</string>
+    <string name="player_next">Next</string>
+    <string name="player_collapse">Collapse</string>
+    <string name="song_title_label">Title</string>
+    <string name="artist_label">Artist</string>
+    <string name="album_label">Album</string>
+
+    <string name="songs_count">%1$d songs</string>
+    <string name="albums_count">%1$d albums</string>
+    <string name="artists_count">%1$d artists</string>
+    <string name="scan_now">Scan now</string>
+    <string name="coming_soon">Coming soon</string>
+    <string name="artist_label_list">Artist</string>
+    <string name="artist_song_count_format">%1$s - %2$d</string>
+    <string name="title_count_format">%1$s (%2$d)</string>
+    <string name="playlist_add">Add</string>
+    <string name="no_dirs_available">No dirs</string>
+
+    <string name="feedback_problem_title">Problem:</string>
+    <string name="feedback_problem_hint">Describe the issue</string>
+    <string name="feedback_detail_title">Details:</string>
+    <string name="feedback_detail_hint">Tell us more, or share suggestions.</string>
+    <string name="feedback_contact_title">Contact:</string>
+    <string name="feedback_contact_hint">QQ or email</string>
+    <string name="feedback_submit">Submit</string>
+    <string name="feedback_problem_required">Enter problem</string>
+    <string name="feedback_content_required">Enter feedback</string>
+    <string name="feedback_too_long">Max 500 chars</string>
+    <string name="feedback_contact_required">Enter contact</string>
+    <string name="feedback_success">Thanks!</string>
+    <string name="feedback_failed_with_msg">Failed: %1$s</string>
+
+    <string name="album_info">Album info</string>
+    <string name="artist_info">Artist info</string>
+
+    <string name="album_ad_content_desc">Ad image</string>
+    <string name="album_ad_text">🎵 More great music</string>
+    <string name="close_ad_content_desc">Close ad</string>
+
+    <string name="tab_songs">Songs</string>
+    <string name="tab_artists">Artists</string>
+    <string name="tab_albums">Albums</string>
+    <string name="tab_playlists">Playlists</string>
+
+    <string name="search_hint_full">Search song, artist, album</string>
+
+    <string name="playmode_all_loop">All loop</string>
+    <string name="playmode_single_loop">Single loop</string>
+    <string name="playmode_random">Random</string>
+    <string name="playmode_sequence">Sequence</string>
+
+    <string name="equalizer_on">EQ on</string>
+    <string name="equalizer_off">EQ off</string>
+
+    <string name="bluetooth_permission_missing">Bluetooth permission missing</string>
+
+    <string name="export_limit_reached">Export limit %1$s, clean first</string>
+    <string name="exported_playlists_count">Exported %1$s playlists</string>
+    <string name="export_result_summary">OK %1$s, fail %2$s</string>
+
+    <string name="added_to_playlists">Added to %1$s playlists</string>
+
+    <string name="lyrics_save_success">Saved</string>
+    <string name="lyrics_delete_success">Lyrics deleted</string>
+    <string name="lyrics_save_fail">Save failed</string>
+    <string name="lyrics_delete_fail">Delete failed</string>
+    <string name="cannot_open_audio">Cannot open audio</string>
+
+    <string name="lyrics_dir_default">Download/Unicorn/Lyrics</string>
+
+    <string name="scan_filter_no_unsupported_formats">All formats supported</string>
+    <string name="scan_filter_excluded_dirs_title">Excluded dirs</string>
+    <string name="scan_filter_included_dirs_title">Included dirs</string>
+
+    <string name="template_title">Title</string>
+    <string name="template_subtitle">Subtitle</string>
+    <string name="template_subtitle2">Subtitle 2</string>
+    <string name="template_config_name">Config</string>
+    <string name="template_song_count_0">0</string>
+    <string name="template_song_count_format">%1$s - %2$d</string>
+
+    <string name="edit">Edit</string>
+    <string name="save_label">Save</string>
+
+    <string name="title_settings">Settings</string>
+    <string name="title_privacy">Privacy</string>
+    <string name="title_album_songs">Album songs</string>
+    <string name="title_artist_songs">Artist songs</string>
+    <string name="title_playlist_songs">Playlist songs</string>
+    <string name="title_choose_dir">Pick dir</string>
+    <string name="title_choose_scan_dir">Pick dirs to scan</string>
+    <string name="title_choose_exclude_dir">Pick dirs to exclude</string>
+    <string name="title_equalizer">Equalizer</string>
+    <string name="title_feedback">Feedback</string>
+    <string name="title_genre_select">Pick genre</string>
+    <string name="title_highlight_color">Highlight</string>
+    <string name="title_icon_setting">Icon style</string>
+    <string name="title_lrc_search">Search lyrics</string>
+    <string name="title_lyrics_options">Lyrics</string>
+    <string name="title_manual">Guide</string>
+    <string name="title_scan_filter">Scan filter</string>
+    <string name="title_theme_color">Accent</string>
+    <string name="title_theme_setting">Theme</string>
+
+    <string name="btn_search">Search</string>
+    <string name="btn_searching">Searching</string>
+
+    <string name="info_artist">Artist</string>
+    <string name="info_album">Album</string>
+    <string name="info_genre">Genre</string>
+    <string name="info_duration">Duration</string>
+    <string name="info_quality">Quality</string>
+    <string name="info_file_size">Size</string>
+    <string name="info_file_path">Path</string>
+    <string name="main_storage">Internal</string>
+
+    <string name="shortcut_toggle_eq">EQ Switch</string>
+    <string name="shortcut_eq_on">EQ On</string>
+    <string name="shortcut_eq_off">EQ Off</string>
+
+    <string name="compile_done">OK</string>
+    <string name="genre_unknown">Unknown genre</string>
+
+    <string name="info_add_to_playlist">Add to playlist</string>
+    <string name="info_share_local_file">Share file</string>
+
+    <string name="info_count">Song count</string>
+    <string name="info_play">Play</string>
+    <string name="info_edit_cover">Edit cover</string>
+    <string name="info_edit_avatar">Edit avatar</string>
+    <string name="info_default_cover">Default cover</string>
+    <string name="info_default_avatar">Default avatar</string>
+
+    <string name="quality_sq_full">SQ</string>
+    <string name="quality_hq_full">HQ</string>
+    <string name="quality_std_full">STD</string>
+    <string name="quality_ord_full">ORD</string>
+    <string name="quality_unk_full">UNK</string>
+
+    <string name="file_size_unknown">Unknown</string>
+
+    <string name="share_song">Share song</string>
+
+    <string name="song_count_plain">%1$d songs</string>
+
+    <plurals name="song_count">
+        <item quantity="one">%1$d song</item>
+        <item quantity="other">%1$d songs</item>
+    </plurals>
+</resources>

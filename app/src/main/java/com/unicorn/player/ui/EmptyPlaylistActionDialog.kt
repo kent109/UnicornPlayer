@@ -46,9 +46,9 @@ class EmptyPlaylistActionDialog(
 
         if (hasExportFiles) {
             dialogBinding.btnImport.visibility = View.VISIBLE
-            dialogBinding.tvMessage.text = "可以新建歌单，或者导入已有歌单。"
+            dialogBinding.tvMessage.text = activity.getString(R.string.can_create_or_import)
         } else {
-            dialogBinding.tvMessage.text = "是否创建新歌单？"
+            dialogBinding.tvMessage.text = activity.getString(R.string.create_new_playlist_prompt)
         }
 
         dialogBinding.btnCancel.setOnClickListener { dialog.dismiss() }
@@ -165,7 +165,7 @@ class EmptyPlaylistActionDialog(
                         }
                     }
                 } else {
-                    Toast.makeText(activity, "导入失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(activity, activity.getString(R.string.import_failed), Toast.LENGTH_SHORT).show()
                 }
             }
         }

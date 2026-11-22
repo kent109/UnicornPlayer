@@ -24,7 +24,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="start|center_vertical"
-            android:text="取消"
+            android:text="@string/cancel"
             android:textColor="@color/secondary"
             android:textSize="17sp"
             android:textStyle="bold" />
@@ -34,7 +34,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end|center_vertical"
-            android:text="全选"
+            android:text="@string/select_all"
             android:textColor="?attr/colorPrimary"
             android:textSize="17sp"
             android:textStyle="bold" />
@@ -105,7 +105,7 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:alpha="0.5"
-                    android:contentDescription="删除"
+                    android:contentDescription="@string/multi_delete_content_desc"
                     android:padding="8dp"
                     android:src="@drawable/ic_delete" />
             </FrameLayout>
@@ -122,7 +122,7 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:alpha="0.5"
-                    android:contentDescription="添加到歌单"
+                    android:contentDescription="@string/multi_add_to_playlist_content_desc"
                     android:padding="8dp"
                     android:src="@drawable/ic_add_to_play" />
             </FrameLayout>

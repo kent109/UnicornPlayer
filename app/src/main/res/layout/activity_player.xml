@@ -73,7 +73,7 @@
         android:id="@+id/ivCollapse"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:contentDescription="收起"
+        android:contentDescription="@string/player_collapse"
         android:visibility="gone"
         android:src="@drawable/ic_collapse"
         app:layout_constraintEnd_toEndOf="parent"

@@ -19,7 +19,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
         android:layout_marginBottom="8dp"
-        android:text="排序方式"
+        android:text="@string/sort_options"
         android:textColor="@color/onSurface"
         android:textSize="20sp"
         android:textStyle="bold" />
@@ -33,7 +33,7 @@
         android:gravity="center_vertical"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:text="按添加时间排序"
+        android:text="@string/sort_by_add_time"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 
@@ -53,7 +53,7 @@
         android:gravity="center_vertical"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:text="按首字母排序"
+        android:text="@string/sort_by_letter"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 
@@ -73,7 +73,7 @@
         android:gravity="center_vertical"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:text="按歌手首字母"
+        android:text="@string/sort_by_artist_letter"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 
@@ -94,7 +94,7 @@
         android:gravity="center_vertical"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"
-        android:text="自定义排序"
+        android:text="@string/sort_custom"
         android:textColor="@color/text_primary"
         android:textSize="16sp" />
 

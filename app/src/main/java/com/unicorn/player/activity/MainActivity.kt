@@ -162,19 +162,19 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             when {
                 granted -> Unit
                 permission == Manifest.permission.READ_MEDIA_AUDIO -> {
-                    Toast.makeText(this, "需要存储权限才能访问音乐文件", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.permission_required), Toast.LENGTH_LONG).show()
                     finish()
                 }
 
                 permission == Manifest.permission.POST_NOTIFICATIONS -> {
-                    Toast.makeText(this, "通知权限被拒绝，通知功能可能受限", Toast.LENGTH_LONG)
+                    Toast.makeText(this, getString(R.string.notification_permission_denied), Toast.LENGTH_LONG)
                         .show()
                 }
 
                 permission == Manifest.permission.BLUETOOTH_CONNECT -> {
                     Toast.makeText(
                         this,
-                        "禁止蓝牙连接(附近设备)无法监听蓝牙事件",
+                        getString(R.string.bluetooth_permission_missing),
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -238,7 +238,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
                 ShortcutUtil.updateEqualizerShortcut(this@MainActivity, enabled)
                 Toast.makeText(
                     this@MainActivity,
-                    if (enabled) "已打开均衡器" else "已关闭均衡器",
+                    if (enabled) getString(R.string.equalizer_on) else getString(R.string.equalizer_off),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -290,7 +290,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
      * 设置 ViewPager2 与 TabLayout 联动（滑动切换与标签点击双向同步）
      */
     private fun setupViewPager() {
-        val titles = listOf("歌曲", "歌手", "专辑", "歌单")
+        val titles = listOf(getString(R.string.tab_songs), getString(R.string.tab_artists), getString(R.string.tab_albums), getString(R.string.tab_playlists))
         val pagerAdapter = MainPagerAdapter(this, titles)
         binding.viewPager.adapter = pagerAdapter
         TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
@@ -543,7 +543,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     }
 
     private fun setupSearchView() {
-        binding.searchView.queryHint = "输入歌曲、歌手、专辑关键字"
+        binding.searchView.queryHint = getString(R.string.search_hint_full)
 
         // 设置 SearchView 内部输入框的 hint 文字颜色，确保可见
         val searchAutoComplete = binding.searchView.findViewById<
@@ -719,10 +719,10 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             updateLoopIcon(nextMode)
             // 弹出 Toast 提示当前播放模式
             val modeText = when (nextMode) {
-                MusicService.PlayMode.ALL_LOOP -> "全部循环"
-                MusicService.PlayMode.SINGLE_LOOP -> "单曲循环"
-                MusicService.PlayMode.RANDOM -> "随机播放"
-                MusicService.PlayMode.SEQUENCE -> "顺序播放"
+                MusicService.PlayMode.ALL_LOOP -> getString(R.string.playmode_all_loop)
+                MusicService.PlayMode.SINGLE_LOOP -> getString(R.string.playmode_single_loop)
+                MusicService.PlayMode.RANDOM -> getString(R.string.playmode_random)
+                MusicService.PlayMode.SEQUENCE -> getString(R.string.playmode_sequence)
             }
             Toast.makeText(this, modeText, Toast.LENGTH_SHORT).show()
         }
@@ -805,7 +805,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
                 if (ready) {
                     checkExportLimitAndExport(pendingExportPlaylistIds)
                 } else {
-                    Toast.makeText(this@MainActivity, "授权目录创建失败", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.auth_dir_create_failed), Toast.LENGTH_SHORT).show()
                     finishPlaylistExportState()
                 }
             }
@@ -833,7 +833,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
                     if (pre.overLimit) {
                         Toast.makeText(
                             this@MainActivity,
-                            "导出文件已达上限 ${PlaylistFileManager.MAX_EXPORT_COUNT} 个，请先清理",
+                            getString(R.string.export_limit_reached, PlaylistFileManager.MAX_EXPORT_COUNT),
                             Toast.LENGTH_SHORT
                         ).show()
                         finishPlaylistExportState()
@@ -845,7 +845,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             } else if (pre.overLimit) {
                 Toast.makeText(
                     this@MainActivity,
-                    "导出文件已达上限 ${PlaylistFileManager.MAX_EXPORT_COUNT} 个，请先清理",
+                    getString(R.string.export_limit_reached, PlaylistFileManager.MAX_EXPORT_COUNT),
                     Toast.LENGTH_SHORT
                 ).show()
                 finishPlaylistExportState()
@@ -861,9 +861,9 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         if (ids.isEmpty()) return
         playlistViewModel.exportPlaylists(ids, mergeConflicts) { success, failed ->
             val msg = if (failed == 0) {
-                "已导出 $success 个歌单"
+                getString(R.string.exported_playlists_count, success)
             } else {
-                "成功 $success 个，失败 $failed 个"
+                getString(R.string.export_result_summary, success, failed)
             }
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             // 无论成败退出多选页，并重置防连点状态
@@ -916,13 +916,13 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         var message = ""
         when (currentMultiChoiceType) {
             0 -> {
-                title = "删除歌曲"
-                message = "确定要从列表中删除所选的歌曲吗？\n\n注意：这不会删除本地文件。"
+                title = getString(R.string.delete_songs_title)
+                message = getString(R.string.delete_songs_message)
             }
 
             3 -> {
-                title = "删除歌单"
-                message = "确定要删除所选的歌单吗？此操作不可恢复。"
+                title = getString(R.string.delete_playlist_title)
+                message = getString(R.string.delete_playlist_message, "")
             }
         }
 
@@ -931,12 +931,12 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         val dialog = AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("删除") { _, _ ->
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 // 通过回调通知外部处理删除
                 handleDeleteSelected(selectedSongIds)
-                Toast.makeText(this, "已从列表中删除", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.deleted_from_list), Toast.LENGTH_SHORT).show()
             }
-            .setNegativeButton("取消", null)
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
         // 设置删除按钮文字颜色为危险操作红（danger_text），取消按钮为 secondary 色
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setTextColor(dangerColor)
@@ -1039,7 +1039,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             }
             Toast.makeText(
                 this@MainActivity,
-                "已添加到 ${playlistIds.size} 个歌单",
+                getString(R.string.added_to_playlists, playlistIds.size),
                 Toast.LENGTH_SHORT
             ).show()
             PlaylistRefresher.notifyPlaylistsChanged()
@@ -1471,7 +1471,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             }
             Toast.makeText(
                 this@MainActivity,
-                "已添加到 ${playlistIds.size} 个歌单",
+                getString(R.string.added_to_playlists, playlistIds.size),
                 Toast.LENGTH_SHORT
             ).show()
             // 通知 PlaylistFragment 刷新歌单列表（更新歌曲数量）

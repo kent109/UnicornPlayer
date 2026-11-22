@@ -60,7 +60,7 @@ class SettingsActivity : BaseActivity() {
         playItems.add(
             SettingItem(
                 key = "equalizer",
-                title = "均衡器",
+                title = getString(R.string.equalizer),
                 hasChevron = true,
                 isFirst = true,
                 isLast = false,
@@ -72,7 +72,7 @@ class SettingsActivity : BaseActivity() {
         playItems.add(
             SettingItem(
                 key = "lyrics",
-                title = "歌词显示",
+                title = getString(R.string.lyrics_settings),
                 hasChevron = true,
                 isFirst = false,
                 isLast = false,
@@ -84,7 +84,7 @@ class SettingsActivity : BaseActivity() {
         playItems.add(
             SettingItem(
                 key = "theme_style",
-                title = "主题样式",
+                title = getString(R.string.theme_style),
                 hasChevron = true,
                 isFirst = false,
                 isLast = false,
@@ -96,7 +96,7 @@ class SettingsActivity : BaseActivity() {
         playItems.add(
             SettingItem(
                 key = "scan_filter",
-                title = "扫描过滤",
+                title = getString(R.string.scan_filter),
                 hasChevron = true,
                 isFirst = false,
                 isLast = false,
@@ -107,8 +107,20 @@ class SettingsActivity : BaseActivity() {
         )
         playItems.add(
             SettingItem(
+                key = "language",
+                title = getString(R.string.language_title),
+                hasChevron = true,
+                isFirst = false,
+                isLast = false,
+                onClick = {
+                    startActivity(Intent(this, LanguageChooseActivity::class.java))
+                }
+            )
+        )
+        playItems.add(
+            SettingItem(
                 key = "clear_cache",
-                title = "清理存储",
+                title = getString(R.string.clear_storage),
                 hasChevron = false,
                 isFirst = false,
                 isLast = true,
@@ -130,7 +142,7 @@ class SettingsActivity : BaseActivity() {
             items = listOf(
                 SettingItem(
                     key = "auto_update",
-                    title = "自动检查更新",
+                    title = getString(R.string.auto_check_update),
                     hasChevron = false,
                     isFirst = true,
                     isLast = false,
@@ -138,7 +150,7 @@ class SettingsActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "version",
-                    title = "版本号",
+                    title = getString(R.string.version_name),
                     summary = getVersionName(),
                     hasChevron = false,
                     isFirst = false,
@@ -161,7 +173,7 @@ class SettingsActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "feedback",
-                    title = "意见反馈",
+                    title = getString(R.string.feedback),
                     hasChevron = true,
                     isFirst = false,
                     isLast = false,
@@ -171,7 +183,7 @@ class SettingsActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "manual",
-                    title = "使用指南",
+                    title = getString(R.string.manual),
                     hasChevron = true,
                     isFirst = false,
                     isLast = false,
@@ -181,7 +193,7 @@ class SettingsActivity : BaseActivity() {
                 ),
                 SettingItem(
                     key = "about",
-                    title = "隐私协议",
+                    title = getString(R.string.privacy_policy),
                     hasChevron = true,
                     isFirst = false,
                     isLast = true,
@@ -362,9 +374,9 @@ class SettingsActivity : BaseActivity() {
     private fun getVersionName(): String {
         return try {
             val packageInfo = packageManager.getPackageInfo(packageName, 0)
-            packageInfo.versionName ?: "未知"
+            packageInfo.versionName ?: getString(R.string.unknown)
         } catch (e: PackageManager.NameNotFoundException) {
-            "未知"
+            getString(R.string.unknown)
         }
     }
 
@@ -427,9 +439,9 @@ class SettingsActivity : BaseActivity() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            startActivity(Intent.createChooser(shareIntent, "分享轻籁"))
+            startActivity(Intent.createChooser(shareIntent, getString(R.string.share_app_image)))
         } catch (e: Exception) {
-            Toast.makeText(this, "分享失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.share_failed_with_msg, e.message), Toast.LENGTH_SHORT).show()
         }
     }
 }
