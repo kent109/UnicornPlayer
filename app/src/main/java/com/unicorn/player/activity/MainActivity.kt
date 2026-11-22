@@ -1,27 +1,22 @@
 package com.unicorn.player.activity
 
-import com.unicorn.player.util.lyrics.LyricsSaveManager
-import com.unicorn.player.util.sort.CustomSortStore
-import com.unicorn.player.R
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.widget.SearchView
 import android.widget.Toast
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
-import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.tabs.TabLayoutMediator
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ActivityMainBinding
 import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.model.Playlist
@@ -40,12 +35,16 @@ import com.unicorn.player.ui.PlaylistFragment
 import com.unicorn.player.ui.PlaylistRefresher
 import com.unicorn.player.ui.SelectPlaylistDialog
 import com.unicorn.player.ui.SongsFragment
+import com.unicorn.player.ui.player.BottomPlayerController
 import com.unicorn.player.util.AudioTagEditor
 import com.unicorn.player.util.DirectoryMigrationManager
 import com.unicorn.player.util.PlaylistFileManager
 import com.unicorn.player.util.ShortcutUtil
+import com.unicorn.player.util.SongInfoHelper
 import com.unicorn.player.util.UpdateHelper
 import com.unicorn.player.util.ViewUtil
+import com.unicorn.player.util.lyrics.LyricsSaveManager
+import com.unicorn.player.util.sort.CustomSortStore
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
 import com.unicorn.player.viewmodel.PlaylistViewModel
@@ -54,8 +53,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.unicorn.player.ui.player.BottomPlayerController
-import com.unicorn.player.util.SongInfoHelper
 
 class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     MusicManager.ConnectionCallback, MultiChoiceFragment.OnMultiChoiceActionListener {
@@ -92,6 +89,9 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
 
     // 底部播放栏控制器，封装底部播放栏的按钮事件、观察者与 UI 更新
     private lateinit var bottomPlayerController: BottomPlayerController
+
+    // 搜索栏手势控制器：长按 → 均衡器切换；双击 → 滚顶
+    private lateinit var searchBarGestureController: SearchBarGestureController
 
     // 乐库为空且未播放过歌曲时隐藏底部播放条
     private var playerHiddenByEmptyLibrary = false
@@ -227,6 +227,24 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
 
         // 初始化桌面长按图标快捷方式
         ShortcutUtil.setupEqualizerShortcut(this)
+
+        // 初始化搜索栏手势控制器（长按 → 均衡器切换；双击 → 滚顶）
+        searchBarGestureController = SearchBarGestureController(
+            musicService = musicService,
+            isMultiChoiceActive = { multiChoiceFragment != null },
+            isSearchCollapsed = { binding.searchView.isIconified },
+            onToggleEqualizer = {
+                val enabled = ShortcutUtil.toggleEqualizer(this@MainActivity, musicService)
+                ShortcutUtil.updateEqualizerShortcut(this@MainActivity, enabled)
+                Toast.makeText(
+                    this@MainActivity,
+                    if (enabled) "已打开均衡器" else "已关闭均衡器",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        )
+        searchBarGestureController.searchView = binding.searchView
+        searchBarGestureController.actionButtonsLayout = binding.actionButtonsLayout
     }
 
     /**
@@ -347,7 +365,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
      * 切换标签页时，排序按钮始终显示
      */
     private fun updateSortButtonVisibility(position: Int) {
-        binding.ivSort.visibility = android.view.View.VISIBLE
+        binding.ivSort.visibility = View.VISIBLE
     }
 
     private fun updateMultiChoiceVisibility(visible: Boolean) {
@@ -421,163 +439,22 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             })
     }
 
-    private var lastSearchTapTime = 0L
-    private val clickViewRect = android.graphics.Rect()
-
-    /** 本次搜索栏手势已被长按快捷功能消费，随后的 up 不再计入双击滚顶 */
-    private var searchLongPressFired = false
-
-    /** 是否正在跟踪搜索栏长按（按下点落在搜索栏内才跟踪） */
-    private var searchLongPressTracking = false
-
-    /** 搜索栏长按的按下事件副本：长按触发后据此合成 CANCEL 交给 SearchView */
-    private var searchBarDownEvent: android.view.MotionEvent? = null
-
-    /**
-     * 搜索栏长按快捷手势。SearchView 内部子视图会消费并按自身逻辑处理长按，
-     * 监听器挂不上，故在 Activity 的 dispatchTouchEvent 里用 GestureDetector 判定。
-     */
-    private val searchBarGestureDetector by lazy {
-        android.view.GestureDetector(
-            this,
-            object : android.view.GestureDetector.SimpleOnGestureListener() {
-                override fun onDown(e: android.view.MotionEvent): Boolean = true
-
-                override fun onLongPress(e: android.view.MotionEvent) {
-                    toggleEqualizerShortcut()
-                }
-            }
-        )
-    }
-
-    /** 按下点是否落在收起状态（非编辑）的搜索栏内 */
-    private fun isDownOnCollapsedSearchBar(ev: android.view.MotionEvent): Boolean {
-        if (multiChoiceFragment != null) {
-            return false
-        }
-        // 搜索编辑状态下长按属于输入框自身（选中/粘贴），不响应快捷功能
-        if (!binding.searchView.isIconified) {
-            return false
-        }
-        if (!isTouchInView(ev, binding.searchView)) {
-            return false
-        }
-        // 操作按钮区叠在搜索栏右端，长按图标不该走快捷手势
-        val onActionButtons = binding.actionButtonsLayout.isVisible
-                && isTouchInView(ev, binding.actionButtonsLayout)
-        return !onActionButtons
-    }
-
-    /** 触点（屏幕坐标）是否落在 view 的可见区域内 */
-    private fun isTouchInView(ev: android.view.MotionEvent, view: View): Boolean {
-        if (view.width == 0 || view.height == 0) {
-            return false
-        }
-        val location = IntArray(2)
-        view.getLocationOnScreen(location)
-        return ev.rawX >= location[0] && ev.rawX < location[0] + view.width &&
-                ev.rawY >= location[1] && ev.rawY < location[1] + view.height
-    }
-
-    /** 长按搜索栏：切换均衡器开关，并吞掉本次手势避免松手时展开搜索模式 */
-    private fun toggleEqualizerShortcut() {
-        searchLongPressFired = true
-        val down = searchBarDownEvent
-        if (down != null) {
-            val cancel = android.view.MotionEvent.obtain(down)
-            cancel.action = android.view.MotionEvent.ACTION_CANCEL
-            binding.searchView.dispatchTouchEvent(cancel)
-            cancel.recycle()
-        }
-        val enabled = ShortcutUtil.toggleEqualizer(this, musicService)
-        // 同步更新桌面快捷方式文本
-        ShortcutUtil.updateEqualizerShortcut(this, enabled)
-        Toast.makeText(
-            this,
-            if (enabled) "已打开均衡器" else "已关闭均衡器",
-            Toast.LENGTH_SHORT
-        ).show()
-    }
-
-    private fun trackSearchBarLongPress(ev: android.view.MotionEvent?) {
-        if (ev == null) {
-            return
-        }
-        when (ev.actionMasked) {
-            android.view.MotionEvent.ACTION_DOWN -> {
-                searchLongPressFired = false
-                searchLongPressTracking = isDownOnCollapsedSearchBar(ev)
-                searchBarDownEvent?.recycle()
-                searchBarDownEvent = if (searchLongPressTracking) {
-                    android.view.MotionEvent.obtain(ev)
-                } else {
-                    null
-                }
-                if (searchLongPressTracking) {
-                    searchBarGestureDetector.onTouchEvent(ev)
-                }
-            }
-
-            else -> {
-                if (!searchLongPressTracking) {
-                    return
-                }
-                searchBarGestureDetector.onTouchEvent(ev)
-                if (ev.actionMasked == android.view.MotionEvent.ACTION_UP ||
-                    ev.actionMasked == android.view.MotionEvent.ACTION_CANCEL
-                ) {
-                    searchLongPressTracking = false
-                    searchBarDownEvent?.recycle()
-                    searchBarDownEvent = null
-                }
-            }
-        }
-    }
-
     override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
-        trackSearchBarLongPress(ev)
+        searchBarGestureController.trackSearchBarLongPress(ev)
         if (ev?.action == android.view.MotionEvent.ACTION_UP) {
-            if (multiChoiceFragment == null) {
-                scrollToTop(binding.searchView, ev) { scrollCurrentTabToTop() }
+            val clickView = if (multiChoiceFragment == null) {
+                binding.searchView
             } else {
-                scrollToTop(
-                    multiChoiceFragment!!.getClickView(), ev
-                ) { multiChoiceFragment!!.scrollToTop() }
+                multiChoiceFragment!!.getClickView()
             }
+            val action = if (multiChoiceFragment == null) {
+                { scrollCurrentTabToTop() }
+            } else {
+                { multiChoiceFragment!!.scrollToTop() }
+            }
+            searchBarGestureController.scrollToTopIfDoubleTap(clickView, ev, action)
         }
         return super.dispatchTouchEvent(ev)
-    }
-
-    private fun scrollToTop(clickView: View, ev: android.view.MotionEvent, action: Runnable) {
-        // 获取clickView在屏幕上的区域
-        clickView.getHitRect(clickViewRect)
-        // 将触摸事件坐标转换到clickView的父坐标系
-        val location = IntArray(2)
-        clickView.getLocationOnScreen(location)
-        val x = ev.rawX.toInt()
-        val y = ev.rawY.toInt()
-        if (clickViewRect.contains(
-                x - location[0] + clickViewRect.left, y - location[1] + clickViewRect.top
-            )
-        ) {
-            // 点击在clickView范围内
-            val canTrigger =
-                ((clickView is SearchView && clickView.isIconified) || clickView !is SearchView)
-                        && !searchLongPressFired
-            if (canTrigger) {
-                val currentTime = System.currentTimeMillis()
-                val doubleTapTimeout = android.view.ViewConfiguration.getDoubleTapTimeout()
-                if (currentTime - lastSearchTapTime < doubleTapTimeout) {
-                    // 双击检测：滚动当前标签页列表到顶部
-                    action.run()
-                    lastSearchTapTime = 0L
-                } else {
-                    lastSearchTapTime = currentTime
-                }
-            } else {
-                lastSearchTapTime = 0L
-            }
-        }
     }
 
     private fun setupViewModel() {
@@ -674,7 +551,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
             androidx.appcompat.R.id.search_src_text
         )
         searchAutoComplete?.setHintTextColor(
-            androidx.core.content.ContextCompat.getColor(
+            ContextCompat.getColor(
                 this, R.color.secondary
             )
         )
@@ -694,12 +571,12 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         // 监听搜索框展开/收起状态，控制操作按钮布局的显示
         binding.searchView.setOnSearchClickListener {
             // 进入搜索模式，隐藏操作按钮布局（包含循环模式、排序、设置）
-            binding.actionButtonsLayout.visibility = android.view.View.GONE
+            binding.actionButtonsLayout.visibility = View.GONE
         }
 
         binding.searchView.setOnCloseListener {
             // 退出搜索模式，显示操作按钮布局
-            binding.actionButtonsLayout.visibility = android.view.View.VISIBLE
+            binding.actionButtonsLayout.visibility = View.VISIBLE
             false // 返回false表示不执行默认的关闭行为
         }
     }
@@ -1185,7 +1062,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     // 保存观察者的引用，以便在重新连接时移除旧的观察者
     // 注意：isPlaying + currentSong 观察者已委托给 BottomPlayerController
     private var fileChangedObserver: androidx.lifecycle.Observer<Unit>? = null
-    private var requestSongListObserver: androidx.lifecycle.Observer<com.unicorn.player.service.Event<Boolean>>? =
+    private var requestSongListObserver: androidx.lifecycle.Observer<com.unicorn.player.util.event.Event<Boolean>>? =
         null
     private var playModeObserver: androidx.lifecycle.Observer<MusicService.PlayMode>? = null
 
@@ -1443,7 +1320,7 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
      */
     private fun syncSortModeFromPrefs() {
         try {
-            val prefs = getSharedPreferences("sort_mode_prefs", Context.MODE_PRIVATE)
+            val prefs = getSharedPreferences("sort_mode_prefs", MODE_PRIVATE)
             val savedOrdinal = prefs.getInt("sort_mode", 0)
             val savedMode = MusicViewModel.SortMode.entries
                 .getOrElse(savedOrdinal) { MusicViewModel.SortMode.BY_TITLE }

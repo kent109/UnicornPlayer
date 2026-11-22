@@ -1,6 +1,5 @@
 package com.unicorn.player.viewmodel
 
-import com.unicorn.player.util.sort.CustomSortStore
 import android.content.Context
 import androidx.core.content.edit
 import androidx.datastore.preferences.core.edit
@@ -16,17 +15,17 @@ import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
 import com.unicorn.player.playback.SongPlayableRegistry
 import com.unicorn.player.repository.MusicRepository
-import com.unicorn.player.activity.scanFiltersDataStore
 import com.unicorn.player.service.DataStoreKeys
 import com.unicorn.player.service.PlaySource
 import com.unicorn.player.service.PlaySourceManager
 import com.unicorn.player.service.applicationDataStore
+import com.unicorn.player.util.datastore.scanFiltersDataStore
+import com.unicorn.player.util.sort.CustomSortStore
 import com.unicorn.player.util.sort.PinyinUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.text.Collator
 import java.util.Locale
@@ -70,7 +69,7 @@ class MusicViewModel(
 
     private val collator = Collator.getInstance(Locale.CHINA)
 
-    private var playSourceObserver: androidx.lifecycle.Observer<String>? = null
+    private var playSourceObserver: Observer<String>? = null
 
     private var _currentPlayingArtist = MutableLiveData<String?>(null)
     val currentPlayingArtist: LiveData<String?> = _currentPlayingArtist
@@ -157,7 +156,7 @@ class MusicViewModel(
     private fun observeHiddenRegistry() {
         // 避免重复注册
         hiddenRegistryObserver?.let { HiddenSongRegistry.hiddenSongPaths.removeObserver(it) }
-        hiddenRegistryObserver = androidx.lifecycle.Observer { paths ->
+        hiddenRegistryObserver = Observer { paths ->
             if (rawSongs.isEmpty()) return@Observer
             val visible = rawSongs.filter { it.path !in paths }
             val sorted = sortForScope(visible, _sortMode.value ?: SortMode.BY_TIME, PlaySource.SONGS)

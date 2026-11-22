@@ -1,5 +1,6 @@
 package com.unicorn.player.activity
 
+import com.unicorn.player.util.datastore.themeDataStore
 import com.unicorn.player.R
 import android.content.Context
 import android.content.res.Resources
@@ -18,15 +19,12 @@ import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
 import com.unicorn.player.databinding.ActivityThemeSettingBinding
 import com.unicorn.player.manager.MusicManager
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-
-internal val Context.themeDataStore by preferencesDataStore(name = "theme_settings")
 
 class ThemeSettingActivity : BaseActivity() {
 
@@ -775,3 +773,6 @@ class ThemeSettingActivity : BaseActivity() {
         SELECT
     }
 }
+
+
+

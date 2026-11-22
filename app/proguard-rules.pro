@@ -33,15 +33,18 @@
 }
 
 # ============================================================
-# 项目自身类（Room / Service / ViewModel / Model）
+# 项目自身类：所有子包 + 根包 Application 入口
+# com.unicorn.player.<任意子包> 全通配，覆盖：
+#   model / database / service / viewmodel / util(+子包) / equalizer /
+#   activity / ui / ui.player / adapter / playback / repository / manager /
+#   widget / diagnostics / UnicornPlayerApplication
 # ============================================================
--keep class com.unicorn.player.model.** { *; }
--keep class com.unicorn.player.database.** { *; }
--keep class com.unicorn.player.service.** { *; }
--keep class com.unicorn.player.viewmodel.** { *; }
--keep class com.unicorn.player.util.** { *; }
--keep class com.unicorn.player.equalizer.** { *; }
+-keep class com.unicorn.player.** { *; }
 
+# 必须 keep UnicornPlayerApplication 本身（根包唯一类）
+-keep class com.unicorn.player.UnicornPlayerApplication { *; }
+
+# Room Entity / DAO 注解保留
 -keepclassmembers class ** {
     @androidx.room.* <fields>;
     @androidx.room.* <methods>;

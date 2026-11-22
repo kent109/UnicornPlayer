@@ -295,3 +295,15 @@ object LrcHelper {
     }
 }
 
+/**
+ * 毫秒时间戳格式化成 "[mm:ss.xx]" 形式。
+ * 例如 83245ms → "[01:23.24]"。
+ */
+fun formatTimeLabel(timeMs: Long): String {
+    val totalCentis = timeMs / 10
+    val minutes = totalCentis / 6000
+    val seconds = (totalCentis % 6000) / 100
+    val centis = totalCentis % 100
+    return "[%02d:%02d.%02d]".format(minutes, seconds, centis)
+}
+

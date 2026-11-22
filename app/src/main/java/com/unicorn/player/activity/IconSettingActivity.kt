@@ -1,5 +1,6 @@
 package com.unicorn.player.activity
 
+import com.unicorn.player.util.datastore.themeDataStore
 import com.unicorn.player.R
 import android.os.Bundle
 import android.util.Log
@@ -163,3 +164,4 @@ class IconSettingActivity : BaseActivity() {
 
     private data class IconOption(val mode: Int, val name: String, val iconRes: Int)
 }
+

@@ -1,5 +1,6 @@
 package com.unicorn.player.activity
 
+import com.unicorn.player.util.datastore.lyricsDataStore
 import com.unicorn.player.util.lyrics.LyricsSaveManager
 import com.unicorn.player.R
 import android.content.Context
@@ -15,7 +16,6 @@ import androidx.core.content.ContextCompat
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.unicorn.player.databinding.ActivityLyricsOptionsBinding
@@ -24,24 +24,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-
-// ---------------------------------------------------------------------------
-// 进程级单例 DataStore 委托
-//
-// 关键约束（来自 DataStore 官方文档）：
-//   1. 每个文件在整个进程内只能有唯一 DataStore 实例
-//   2. `by preferencesDataStore(name = "...")` 这种 property-delegate 写法会
-//      在 delegate 对象的生命周期内维护一个单例；但如果 delegate 是类内部
-//      Activity 实例的成员属性，每次 Activity 重建都会创建一个新的 delegate
-//      实例 → 第二个 delegate 要绑定同一文件时被第一个 DataStore 还活着 →
-//         IllegalStateException: "There are multiple DataStores active for the
-//         same file"
-//   3. 修复方法：delegate 必须设在 **top-level**（文件级/static），整个进程
-//      仅实例化一次，所有 Activity 共享。
-//     → Kotlin 顶层属性就是 static-like，全进程一份，lifecycle 超出任何
-//      Activity，符合 DataStore 要求。
-// ---------------------------------------------------------------------------
-internal val Context.lyricsDataStore by preferencesDataStore(name = "lyrics_settings")
 
 /**
  * 歌词显示设置页面
@@ -111,7 +93,7 @@ class LyricsOptionsActivity : BaseActivity() {
     private lateinit var binding: ActivityLyricsOptionsBinding
 
     // 字体大小弹窗
-    private var fontPopup: android.widget.PopupWindow? = null
+    private var fontPopup: PopupWindow? = null
 
     // 防止开关恢复时递归触发 listener
     private var isRestoringSwitch = false
@@ -221,7 +203,7 @@ class LyricsOptionsActivity : BaseActivity() {
         }
 
         // 添加设置项
-        items.forEachIndexed { index, item ->
+        items.forEachIndexed { _, item ->
             val itemView = createSettingItem(inflater, contentContainer, item)
             contentContainer.addView(itemView)
 
@@ -541,5 +523,8 @@ class LyricsOptionsActivity : BaseActivity() {
         SELECT
     }
 }
+
+
+
 
 

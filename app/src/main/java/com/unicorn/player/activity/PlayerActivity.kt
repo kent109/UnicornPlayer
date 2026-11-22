@@ -1,9 +1,6 @@
 package com.unicorn.player.activity
 
-import com.unicorn.player.util.lyrics.LyricsSaveManager
-import com.unicorn.player.R
 import android.content.Intent
-import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -22,32 +19,37 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.graphics.drawable.toDrawable
 import androidx.core.graphics.toColorInt
 import androidx.core.view.doOnPreDraw
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import com.hw.lrcviewlib.LrcRow
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ActivityPlayerBinding
 import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
+import com.unicorn.player.ui.LrcPreviewDialog
+import com.unicorn.player.ui.player.PlayerPagerAdapter
 import com.unicorn.player.util.DisplayUtil
-import com.unicorn.player.util.cover.ImagePicker
-import com.unicorn.player.util.LogWriter
-import com.unicorn.player.util.lyrics.LrcFetcher
 import com.unicorn.player.util.DynamicBgColorUtil
-import com.unicorn.player.util.lyrics.LrcHelper
+import com.unicorn.player.util.LogWriter
 import com.unicorn.player.util.ViewUtil
+import com.unicorn.player.util.cover.CoverEditorHelper
+import com.unicorn.player.util.cover.ImagePicker
+import com.unicorn.player.util.datastore.lyricsDataStore
+import com.unicorn.player.util.lyrics.LrcFetcher
+import com.unicorn.player.util.lyrics.LrcHelper
+import com.unicorn.player.util.lyrics.LyricsSaveManager
+import com.unicorn.player.util.lyrics.formatTimeLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
-import com.unicorn.player.ui.LrcPreviewDialog
-import com.unicorn.player.ui.player.PlayerPagerAdapter
-import com.unicorn.player.util.cover.CoverEditorHelper
 
 class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
@@ -124,9 +126,6 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
         /** onPause→onStart 间隔超过该值才视为"灭屏/后台离开"，需要抑制恢复 */
         private const val AWAY_THRESHOLD_MS = 2000L
-
-        /** 松手切歌所需的最小水平拖动距离（占播放页宽度的比例），小于该值的轻扫一律弹回 */
-        private const val MIN_SWIPE_DRAG_RATIO = 0.5f
     }
 
     // 匹配 LRC 行内所有时间戳标记 [mm:ss.xx] / [mm:ss.xxx]
@@ -167,17 +166,6 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 LrcRow(textOnly, formatted, row.CurrentRowTime)
             }
         }
-    }
-
-    /**
-     * 把毫秒时间戳格式化成 "mm:ss.xx" 形式，用方括号包裹，例如 "[01:23.45]"
-     */
-    private fun formatTimeLabel(timeMs: Long): String {
-        val totalCentis = timeMs / 10
-        val minutes = totalCentis / 6000
-        val seconds = (totalCentis % 6000) / 100
-        val centis = totalCentis % 100
-        return "[%02d:%02d.%02d]".format(minutes, seconds, centis)
     }
 
     // 防止循环调用的标志
@@ -298,7 +286,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
 
         // 设置页面切换动画，提供更平滑的过渡效果
         binding.viewPager.setPageTransformer { page, position ->
-            transformPage(page, position)
+            PlayerLayout.transformPage(page, position)
         }
 
         // 禁用轻扫切歌，需要拖动足够距离才翻页
@@ -424,14 +412,6 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         }
     }
 
-    private fun transformPage(page: View, position: Float) {
-        val absPosition = kotlin.math.abs(position)
-        page.alpha = 1f - absPosition * 0.3f
-        val scale = 1f - absPosition * 0.1f
-        page.scaleX = scale
-        page.scaleY = scale
-    }
-
     fun applyPageTransformer() {
         binding.viewPager.doOnPreDraw {
             applyTransformToVisiblePages()
@@ -448,7 +428,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             if (adapterPos != RecyclerView.NO_POSITION) {
                 // ViewPager2 稳定态下 position ≈ adapterPos - currentItem
                 val position = (adapterPos - currentItem).toFloat()
-                transformPage(child, position)
+                PlayerLayout.transformPage(child, position)
             }
         }
     }
@@ -479,15 +459,15 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                     }
 
                     MotionEvent.ACTION_UP -> {
-                        val minDrag = pager.width * MIN_SWIPE_DRAG_RATIO
+                        val minDrag = pager.width * PlayerLayout.MIN_SWIPE_DRAG_RATIO
                         // 只在播放页自身被拖动时介入，避免打断进度条、歌词等子 View 的手势
                         if (kotlin.math.abs(event.rawX - downX) < minDrag
                             && recyclerView.scrollState == RecyclerView.SCROLL_STATE_DRAGGING
-                            && pageOffset(recyclerView, downItem) != 0
+                            && PlayerLayout.pageOffset(recyclerView, downItem) != 0
                         ) {
                             event.action = MotionEvent.ACTION_CANCEL
                             recyclerView.post {
-                                val dx = pageOffset(recyclerView, downItem)
+                                val dx = PlayerLayout.pageOffset(recyclerView, downItem)
                                 if (dx != 0) recyclerView.smoothScrollBy(dx, 0)
                             }
                         }
@@ -501,31 +481,6 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
             override fun onRequestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {}
         })
     }
-
-    /**
-     * 把 position 页对齐回去所需的滚动量（该页取不到时返回 0，即不介入）。
-     * scrollBy 的正方向让子 View 左移，所以滚动量就是 child.left 本身。
-     *
-     * 方向不能反：ScrollEventAdapter 按回位第一帧的滚动方向推算目标页（正向 = mPosition+1，
-     * 反向 = mPosition），只有算回原页才不会派发 onPageSelected；算错就会误切歌、重播当前歌曲。
-     */
-    private fun pageOffset(rv: RecyclerView, position: Int): Int {
-        val child = (0 until rv.childCount)
-            .map { rv.getChildAt(it) }
-            .firstOrNull { rv.getChildAdapterPosition(it) == position }
-        return child?.left ?: 0
-    }
-
-    /**
-     * 字号档位（小/中/大）对应的像素值。
-     * 数组下标对应 FONT_SIZE_SMALL=0 / MEDIUM=1 / LARGE=2，
-     * 三个元素分别为 { 普通行字号, 高亮行字号, 拖动选中行字号 }。
-     */
-    private val fontSizeTiers = arrayOf(
-        intArrayOf(13, 16, 14),  // 小
-        intArrayOf(15, 18, 16),  // 中（默认）
-        intArrayOf(19, 22, 20)   // 大
-    )
 
     /**
      * 从 DataStore 恢复"显示歌词"的运行时状态。
@@ -561,7 +516,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
                 LyricsOptionsActivity.FONT_SIZE_MEDIUM
             }
         }
-        val sizes = fontSizeTiers[tier]
+        val sizes = PlayerLayout.fontSizeTiers[tier]
         normalRowTextSize = DisplayUtil.sp2px(this, sizes[0])
         highlightRowTextSize = DisplayUtil.sp2px(this, sizes[1])
         trySelectRowTextSize = DisplayUtil.sp2px(this, sizes[2])
@@ -598,7 +553,6 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         } else {
             typedValue.data
         }
-        val selectLineColor = themeColor
         this.highlightRowColor = ThemeSettingActivity.resolveHighlightColor(this)
         this.trySelectRowColor = (0x55000000 or (themeColor and 0x00FFFFFF))
 
@@ -612,7 +566,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         // 拖动选中行仍保持普通行样式（拖动文字不会带上选中色）。
         // 全屏时恢复为醒目的高亮色与大字号，便于拖动时定位当前行。
         lrcView.lrcSetting.setNormalRowColor(normalRowColor)
-            .setTimeTextSize(DisplayUtil.sp2px(this, 14)).setSelectLineColor(selectLineColor)
+            .setTimeTextSize(DisplayUtil.sp2px(this, 14)).setSelectLineColor(themeColor)
             .setSelectLineTextSize(DisplayUtil.sp2px(this, 18)).setHeightRowColor(highlightRowColor)
             .setNormalRowTextSize(normalRowTextSize)
             .setHeightLightRowTextSize(highlightRowTextSize)
@@ -632,7 +586,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         binding.lrcView.post { binding.lrcView.commitLrcSettings() }
 
         // 滚动动画时长：库默认 400ms，调快为 250ms（seekbar 定位与切行滚动均生效）
-        lrcView.setAutomaticMoveAnimationDuration(250)
+        lrcView.automaticMoveAnimationDuration = 250
 
         // 应用字号设置（从 DataStore 读取字体大小偏好）
         applyFontSize()
@@ -1635,7 +1589,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         lifecycleScope.launch {
             val color = DynamicBgColorUtil.extract(this@PlayerActivity, song.albumArt)
             if (gen != bgGeneration || isFinishing || isDestroyed) return@launch
-            window.setBackgroundDrawable(ColorDrawable(color))
+            window.setBackgroundDrawable(color.toDrawable())
             binding.topBar.setBackgroundColor(color)
         }
     }
@@ -2006,6 +1960,7 @@ class PlayerActivity : BaseActivity(), MusicManager.ConnectionCallback {
         emptyTextView?.visibility = View.GONE
     }
 }
+
 
 
 

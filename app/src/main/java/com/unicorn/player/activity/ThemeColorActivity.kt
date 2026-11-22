@@ -1,5 +1,6 @@
 package com.unicorn.player.activity
 
+import com.unicorn.player.util.datastore.themeDataStore
 import com.unicorn.player.R
 import android.content.Context
 import android.os.Bundle
@@ -240,3 +241,4 @@ class ThemeColorActivity : BaseActivity() {
         return (dp * resources.displayMetrics.density).toInt()
     }
 }
+

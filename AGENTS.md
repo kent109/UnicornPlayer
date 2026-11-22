@@ -1,138 +1,128 @@
 # UnicornPlayer AGENTS.md
 
-## 构建命令
-
-**仅限 Windows**：使用 `gradle`（不是 `./gradlew`）
+## 构建命令（仅限 Windows）
 
 ```bash
+gradle app:compileDebugKotlin     # 快速类型检查（最常用）
 gradle app:assembleDebug          # 构建调试 APK
 gradle app:assembleRelease        # 构建发布 APK
-gradle app:compileDebugKotlin     # 快速类型检查
 gradle clean                      # 清理构建
 ```
 
-**发布 APK 命名**：`UnicornPlayer_1.0.0_YYMMDD.apk`（从 `app/build.gradle:29-37` 自动生成）
+- **签名**：`keystore.jks`
+- **发布 APK 命名**：`UnicornPlayer_1.0.0_YYMMDD.apk`（`app/build.gradle:29-37` 自动生成）
+- **ProGuard**：已启用 `proguard-android-optimize.txt` + 资源压缩 + 混淆
 
-**签名**：`keystore.jks`（见 `app/build.gradle:39-46`）
+## 项目参数
 
-## 架构
+| 项 | 值 |
+|----|----|
+| 包名 | `com.unicorn.player` |
+| minSdk / targetSdk | 29 / 35 |
+| 架构 | MVVM + Repository |
+| ViewBinding | 已启用（`app/build.gradle`） |
+| 模块 | `app/` + `equalizer/`（库项目） |
+| ExoPlayer | media3 1.9.x（`androidx.media3.exoplayer.ExoPlayer`） |
+| Room | 2.5.1（KAPT，参数名需 `javaParameters = true`） |
 
-**包名**：`com.unicorn.player`
-**最低 SDK**：29（Android 10），**目标 SDK**：35（Android 15）
-**架构**：MVVM + Repository 模式
-**ViewBinding**：在 `app/build.gradle:71-73` 中启用
-
-### 模块结构
+## 目录结构（重构后）
 
 ```
-UnicornPlayer/
-├── app/          # 主应用模块
-└── equalizer/    # 音频均衡器库模块
+com.unicorn.player/
+├── UnicornPlayerApplication.kt     # 根包唯一入口
+│
+├── activity/                        # 所有 Activity（24 个）
+│   ├── PlayerLayout.kt              #   PlayerActivity 布局函数
+│   ├── SearchBarGestureController.kt #  MainActivity 搜索栏手势
+│   └── ...Activity.kt               #   BaseActivity、MainActivity、PlayerActivity 等
+│
+├── service/                         # MusicService + 8 个职责分离类
+│   ├── MusicService.kt              #   核心（~2020 行，累计减 1107 行）
+│   ├── PlayerListener.kt            #   Player.Listener 3 回调
+│   ├── MusicServiceMediaSessionCallback.kt # MediaSession.Callback 5 回调
+│   ├── ServiceBroadcastReceivers.kt  #  通知栏按钮 + 蓝牙状态工厂
+│   ├── AudioFocusManager.kt          #   手动音频焦点管理
+│   ├── NotificationController.kt    #   通知 + MediaSession 元数据
+│   ├── AlbumArtDecoder.kt            #   封面 4 来源解码链
+│   ├── MusicServiceBluetooth.kt      #   蓝牙 A2DP + 断开处理
+│   ├── PositionUpdater.kt            #   1 秒进度轮询
+│   └── PlaySource.kt                 #   顶层 object（DataStoreKeys 等）
+│
+├── util/
+│   ├── compat/IntentCompat.kt       #   getParcelableExtra API 兼容
+│   ├── cover/                       #   封面处理（5）
+│   ├── datastore/UnicornDataStores.kt #  顶层 DataStore 扩展
+│   ├── diag/CallStack.kt            #   callerTrace 栈帧过滤
+│   ├── event/Event.kt               #   一次性事件包装
+│   ├── lyrics/                      #   歌词（3）
+│   └── sort/                        #   排序/拼音/繁简（3）
+│
+├── ui/                              # Fragment + Dialog
+│   └── player/                      #   PlayerFragment + BottomPlayerController
+│
+├── equalizer/                       # TenBandEqualizerProcessor + BiquadModels
+├── model/                           # Room 实体（Song/Playlist/Artist/Album/Cover）
+├── database/                        # MusicDatabase + DAOs
+├── adapter/                         # 12 个 Adapter
+├── viewmodel/                       # MusicViewModel + PlaylistViewModel
+├── repository/                      # MusicRepository
+├── playback/                        # SongPlayableRegistry
+├── manager/                         # MusicManager
+├── diagnostics/                     # 性能诊断
+└── widget/                          # 自定义 View
 ```
 
-### 关键组件
+## Service 职责拆分模式（通用范式）
 
-- **MusicRepository**：扫描 MediaStore，分类质量（SQ/HQ/STD/ORD），存储到 Room
-- **MusicViewModel**：暴露 LiveData，使用协程 Job 进行搜索
-- **MusicService**：MediaPlayer + 音频焦点 + MediaSession + 通知，将状态持久化到 DataStore
-- **Activities**：MainActivity、PlayerActivity、SettingsActivity、LyricsOptionsActivity、ArtistSongsActivity、AlbumSongsActivity、LrcSearchActivity、EqualizerActivity、DirectoryPickerActivity、PlaylistSongsActivity、ScanFilterActivity、FeedbackActivity、ManualActivity、AboutActivity
-- **Fragments**：MainPagerAdapter、SongsFragment、ArtistFragment、AlbumFragment、PlaylistFragment、PlaceholderFragment
-- **Adapters**：SongAdapter、SelectableSongAdapter、PlaylistAdapter、SelectablePlaylistAdapter、ArtistAdapter、AlbumAdapter、LrcSearchResultAdapter
+MusicService 从 3127 → ~2020 行，采用**闭包注入**替代直接字段访问：
+
+| 安全级别 | 模式 | 例子 |
+|---------|------|------|
+| 🟢 | 零闭包静态 object | `PlayerLayout`、`BiquadModels`、`Event` |
+| 🟡 | 构造注入 3-10 闭包 | `PositionUpdater`、`NotificationController`、`AlbumArtDecoder` |
+| 🟠 | 构造注入 10-37 闭包 | `PlayerListener`、`MusicServiceMediaSessionCallback` |
+| 🔴 | 保留在 Service 内 | `playNext/playPrevious/play/pause/seekTo`（核心业务互相调用） |
+
+**原则**：每个闭包参数要有明确语义（`getIsPlaying` 而非 `() -> Boolean`），避免 `Any`/`Pair` 这类模糊类型。
 
 ## 数据层
 
-### Room 数据库（版本 3）
-
-**实体**：Song、Playlist、PlaylistSong、Artist、Album
-**DAOs**：SongDao、PlaylistDao（都返回 Flow）
-**迁移**：`fallbackToDestructiveMigration()`
-
-### DataStore（Preferences 1.0.0）
-
-存储播放状态：当前歌曲、播放模式、随机模式、音量
+- **Room 数据库（版本 3）**：Song、Playlist、PlaylistSong、Artist、Cover 实体；SongDao、PlaylistDao、CoverDao；`fallbackToDestructiveMigration()`
+- **DataStore（Preferences 1.0.0）**：`UnicornDataStores.kt` 里 3 个顶层扩展（themeDataStore/scanFiltersDataStore/lyricsDataStore）
+- **SAF**：DocumentFile 1.0.0（直接权限不可用时走 SAF）
 
 ## 依赖
 
 **需要 KAPT**：Room 2.5.1、Glide 4.16.0
-**Kotlin 编译参数**：`javaParameters = true`（Room 的 `:param` 占位符支持）- `app/build.gradle` 的 `android { kotlin { compilerOptions { ... } } }`
 
 **关键库**：
-- Room 2.5.1（KAPT）
-- Glide 4.16.0（KAPT）
-- DataStore 1.0.0
+- Room 2.5.1、Glide 4.16.0、DataStore 1.0.0
+- media3 1.9.x（Player/MediaSession）
 - SmartRefreshLayout 3.0.0-alpha
-- LrcView V1.4（JitPack）
-- Markwon 4.6.2
 - OkHttp 4.12.0、Gson 2.10.1
-- opencc4j 1.14.0、pinyin4j 2.5.1
 - Kotlinx Serialization 1.11.0
+- opencc4j 1.14.0（繁简转换）、pinyin4j 2.5.1（拼音排序）
 - DocumentFile 1.0.0（SAF）
 
-## 代码生成与格式化
+## 代码规范
 
-**每次代码修改后必须格式化**：
-- 删除未使用的 import
-- 保持 4 空格缩进
-- 统一空格使用（运算符、逗号）
-- 方法参数换行格式化
-- 使用 Android Studio "Code" -> "Reformat Code"
+**换行符（重要）**：所有新建文本文件必须 **CRLF**（`\r\n`）。Write 工具默认 LF，需 `content.replace('\n', '\r\n')`。
 
-**换行符规则（重要）**：
-- **CRLF 换行符**：Windows 标准换行符，格式为 `\r\n`（回车+换行）
-- **LF 换行符**：Unix/Linux 标准换行符，格式为 `\n`（换行）
-- **CR 换行符**：旧式换行符，格式为 `\r`（回车）
-- **禁止使用 CR**：绝对不能使用纯 CR（`\r`）
-- **禁止使用 LF**：绝对不能使用纯 LF（`\n`）
-- **必须使用 CRLF**：所有文本文件必须使用 CRLF（`\r\n`）
+**Room KAPT 陷阱**：必须在 `app/build.gradle` 的 `android { kotlin { compilerOptions { javaParameters = true } } }` 启用参数名。放 `kapt { arguments { arg(...) } }` 无效。症状：`kaptDebugKotlin` 报 "Each bind variable in the query must have a matching method parameter"。
 
-**新文件创建规则**：
-- 新建文本文件（.kt、.java、.xml、.md、.gradle、.xml、.properties 等）必须使用 CRLF（`\r\n`）
-- Write 工具默认输出 LF，需要立即转换为 CRLF
-- 正确转换方法：`content.replace('\n', '\r\n')`
+**ViewBinding**：始终用 `binding` 视图，不用 `findViewById`。
 
-**检查文件换行符的方法**：
-```bash
-# Python 方法
-python -c "content = open(r'文件路径', 'rb').read(); print('CRLF count:', content.count(b'\r\n'))"
-
-# PowerShell 方法
-powershell -Command "(Get-Content '文件路径' -Raw) -replace '`r`n', '`r`n'"
-```
-
-**常见错误**：
-- ❌ 使用 Write 工具后直接保存（会得到 LF）
-- ❌ 使用 PowerShell Set-Content（默认使用 LF）
-- ❌ 使用 Python open() 写入（默认使用 LF）
-- ✅ 使用 Python `content.replace('\n', '\r\n')` 转换
-- ✅ 使用 PowerShell `Get-Content ... | Set-Content ... -NoNewline`
+**Gradle**：Windows 用 `gradle`，不是 `./gradlew`。
 
 ## 权限
 
-- `READ_MEDIA_AUDIO` - 音频文件（Android 13+）
-- `WAKE_LOCK` - 播放期间保持设备唤醒
-- `FOREGROUND_SERVICE` - 后台服务
-- `FOREGROUND_SERVICE_MEDIA_PLAYBACK` - 媒体专用前台服务
-- `POST_NOTIFICATIONS` - 显示播放通知（Android 13+）
-- `BLUETOOTH` / `BLUETOOTH_CONNECT` - 蓝牙音频输出
+`READ_MEDIA_AUDIO`（Android 13+）、`WAKE_LOCK`、`FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_MEDIA_PLAYBACK`、`POST_NOTIFICATIONS`（Android 13+）、`BLUETOOTH` / `BLUETOOTH_CONNECT`
 
-## 发布配置
+## 快速验证
 
-**ProGuard**：`proguard-android-optimize.txt`（在 `app/build.gradle:49-54` 中启用）
-**资源压缩**：发布构建中启用
-**签名**：`keystore.jks`
-**混淆**：启用
+项目没有单元测试。最可靠的验证：
 
-## 常见陷阱
-
-- **换行符**：所有新建的文本文件（.kt、.java、.xml、.md、.gradle）必须使用 CRLF，不能使用 LF
-- **ViewBinding**：始终使用 binding 视图，不要用 `findViewById`
-- **Room KAPT**：必须使用 `kapt` 插件，并在 `android { kotlin { compilerOptions { javaParameters = true } } }` 中启用参数名。放到 `kapt { arguments { arg(...) } }` 里无效（Room 不读该选项），症状是 `kaptDebugKotlin` 报"Each bind variable in the query must have a matching method parameter"、`Unused parameters: arg0,arg1`
-- **Gradle 命令**：Windows 使用 `gradle`，不是 `./gradlew`
-- **包名前缀**：始终使用 `com.unicorn.player` 前缀
-- **包结构**：实际结构比文档中描述的大得多；检查 `app/src/main/java/com/unicorn/player/` 获取完整列表
-- **均衡器模块**：`equalizer` 模块作为库项目包含在 `app/build.gradle:141`
-
-## 测试
-
-未找到单元测试或仪器测试。
-最快验证：`gradle app:compileDebugKotlin`（包含类型检查）
+```bash
+gradle app:compileDebugKotlin          # 类型检查 + KAPT + KSP
+gradle app:assembleDebug               # 完整构建 + ProGuard + 签名
+```

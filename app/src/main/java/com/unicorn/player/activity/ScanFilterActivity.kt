@@ -1,7 +1,5 @@
 package com.unicorn.player.activity
 
-import com.unicorn.player.R
-import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.text.SpannableString
@@ -16,22 +14,17 @@ import androidx.cardview.widget.CardView
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.switchmaterial.SwitchMaterial
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ActivityScanFilterBinding
 import com.unicorn.player.playback.SongPlayableRegistry
+import com.unicorn.player.util.datastore.scanFiltersDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
-
-// ---------------------------------------------------------------------------
-// 进程级单例 DataStore 委托
-// 顶层属性保证全进程唯一实例，避免 IllegalStateException
-// ---------------------------------------------------------------------------
-internal val Context.scanFiltersDataStore by preferencesDataStore(name = "scan_filters")
 
 /**
  * 扫描过滤设置页面
@@ -306,7 +299,7 @@ class ScanFilterActivity : BaseActivity() {
             )
         }
 
-        items.forEachIndexed { index, item ->
+        items.forEachIndexed { _, item ->
             val itemView = createSettingItem(inflater, contentContainer, item)
             contentContainer.addView(itemView)
 
@@ -436,3 +429,6 @@ class ScanFilterActivity : BaseActivity() {
         SELECT
     }
 }
+
+
+

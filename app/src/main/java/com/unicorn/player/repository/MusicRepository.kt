@@ -14,9 +14,9 @@ import com.unicorn.player.model.Playlist
 import com.unicorn.player.model.PlaylistSong
 import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
-import com.unicorn.player.activity.scanFiltersDataStore
-import com.unicorn.player.util.cover.CoverStore
 import com.unicorn.player.util.PlaylistFileManager
+import com.unicorn.player.util.cover.CoverStore
+import com.unicorn.player.util.datastore.scanFiltersDataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
@@ -221,7 +221,7 @@ class MusicRepository(private val context: Context) {
             if (file.exists()) {
                 return true
             }
-        } else if (dirName.equals(album)) {
+        } else if (dirName == album) {
             return true
         }
         return false
@@ -417,7 +417,7 @@ class MusicRepository(private val context: Context) {
 
     private fun isFileSizeValid(path: String): Boolean {
         return try {
-            val file = java.io.File(path)
+            val file = File(path)
             if (file.exists()) {
                 val fileSizeInKB = file.length() / 1024
                 fileSizeInKB >= 1024

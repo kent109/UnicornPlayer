@@ -1,7 +1,9 @@
 package com.unicorn.player
 
 import android.app.Application
+import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.playback.SongPlayableRegistry
+import com.unicorn.player.util.datastore.themeDataStore
 import com.unicorn.player.util.sort.PinyinUtil
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -12,8 +14,6 @@ import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.unicorn.player.activity.ThemeSettingActivity
-import com.unicorn.player.activity.themeDataStore
 
 /**
  * 自定义Application类，实现全局异常捕获
@@ -120,7 +120,7 @@ class UnicornPlayerApplication : Application() {
                 throwable.printStackTrace(pw)
                 writer.write("异常类型: ${throwable.javaClass.name}\n")
                 writer.write("异常信息: ${throwable.message}\n\n")
-                writer.write("堆栈跟踪:\n${sw.toString()}\n")
+                writer.write("堆栈跟踪:\n$sw\n")
 
                 // 写入异常原因（如果有）
                 var cause = throwable.cause
@@ -132,7 +132,7 @@ class UnicornPlayerApplication : Application() {
                     cause.printStackTrace(causePw)
                     writer.write("异常类型: ${cause.javaClass.name}\n")
                     writer.write("异常信息: ${cause.message}\n\n")
-                    writer.write("堆栈跟踪:\n${causeSw.toString()}\n")
+                    writer.write("堆栈跟踪:\n$causeSw\n")
                     cause = cause.cause
                     causeIndex++
                 }
