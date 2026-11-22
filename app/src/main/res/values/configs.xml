@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="cloud_func_github_issue">https://cloud-func-proxy.netlify.app/.netlify/functions/githubIssue</string>
+    <string name="lrclib_search">https://lrclib.net/api/search?q=</string>
+    <string name="version_json">https://raw.giteeusercontent.com/kent0/UnicornPlayer/raw/master/version.json</string>
 </resources>

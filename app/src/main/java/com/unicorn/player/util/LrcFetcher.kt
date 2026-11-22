@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
+import com.unicorn.player.R
+import com.unicorn.player.UnicornPlayerApplication
 import com.unicorn.player.model.LrcSearchResult
 import okhttp3.Call
 import okhttp3.Callback
@@ -29,7 +31,10 @@ object LrcFetcher {
 
     private const val TAG = "LrcFetcher"
 
-    private const val SEARCH_URL = "https://lrclib.net/api/search?q="
+    private val SEARCH_URL: String
+        get() = UnicornPlayerApplication.getInstance()
+            ?.getString(R.string.lrclib_search)
+            ?: throw IllegalStateException("Application context not available")
 
     // 复用的 OkHttp 客户端
     private val client = OkHttpClient()

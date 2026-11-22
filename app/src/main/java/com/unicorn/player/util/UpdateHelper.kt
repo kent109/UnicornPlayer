@@ -19,6 +19,7 @@ import androidx.core.net.toUri
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.unicorn.player.R
+import com.unicorn.player.UnicornPlayerApplication
 import com.unicorn.player.ui.PanelDialog
 import okhttp3.Call
 import okhttp3.Callback
@@ -71,8 +72,10 @@ class UpdateHelper(private val activity: AppCompatActivity) {
     companion object {
         private const val TAG = "UpdateHelper"
 
-        private const val VERSION_URL =
-            "https://raw.giteeusercontent.com/kent0/UnicornPlayer/raw/master/version.json"
+        private val VERSION_URL: String
+            get() = UnicornPlayerApplication.getInstance()
+                ?.getString(R.string.version_json)
+                ?: throw IllegalStateException("Application context not available")
 
         private const val PREFS_NAME = "update_prefs"
         private const val KEY_DOWNLOADED_VERSION_CODE = "downloaded_version_code"
