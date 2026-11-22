@@ -2,6 +2,8 @@ package com.unicorn.player.util
 
 import android.os.Handler
 import android.os.Looper
+import com.unicorn.player.R
+import com.unicorn.player.UnicornPlayerApplication
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -14,16 +16,15 @@ import java.io.IOException
 
 object FeedbackHelper {
 
-    // 替换成你的云函数 API 网关地址
-    private const val CLOUD_FUNCTION_URL =
-        "http://1463054956-k96eag7gid.ap-guangzhou.tencentscf.com"
-
-    // 与云函数环境变量 APP_SECRET 保持一致
-    private const val SECRET = "sk202608aabbcc"
-
     private val client = OkHttpClient()
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    private fun getCloudFunctionUrl(): String {
+        val context = UnicornPlayerApplication.getInstance()
+        return context?.getString(R.string.cloud_func_github_issue)
+            ?: throw IllegalStateException("Application context not available")
+    }
 
     fun submitFeedback(
         title: String,
@@ -39,7 +40,6 @@ object FeedbackHelper {
             put("content", content)
             put("contact", contact)
             put("deviceInfo", deviceInfo)
-            put("secret", SECRET)
             if (!assignee.isNullOrEmpty()) {
                 put("assignee", assignee)
             }
@@ -47,7 +47,7 @@ object FeedbackHelper {
 
         val requestBody = json.toString().toRequestBody(JSON_MEDIA_TYPE)
         val request = Request.Builder()
-            .url(CLOUD_FUNCTION_URL)
+            .url(getCloudFunctionUrl())
             .post(requestBody)
             .build()
 
