@@ -10,9 +10,9 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.R
-import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemPlaylistBinding
-import com.unicorn.player.util.CoverImage
+import com.unicorn.player.util.cover.CoverImage
 import com.unicorn.player.viewmodel.PlaylistViewModel
 
 /**

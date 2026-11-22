@@ -1,5 +1,6 @@
 package com.unicorn.player.service
 
+import com.unicorn.player.util.sort.CustomSortStore
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -59,19 +60,18 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.bullhead.equalizer.AudioEffectManager
 import com.bullhead.equalizer.EqualizerModel
 import com.bullhead.equalizer.Settings
-import com.unicorn.player.MainActivity
+import com.unicorn.player.activity.MainActivity
 import com.unicorn.player.R
-import com.unicorn.player.ScanFilterActivity
+import com.unicorn.player.activity.ScanFilterActivity
 import com.unicorn.player.database.MusicDatabase
 import com.unicorn.player.equalizer.TenBandEqualizerProcessor
 import com.unicorn.player.manager.MusicManager
 import com.unicorn.player.model.Cover
 import com.unicorn.player.model.Song
 import com.unicorn.player.playback.SongPlayableRegistry
-import com.unicorn.player.scanFiltersDataStore
-import com.unicorn.player.util.CustomSortStore
+import com.unicorn.player.activity.scanFiltersDataStore
 import com.unicorn.player.util.LogWriter
-import com.unicorn.player.util.PinyinUtil
+import com.unicorn.player.util.sort.PinyinUtil
 import io.github.eugenedibtsev.media3.ape.ApeSupport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

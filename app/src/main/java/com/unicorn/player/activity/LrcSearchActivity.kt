@@ -1,0 +1,356 @@
+package com.unicorn.player.activity
+
+import com.unicorn.player.util.sort.toSimpleCustom
+import com.unicorn.player.util.lyrics.LyricsSaveManager
+import com.unicorn.player.R
+import android.content.res.ColorStateList
+import android.os.Bundle
+import android.util.Log
+import android.util.TypedValue
+import android.view.View
+import android.view.inputmethod.InputMethodManager
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.unicorn.player.adapter.LrcSearchResultAdapter
+import com.unicorn.player.databinding.ActivityLrcSearchBinding
+import com.unicorn.player.model.LrcSearchResult
+import com.unicorn.player.util.lyrics.LrcFetcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import com.unicorn.player.ui.LrcPreviewDialog
+
+
+/**
+ * 歌词搜索界面
+ * 允许用户手动输入歌手/歌名搜索 lrclib.net 并选择下载歌词
+ */
+class LrcSearchActivity : BaseActivity(),
+    LrcSearchResultAdapter.OnResultClickListener,
+    LrcSearchResultAdapter.OnResultLongClickListener {
+
+    private lateinit var binding: ActivityLrcSearchBinding
+    private lateinit var adapter: LrcSearchResultAdapter
+
+    /** 当前播放歌曲的音频文件路径，用于确定 .lrc 保存位置 */
+    private var audioPath: String = ""
+
+    // ===== SAF 歌词保存 =====
+    // 待保存的歌词内容（授权完成后写入）
+    private var pendingSaveContent: String? = null
+
+    // 待保存的文件名
+    private var pendingSaveFileName: String? = null
+
+    // SAF 目录选择器启动器：用户授权后持久化树 URI → 确认/创建保存目录 → 执行保存
+    private val openDocumentTreeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+            if (treeUri != null) {
+                LyricsSaveManager.saveTreeUri(this, treeUri)
+                // 授权完成，先确认 Download/Unicorn/Lyrics 目录存在（不存在则创建）
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val dirReady = LyricsSaveManager.ensureSaveDirExists(this@LrcSearchActivity)
+                    withContext(Dispatchers.Main) {
+                        if (dirReady) {
+                            executePendingSave()
+                        } else {
+                            pendingSaveContent = null
+                            pendingSaveFileName = null
+                            Toast.makeText(
+                                this@LrcSearchActivity,
+                                "保存目录创建失败",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+            } else {
+                // 用户取消选择，清理待保存数据
+                pendingSaveContent = null
+                pendingSaveFileName = null
+            }
+        }
+
+    companion object {
+        const val TAG = "LrcSearchActivity"
+        const val EXTRA_ARTIST = "extra_artist"
+        const val EXTRA_TITLE = "extra_title"
+        const val EXTRA_AUDIO_PATH = "extra_audio_path"
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityLrcSearchBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        // 获取传入参数
+        val artist = intent.getStringExtra(EXTRA_ARTIST) ?: ""
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: ""
+        audioPath = intent.getStringExtra(EXTRA_AUDIO_PATH) ?: ""
+
+        // 初始化 TitleBar 返回按钮
+        binding.titleBar.findViewById<View>(R.id.ivBack).setOnClickListener { finish() }
+        binding.titleBar.findViewById<android.widget.TextView>(R.id.tvTitle).text = "搜索歌词"
+
+        // 预填输入框
+        binding.etArtist.setText(artist)
+        binding.etTitle.setText(title)
+
+        // 初始化 RecyclerView
+        adapter = LrcSearchResultAdapter(this, this)
+        binding.rvResults.layoutManager = LinearLayoutManager(this)
+        binding.rvResults.adapter = adapter
+
+        // 搜索按钮点击
+        binding.btnSearch.setOnClickListener { startSearch() }
+
+        // 配置 SmartRefreshLayout 的 overscroll 效果
+        binding.smartRefreshLayout.apply {
+            setEnableOverScrollBounce(true)   // 回弹效果
+            setEnableOverScrollDrag(true)    // 拖拽越界效果
+            setEnableRefresh(false)          // 禁用下拉刷新（保持纯 overscroll 体验）
+        }
+    }
+
+    /**
+     * 开始搜索
+     */
+    private fun startSearch() {
+        val artist = binding.etArtist.text?.toString()?.trim() ?: ""
+        val title = binding.etTitle.text?.toString()?.trim() ?: ""
+
+        when {
+            artist.isBlank() && title.isBlank() -> {
+                Toast.makeText(this, "请填写歌手和歌名", Toast.LENGTH_SHORT).show()
+                return
+            }
+        }
+
+        // 隐藏输入法
+        hideKeyboard()
+
+        // 禁用输入框和搜索按钮，按钮文字改为"正在搜索"
+        setSearchingState(true)
+
+        // 显示 loading，清空旧结果
+        binding.progressBar.visibility = View.VISIBLE
+        adapter.selectedId = null
+        adapter.submitList(emptyList())
+
+        LrcFetcher.searchLyrics(artist, title, object : LrcFetcher.LrcSearchCallback {
+            override fun onSearchResults(results: List<LrcSearchResult>) {
+                runOnUiThread {
+                    binding.progressBar.visibility = View.GONE
+                    setSearchingState(false)
+                    if (results.isEmpty()) {
+                        Toast.makeText(this@LrcSearchActivity, "未搜索到歌词", Toast.LENGTH_SHORT)
+                            .show()
+                    } else {
+                        adapter.submitList(results)
+                        Log.i(TAG, "搜索到 ${results.size} 条歌词")
+                    }
+                }
+            }
+
+            override fun onSearchFailure(message: String) {
+                runOnUiThread {
+                    binding.progressBar.visibility = View.GONE
+                    setSearchingState(false)
+                    Toast.makeText(this@LrcSearchActivity, "搜索失败: $message", Toast.LENGTH_SHORT)
+                        .show()
+                    Log.e(TAG, "搜索失败: $message")
+                }
+            }
+        })
+    }
+
+    /** 当前显示的歌词预览对话框 */
+    private var previewDialog: LrcPreviewDialog? = null
+
+    /**
+     * 搜索结果点击 -  弹出"使用歌词"确认对话框
+     */
+    override fun onResultClick(result: LrcSearchResult) {
+        val secondaryColor = this.getColor(R.color.secondary)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("使用歌词")
+            .setMessage("确定要使用「${result.trackName} - ${result.artistName}」的歌词吗？")
+            .setPositiveButton("确定") { _, _ ->
+                saveSelectedLyrics(result)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+        dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE).setTextColor(secondaryColor)
+    }
+
+    /**
+     * 更新搜索结果项的歌词内容，并标记为已修改（右侧显示已修改图标）
+     */
+    private fun updateResultContent(result: LrcSearchResult, newContent: String) {
+        val currentList = adapter.currentList.toMutableList()
+        val index = currentList.indexOfFirst { it.id == result.id }
+        if (index >= 0) {
+            currentList[index] = result.copy(syncedLyrics = newContent, isModified = true)
+            adapter.submitList(currentList)
+            Log.i(TAG, "已更新第 ${index + 1} 条搜索结果歌词内容（已标记修改）")
+        }
+    }
+
+    /**
+     * 搜索结果长按 - 弹出歌词预览对话框（从 item 位置弹出，可滑动关闭，支持编辑）
+     */
+    override fun onResultLongClick(result: LrcSearchResult) {
+        // 获取列表在屏幕上的中心位置作为动画起点
+        val location = IntArray(2)
+        binding.rvResults.getLocationOnScreen(location)
+        val centerX = location[0] + binding.rvResults.width / 2f
+        val centerY = location[1] + binding.rvResults.height / 2f
+
+        previewDialog = LrcPreviewDialog(
+            this,
+            result.syncedLyrics,
+            centerX,
+            centerY,
+            startInEditMode = true,
+            onContentUpdated = { updatedContent ->
+                // 更新列表 item 的 syncedLyrics
+                updateResultContent(result, updatedContent)
+            },
+            showSaveButton = false
+        ).also { it.show() }
+    }
+
+    /**
+     * 保存选中的歌词到 Download/Unicorn/Lyrics/（SAF）
+     * 无 SAF 权限时引导用户授权，授权完成后自动继续保存
+     */
+    private fun saveSelectedLyrics(result: LrcSearchResult) {
+        // 歌词文件名与歌曲文件名保持一致（不做繁简转换），内容仍会转简体
+        val baseName = File(audioPath).nameWithoutExtension
+        val lrcFileName = "$baseName.lrc"
+
+        // 首行插入 "[00:00.00]Artist - Title"
+        val artist = result.artistName.ifBlank {
+            baseName.substringBefore(" - ").trim()
+        }
+        val title = result.trackName.ifBlank {
+            baseName.substringAfter(" - ", baseName).trim()
+        }
+        // 清理 <数字:数字.数字> 标签
+        val cleanedLyrics = LrcFetcher.cleanTimestampTags(result.syncedLyrics)
+
+        val header = "[00:00.00]$artist - $title"
+        val lrcContent = header + "\r\n" + cleanedLyrics
+
+        // 转为简体中文（CRLF 换行）
+        val simplifiedContent = lrcContent.toSimpleCustom()
+
+        // 检查 SAF 权限：有则直接保存，无则缓存数据并引导授权
+        if (LyricsSaveManager.hasSavedTreeUri(this) &&
+            LyricsSaveManager.isTreePermissionValid(this)
+        ) {
+            performSave(lrcFileName, simplifiedContent)
+        } else {
+            pendingSaveContent = simplifiedContent
+            pendingSaveFileName = lrcFileName
+            Toast.makeText(this, "请选择 Download 目录以授权保存", Toast.LENGTH_LONG).show()
+            openDocumentTreeLauncher.launch(LyricsSaveManager.getInitialUri(this))
+        }
+    }
+
+    /**
+     * 执行实际的保存写入操作（SAF Download/Unicorn/Lyrics/）
+     */
+    private fun performSave(fileName: String, content: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val dirReady = LyricsSaveManager.ensureSaveDirExists(this@LrcSearchActivity)
+            if (!dirReady) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@LrcSearchActivity, "保存目录创建失败", Toast.LENGTH_SHORT)
+                        .show()
+                }
+                return@launch
+            }
+            val success = LyricsSaveManager.writeLrcFile(this@LrcSearchActivity, fileName, content)
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    Toast.makeText(this@LrcSearchActivity, "歌词已保存", Toast.LENGTH_SHORT).show()
+                    finish()
+                } else {
+                    Toast.makeText(this@LrcSearchActivity, "保存失败", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /**
+     * 用户授权 SAF 目录后，执行之前缓存的待保存写入
+     */
+    private fun executePendingSave() {
+        val content = pendingSaveContent ?: return
+        val fileName = pendingSaveFileName ?: return
+        pendingSaveContent = null
+        pendingSaveFileName = null
+        performSave(fileName, content)
+    }
+
+    /**
+     * 设置搜索进行中的 UI 状态
+     * @param searching true=禁用输入/按钮并显示"正在搜索"，false=恢复可用
+     */
+    private fun setSearchingState(searching: Boolean) {
+        binding.etArtist.isEnabled = !searching
+        binding.etTitle.isEnabled = !searching
+        binding.btnSearch.isEnabled = !searching
+        binding.btnSearch.text = if (searching) "正在搜索" else "搜索"
+        // 搜索中使用禁用色
+        val typedValue = TypedValue()
+        theme.resolveAttribute(
+            com.google.android.material.R.attr.colorPrimary, typedValue, true
+        )
+        val color = if (typedValue.resourceId != 0) {
+            ContextCompat.getColor(this, typedValue.resourceId)
+        } else {
+            typedValue.data
+        }
+        val dimmed = if (searching) (color and 0x00FFFFFF) or (0xCC shl 24) else color
+        binding.btnSearch.backgroundTintList = ColorStateList.valueOf(dimmed)
+
+        // 文字跟随底色做半透明"变灰"，仍保持 onPrimary 色相，不用 Material 的禁用态色
+        val onPrimaryValue = TypedValue()
+        theme.resolveAttribute(
+            com.google.android.material.R.attr.colorOnPrimary, onPrimaryValue, true
+        )
+        val onPrimary = if (onPrimaryValue.resourceId != 0) {
+            ContextCompat.getColor(this, onPrimaryValue.resourceId)
+        } else {
+            onPrimaryValue.data
+        }
+        val textAlpha = if (searching) 0x99 shl 24 else 0xFF shl 24
+        binding.btnSearch.setTextColor((onPrimary and 0x00FFFFFF) or textAlpha)
+    }
+
+    /**
+     * 隐藏软键盘
+     */
+    private fun hideKeyboard() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
+        val view = currentFocus ?: binding.root
+        imm?.hideSoftInputFromWindow(view.windowToken, 0)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // 取消所有进行中的网络请求
+        LrcFetcher.cancelAll()
+    }
+}
+
+
+
+

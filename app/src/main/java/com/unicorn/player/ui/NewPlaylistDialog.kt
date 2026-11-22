@@ -7,9 +7,9 @@ import android.view.View
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.unicorn.player.R
-import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.databinding.DialogNewPlaylistBinding
-import com.unicorn.player.util.CoverImage
+import com.unicorn.player.util.cover.CoverImage
 import com.unicorn.player.util.ScreenCornerUtil
 
 /**

@@ -10,7 +10,7 @@ import androidx.datastore.preferences.core.edit
 import com.bullhead.equalizer.Settings
 import com.bullhead.equalizer.TenBandEqBridge
 import com.unicorn.player.R
-import com.unicorn.player.ShortcutBridgeActivity
+import com.unicorn.player.activity.ShortcutBridgeActivity
 import com.unicorn.player.service.DataStoreKeys
 import com.unicorn.player.service.MusicService
 import com.unicorn.player.service.applicationDataStore

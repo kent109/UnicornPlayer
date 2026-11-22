@@ -35,7 +35,7 @@
         <profileable android:shell="true" />
 
         <activity
-            android:name=".MainActivity"
+            android:name=".activity.MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
@@ -47,7 +47,7 @@
         </activity>
 
         <activity
-            android:name=".PlayerActivity"
+            android:name=".activity.PlayerActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
@@ -62,35 +62,35 @@
         </activity>
 
         <activity
-            android:name=".SettingsActivity"
+            android:name=".activity.SettingsActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".EqualizerActivity"
+            android:name=".activity.EqualizerActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".AboutActivity"
+            android:name=".activity.AboutActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".ManualActivity"
+            android:name=".activity.ManualActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".FeedbackActivity"
+            android:name=".activity.FeedbackActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize"
@@ -98,84 +98,84 @@
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".LyricsOptionsActivity"
+            android:name=".activity.LyricsOptionsActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".ThemeSettingActivity"
+            android:name=".activity.ThemeSettingActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".ThemeColorActivity"
+            android:name=".activity.ThemeColorActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".HighlightColorActivity"
+            android:name=".activity.HighlightColorActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".IconSettingActivity"
+            android:name=".activity.IconSettingActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".ScanFilterActivity"
+            android:name=".activity.ScanFilterActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".DirectoryPickerActivity"
+            android:name=".activity.DirectoryPickerActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".GenreSelectActivity"
+            android:name=".activity.GenreSelectActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".LrcSearchActivity"
+            android:name=".activity.LrcSearchActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".ArtistSongsActivity"
+            android:name=".activity.ArtistSongsActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".AlbumSongsActivity"
+            android:name=".activity.AlbumSongsActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".PlaylistSongsActivity"
+            android:name=".activity.PlaylistSongsActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
@@ -195,7 +195,7 @@
         </service>
 
         <activity
-            android:name=".ShortcutBridgeActivity"
+            android:name=".activity.ShortcutBridgeActivity"
             android:exported="true"
             android:excludeFromRecents="true"
             android:screenOrientation="portrait"

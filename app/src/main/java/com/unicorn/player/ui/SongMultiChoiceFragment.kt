@@ -7,9 +7,9 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.unicorn.player.BaseActivity
+import com.unicorn.player.activity.BaseActivity
 import com.unicorn.player.R
-import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.databinding.SongFragmentMultiChoiceBinding
 import com.unicorn.player.model.Song
 

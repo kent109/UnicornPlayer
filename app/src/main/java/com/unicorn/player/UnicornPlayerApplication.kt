@@ -2,7 +2,7 @@ package com.unicorn.player
 
 import android.app.Application
 import com.unicorn.player.playback.SongPlayableRegistry
-import com.unicorn.player.util.PinyinUtil
+import com.unicorn.player.util.sort.PinyinUtil
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -12,6 +12,8 @@ import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.unicorn.player.activity.ThemeSettingActivity
+import com.unicorn.player.activity.themeDataStore
 
 /**
  * 自定义Application类，实现全局异常捕获
@@ -144,3 +146,4 @@ class UnicornPlayerApplication : Application() {
         }
     }
 }
+

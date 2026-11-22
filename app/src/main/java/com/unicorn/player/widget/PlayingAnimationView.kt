@@ -7,7 +7,7 @@ import android.util.AttributeSet
 import android.view.View
 import androidx.annotation.ColorInt
 import com.unicorn.player.R
-import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.activity.ThemeSettingActivity
 import kotlin.math.sin
 
 class PlayingAnimationView @JvmOverloads constructor(

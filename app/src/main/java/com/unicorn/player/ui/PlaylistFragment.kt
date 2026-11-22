@@ -1,5 +1,6 @@
 package com.unicorn.player.ui
 
+import com.unicorn.player.util.sort.CustomSortStore
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -18,8 +19,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.unicorn.player.MainActivity
-import com.unicorn.player.PlaylistSongsActivity
+import com.unicorn.player.activity.MainActivity
+import com.unicorn.player.activity.PlaylistSongsActivity
 import com.unicorn.player.R
 import com.unicorn.player.adapter.HeaderSpacerAdapter
 import com.unicorn.player.adapter.PlaylistAdapter
@@ -28,9 +29,8 @@ import com.unicorn.player.databinding.DialogPlaylistImportBinding
 import com.unicorn.player.databinding.FragmentPlaylistBinding
 import com.unicorn.player.model.Cover
 import com.unicorn.player.repository.MusicRepository
-import com.unicorn.player.util.CoverStore
-import com.unicorn.player.util.CustomSortStore
-import com.unicorn.player.util.ImagePicker
+import com.unicorn.player.util.cover.CoverStore
+import com.unicorn.player.util.cover.ImagePicker
 import com.unicorn.player.util.PlayHelper
 import com.unicorn.player.util.PlaylistFileManager
 import com.unicorn.player.viewmodel.PlaylistViewModel
@@ -740,3 +740,5 @@ class PlaylistFragment : Fragment(), PlaylistAdapter.OnPlaylistClickListener {
         )
     }
 }
+
+

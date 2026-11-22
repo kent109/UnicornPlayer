@@ -12,11 +12,11 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemSongBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.playback.SongPlayableRegistry
-import com.unicorn.player.util.KyrieDrawable
+import com.unicorn.player.util.cover.KyrieDrawable
 
 class SongAdapter(
     private val listener: OnSongClickListener,

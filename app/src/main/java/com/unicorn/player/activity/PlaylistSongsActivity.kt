@@ -1,0 +1,418 @@
+package com.unicorn.player.activity
+
+import com.unicorn.player.util.sort.CustomSortStore
+import com.unicorn.player.R
+import android.content.Context
+import android.content.Intent
+import android.content.IntentSender
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.View
+import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProvider
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.unicorn.player.adapter.SongAdapter
+import com.unicorn.player.adapter.SongAdapter.OnSongClickListener
+import com.unicorn.player.adapter.SongAdapter.OnSongMoreClickListener
+import com.unicorn.player.databinding.ActivityPlaylistSongsBinding
+import com.unicorn.player.manager.MusicManager
+import com.unicorn.player.model.Song
+import com.unicorn.player.repository.MusicRepository
+import com.unicorn.player.service.MusicService
+import com.unicorn.player.service.PlaySource
+import com.unicorn.player.ui.SelectSongsDialog
+import com.unicorn.player.ui.SongMultiChoiceFragment
+import com.unicorn.player.util.AudioTagEditor
+import com.unicorn.player.util.ScrollToTopHelper
+import com.unicorn.player.util.SongDragReorderHelper
+import com.unicorn.player.viewmodel.MusicViewModel
+import com.unicorn.player.viewmodel.MusicViewModelFactory
+import com.unicorn.player.viewmodel.PlaylistViewModel
+import com.unicorn.player.viewmodel.PlaylistViewModelFactory
+import com.unicorn.player.ui.player.BottomPlayerController
+import com.unicorn.player.util.SongInfoHelper
+
+/**
+ * 歌单歌曲列表 Activity
+ *
+ * 展示某个歌单的全部歌曲，复用 item_song.xml 布局（SongAdapter）；
+ * 底部「添加」按钮 → 弹出全量歌曲选择框（SelectSongsDialog），
+ * 确定后合并添加（REPLACE 去重）。
+ */
+class PlaylistSongsActivity : SongMultiChoiceBaseActivity(), OnSongClickListener, OnSongMoreClickListener,
+    MusicManager.ConnectionCallback {
+
+    private lateinit var binding: ActivityPlaylistSongsBinding
+    private lateinit var songAdapter: SongAdapter
+    private lateinit var songInfoHelper: SongInfoHelper
+    private lateinit var dragHelper: SongDragReorderHelper
+
+    private val writePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            songInfoHelper.retryPendingWrite()
+        }
+    }
+
+    private var playlistName: String = ""
+
+    // 当前歌单的歌曲列表（排序后），用于播放时设置给 MusicService
+    private var playlistSongs: List<Song> = emptyList()
+
+    // 服务观察者
+    private var currentSongObserver: Observer<Song?>? = null
+    private var isPlayingObserver: Observer<Boolean>? = null
+    private var currentPositionObserver: Observer<Int>? = null
+
+    companion object {
+        const val TAG = "PlaylistSongsActivity"
+        const val EXTRA_PLAYLIST_ID = "extra_playlist_id"
+        const val EXTRA_PLAYLIST_NAME = "extra_playlist_name"
+
+        fun newIntent(context: Context, playlistId: Long, playlistName: String): Intent {
+            return Intent(context, PlaylistSongsActivity::class.java).apply {
+                putExtra(EXTRA_PLAYLIST_ID, playlistId)
+                putExtra(EXTRA_PLAYLIST_NAME, playlistName)
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityPlaylistSongsBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        playlistId = intent.getLongExtra(EXTRA_PLAYLIST_ID, -1L)
+        playlistName = intent.getStringExtra(EXTRA_PLAYLIST_NAME) ?: ""
+
+        songInfoHelper = SongInfoHelper(this)
+        songInfoHelper.onDeleteListener = object : SongInfoHelper.OnDeleteListener {
+            override fun onDelete(song: Song) {
+                // 从当前歌单移除该歌曲；ViewModel reload 后列表自动刷新
+                viewModel.removeSongFromPlaylist(playlistId, song.id)
+                setResult(RESULT_OK)
+            }
+        }
+        setupWritePermissionCallback()
+
+        // 设置 TitleBar
+        binding.titleBar.setTitle(playlistName)
+        binding.titleBar.setOnBackClickListener { finish() }
+        multiChoiceView = LayoutInflater.from(this).inflate(R.layout.multi_choice_view, null)
+        binding.titleBar.addViewToRight(multiChoiceView!!)
+
+        setupViewModel()
+        setupRecyclerView()
+        setupSmartRefreshLayout()
+        setupBottomPlayer()
+        setupAddButton()
+        setupBackPressHandler()
+        handleRecreate(savedInstanceState)
+
+        bindMusicService()
+    }
+
+    /**
+     * 写入权限请求回调
+     */
+    private fun setupWritePermissionCallback() {
+        songInfoHelper.writePermissionCallback = object : AudioTagEditor.WritePermissionCallback {
+            override fun onRequestWritePermission(intentSender: IntentSender, requestCode: Int) {
+                writePermissionLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+            }
+        }
+    }
+
+    private fun setupAddButton() {
+        binding.btAddSongs.setOnClickListener { view ->
+            // 无歌曲数据时提示用户，不弹出选择框
+            if (viewModel.getSortedFullSongs().isEmpty()) {
+                Toast.makeText(this@PlaylistSongsActivity, "暂无歌曲可添加", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            // 以「添加」按钮中心作为弹窗动画起点（参考 PlayerActivity 中 LrcPreviewDialog 触发坐标计算方式）
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+            val centerX = location[0] + view.width / 2f
+            val centerY = location[1] + view.height / 2f
+            showSelectSongsDialog(centerX, centerY)
+        }
+    }
+
+    /**
+     * 弹出添加歌曲弹窗；外部传入已收集的全量歌曲与歌单内已有 songId（预勾选）
+     *
+     * @param triggerX 弹窗动画起点 X（屏幕坐标）
+     * @param triggerY 弹窗动画起点 Y（屏幕坐标）
+     */
+    private fun showSelectSongsDialog(triggerX: Float, triggerY: Float) {
+        // 收集全量歌曲与歌单内已有 songId（同步方式通过已缓存的 list）
+        val allSongs = viewModel.getSortedFullSongs()
+        val alreadySelectedIds = playlistSongs.map { it.id }
+        SelectSongsDialog(
+            context = this,
+            triggerX = triggerX,
+            triggerY = triggerY,
+            playlistId = playlistId,
+            playlistName = playlistName,
+            allSongs = allSongs,
+            alreadySelectedIds = alreadySelectedIds,
+            onConfirm = { newName, chosenIds ->
+                // 改名回调
+                if (newName != playlistName) {
+                    playlistName = newName
+                    binding.titleBar.setTitle(playlistName)
+                    viewModel.renamePlaylistName(playlistId, newName)
+                }
+                // 合并添加（REPLACE 去重）：用 id 反查 Song 对象
+                val idToSong = allSongs.associateBy { it.id }
+                val toAdd = chosenIds.mapNotNull { idToSong[it] }
+                viewModel.addSongsToPlaylist(playlistId, toAdd)
+                // 通知父 Fragment 歌曲列表有改动，返回后主动刷新歌曲数量/更新时间
+                setResult(RESULT_OK)
+            }
+        ).show()
+    }
+
+    /**
+     * 初始化底部播放栏控制器
+     */
+    private fun setupBottomPlayer() {
+        bottomPlayerController = BottomPlayerController(
+            this,
+            binding.bottomPlayer
+        ) { musicService }
+        bottomPlayerController.setupClickListeners()
+
+        // 多选按钮点击事件
+        multiChoiceView!!.setOnClickListener {
+            showSongMultiChoiceFragment(SongMultiChoiceFragment.FT_PLAYLIST, playlistSongs)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 回本页时重算一次顺序：排序方式或自定义排序开关可能在别处改过，
+        // 而 playlistSongs 的值没变，观察者不会再投递
+        viewModel.syncSortModeFromPrefs()
+        viewModel.playlistSongs.value?.let { submitPlaylistSongs(it) }
+        observeMusicService()
+        val newCassetteMode = ThemeSettingActivity.resolveIconMode(this) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
+        if (songAdapter.isCassetteMode != newCassetteMode) {
+            songAdapter.isCassetteMode = newCassetteMode
+            songAdapter.notifyDataSetChanged()
+        }
+        musicService?.let { service ->
+            songAdapter.isPlaying = service.isPlaying.value == true
+            songAdapter.currentPlayingSong = service.currentSong.value
+            songAdapter.isPaused = false
+            songAdapter.resumeCurrentSongAnimation()
+            service.currentPosition.value?.let { position ->
+                songAdapter.updateCassetteAnimationProgress(position.toLong())
+            }
+            bottomPlayerController.updateUI(service)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        musicService?.savePlaybackState()
+        songAdapter.isPaused = true
+        songAdapter.pauseCurrentSongAnimation()
+        removeMusicServiceObservers()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        dragHelper.release()
+        songAdapter.stopCurrentSongAnimation()
+        bottomPlayerController.removeObservers()
+        // 注销服务连接回调并解绑
+        MusicManager.unregisterConnectionCallback(this)
+        MusicManager.unbind(this)
+    }
+
+    private fun setupViewModel() {
+        val repository = MusicRepository(this)
+        val factory = MusicViewModelFactory(repository, this)
+        viewModel = ViewModelProvider(this, factory)[MusicViewModel::class.java]
+
+        val playlistFactory = PlaylistViewModelFactory(repository, this.application)
+        playlistViewModel =
+            ViewModelProvider(this, playlistFactory)[PlaylistViewModel::class.java]
+
+        // 加载歌单歌曲
+        viewModel.loadPlaylistSongs(playlistId)
+
+        // 监听歌单歌曲列表变化
+        viewModel.playlistSongs.observe(this) { songs ->
+            submitPlaylistSongs(songs)
+        }
+
+        viewModel.isLoading.observe(this) { isLoading ->
+            binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+        }
+    }
+
+    private fun submitPlaylistSongs(songs: List<Song>) {
+        // 展示顺序跟随主界面 ivSort 所选排序模式；处于自定义排序时用本歌单的拖动顺序
+        val scope = CustomSortStore.playlistScope(playlistId)
+        val sorted = viewModel.sortWithCurrentMode(songs, scope)
+        playlistSongs = sorted
+        dragHelper.submit(sorted)
+        updateSongCount(sorted.size)
+
+        multiChoiceView?.visibility = if (playlistSongs.isEmpty()) View.GONE else View.VISIBLE
+
+        // 歌曲数量、排序等发生变化时，只有当前正在播放此歌单才同步播放列表
+        if (musicService != null) {
+            musicService?.syncPlaylistSongList(playlistId, playlistSongs)
+        }
+    }
+
+    private fun updateSongCount(count: Int) {
+        binding.titleBar.setTitle("$playlistName ($count 首)")
+    }
+
+    private fun setupRecyclerView() {
+        songAdapter = SongAdapter(this, this)
+        songAdapter.observePlayableChanges(this)
+        songAdapter.isCassetteMode = ThemeSettingActivity.resolveIconMode(this) == ThemeSettingActivity.SONG_ICON_MODE_CASSETTE
+        binding.recyclerView.apply {
+            layoutManager = LinearLayoutManager(this@PlaylistSongsActivity)
+            adapter = songAdapter
+            songAdapter.setRecyclerView(this)
+        }
+        dragHelper = SongDragReorderHelper(
+            recyclerView = binding.recyclerView,
+            adapter = songAdapter,
+            scopeProvider = { CustomSortStore.playlistScope(playlistId) },
+            canDrag = { viewModel.isCustomSortEnabled() && !isMultiChoiceActive() },
+            serviceProvider = { musicService },
+            onOrderChanged = { scope, songs ->
+                playlistSongs = songs
+                viewModel.saveCustomOrder(scope, songs.map { it.path })
+                // 播放队列由 helper 在当前来源匹配时统一同步，这里不再调 syncPlaylistSongList
+            }
+        ).apply { attach() }
+    }
+
+    private fun setupSmartRefreshLayout() {
+        binding.smartRefreshLayout.apply {
+            setEnableOverScrollBounce(true)
+            setEnableOverScrollDrag(true)
+            setEnableRefresh(false)
+        }
+    }
+
+    private fun bindMusicService() {
+        MusicManager.registerConnectionCallback(this)
+        val alreadyConnected = MusicManager.bind(this)
+        musicService = MusicManager.getService()
+        if (alreadyConnected && musicService != null) {
+            onServiceConnected(musicService)
+        }
+    }
+
+    // ==================== MusicManager.ConnectionCallback 实现 ====================
+
+    override fun onServiceConnected(service: MusicService?) {
+        if (isDestroyed || isFinishing) return
+        musicService = service ?: return
+        observeMusicService()
+    }
+
+    override fun onServiceDisconnected() {
+        musicService = null
+        removeMusicServiceObservers()
+    }
+
+    private fun observeMusicService() {
+        val service = musicService ?: return
+        removeMusicServiceObservers()
+
+        currentSongObserver = Observer { song ->
+            song?.let {
+                songAdapter.currentPlayingSong = it
+                songAdapter.currentPlaybackPositionMs = 0L
+                songAdapter.notifyDataSetChanged()
+            }
+        }
+        isPlayingObserver = Observer { isPlaying ->
+            songAdapter.isPlaying = isPlaying
+            if (isPlaying) {
+                songAdapter.resumeCurrentSongAnimation()
+            } else {
+                songAdapter.pauseCurrentSongAnimation()
+            }
+        }
+        currentPositionObserver = Observer { position ->
+            songAdapter.currentPlaybackPositionMs = position.toLong()
+        }
+        service.currentSong.observe(this, currentSongObserver!!)
+        service.isPlaying.observe(this, isPlayingObserver!!)
+        service.currentPosition.observe(this, currentPositionObserver!!)
+
+        bottomPlayerController.observe(service)
+    }
+
+    private fun removeMusicServiceObservers() {
+        bottomPlayerController.removeObservers()
+        val service = musicService
+        currentSongObserver?.let { service?.currentSong?.removeObserver(it) }
+        isPlayingObserver?.let { service?.isPlaying?.removeObserver(it) }
+        currentPositionObserver?.let { service?.currentPosition?.removeObserver(it) }
+        currentSongObserver = null
+        isPlayingObserver = null
+        currentPositionObserver = null
+    }
+
+    // ==================== OnSongClickListener ====================
+
+    override fun onSongClick(song: Song, position: Int) {
+        val index = playlistSongs.indexOfFirst { it.id == song.id }.takeIf { it != -1 } ?: position
+        musicService?.setSongList(playlistSongs, index)
+        // 歌单详情作为播放入口：来源为 f3$歌单ID
+        musicService?.setPlaySource(
+            PlaySource.build(PlaySource.PLAYLIST, playlistId.toString())
+        )
+        if (musicService?.currentSong?.value?.id == song.id) {
+            if (musicService?.isPlaying?.value != true) {
+                musicService?.requestAudioFocusAndPlay()
+                musicService?.updateNotification()
+            }
+        } else {
+            musicService?.requestAudioFocusAndPlayCurrentSong()
+            musicService?.updateNotification()
+        }
+    }
+
+    override fun onMoreClick(song: Song, position: Int) {
+        songInfoHelper.showSongInfoDialog(song)
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        if (ev?.action == MotionEvent.ACTION_UP) {
+            ScrollToTopHelper.scrollToTop(
+                binding.titleBar,
+                ev
+            ) { scrollToTop() }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun scrollToTop() {
+        val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
+        if (layoutManager != null && layoutManager.itemCount > 0) {
+            binding.recyclerView.smoothScrollToPosition(0)
+        }
+    }
+}
+
+
+

@@ -1,5 +1,6 @@
 package com.unicorn.player.viewmodel
 
+import com.unicorn.player.util.sort.CustomSortStore
 import android.content.Context
 import androidx.core.content.edit
 import androidx.datastore.preferences.core.edit
@@ -9,19 +10,18 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.unicorn.player.ScanFilterActivity
+import com.unicorn.player.activity.ScanFilterActivity
 import com.unicorn.player.model.Album
 import com.unicorn.player.model.ScanFilterConfig
 import com.unicorn.player.model.Song
 import com.unicorn.player.playback.SongPlayableRegistry
 import com.unicorn.player.repository.MusicRepository
-import com.unicorn.player.scanFiltersDataStore
+import com.unicorn.player.activity.scanFiltersDataStore
 import com.unicorn.player.service.DataStoreKeys
 import com.unicorn.player.service.PlaySource
 import com.unicorn.player.service.PlaySourceManager
 import com.unicorn.player.service.applicationDataStore
-import com.unicorn.player.util.CustomSortStore
-import com.unicorn.player.util.PinyinUtil
+import com.unicorn.player.util.sort.PinyinUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first

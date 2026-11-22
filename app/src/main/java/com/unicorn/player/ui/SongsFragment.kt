@@ -1,5 +1,6 @@
 package com.unicorn.player.ui
 
+import com.unicorn.player.util.sort.CustomSortStore
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -11,14 +12,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.unicorn.player.R
-import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.adapter.HeaderSpacerAdapter
 import com.unicorn.player.adapter.SongAdapter
 import com.unicorn.player.databinding.FragmentSongsBinding
 import com.unicorn.player.model.Song
 import com.unicorn.player.repository.MusicRepository
 import com.unicorn.player.service.MusicService
-import com.unicorn.player.util.CustomSortStore
 import com.unicorn.player.util.SongDragReorderHelper
 import com.unicorn.player.viewmodel.MusicViewModel
 import com.unicorn.player.viewmodel.MusicViewModelFactory
@@ -495,3 +495,5 @@ class SongsFragment : Fragment(), SongAdapter.OnSongClickListener,
         host?.onMoreClick(song, position)
     }
 }
+
+

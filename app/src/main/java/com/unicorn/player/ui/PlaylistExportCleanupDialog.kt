@@ -1,5 +1,6 @@
 package com.unicorn.player.ui
 
+import com.unicorn.player.R
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.View

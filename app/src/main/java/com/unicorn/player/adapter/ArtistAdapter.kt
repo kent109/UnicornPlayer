@@ -7,10 +7,10 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.R
-import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemArtistBinding
 import com.unicorn.player.model.Artist
-import com.unicorn.player.util.CoverImage
+import com.unicorn.player.util.cover.CoverImage
 
 class ArtistAdapter(
     private val listener: OnArtistClickListener

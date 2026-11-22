@@ -6,7 +6,7 @@ import android.view.View
 import android.view.Window
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.unicorn.player.R
-import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.databinding.DialogSongInfoBinding
 import com.unicorn.player.databinding.ItemSongInfoBinding
 import com.unicorn.player.model.Artist

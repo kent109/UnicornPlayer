@@ -5,11 +5,11 @@ import android.view.ViewGroup
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.unicorn.player.R
-import com.unicorn.player.ThemeSettingActivity
+import com.unicorn.player.activity.ThemeSettingActivity
 import com.unicorn.player.databinding.ItemAlbumBinding
 import com.unicorn.player.databinding.ItemAlbumHeaderBinding
 import com.unicorn.player.model.Album
-import com.unicorn.player.util.CoverImage
+import com.unicorn.player.util.cover.CoverImage
 
 /**
  * 专辑列表适配器，展示按首字母分组的专辑。
