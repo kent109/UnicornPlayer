@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.cardview.widget.CardView
 import com.unicorn.player.R
 import com.unicorn.player.databinding.ActivityPermissionListBinding
 import com.unicorn.player.util.PermissionInfo
@@ -38,10 +39,10 @@ class PermissionListActivity : BaseActivity() {
             gravity = Gravity.CENTER
             setTextColor(getColor(R.color.onSurfaceVariant))
             setPadding(
+                (4 * density).toInt(),
                 (8 * density).toInt(),
-                (8 * density).toInt(),
-                (8 * density).toInt(),
-                (8 * density).toInt()
+                (4 * density).toInt(),
+                (12 * density).toInt()
             )
         }
         container.addView(introText)
@@ -53,14 +54,16 @@ class PermissionListActivity : BaseActivity() {
         }
     }
 
-    private fun createPermissionCard(perm: PermissionInfo, density: Float): LinearLayout {
+    private fun createPermissionCard(perm: PermissionInfo, density: Float): CardView {
         val containerPadding = (12 * density).toInt()
-        val itemSpacing = (8 * density).toInt()
+        val itemSpacing = (0 * density).toInt()
 
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(containerPadding, containerPadding, containerPadding, containerPadding)
-            setBackgroundColor(getColor(R.color.settings_item_bg))
+        // 外层 CardView：圆角 + 阴影
+        val card = CardView(this).apply {
+            setCardBackgroundColor(getColor(R.color.settings_item_bg))
+            radius = 12 * density
+            cardElevation = 2 * density
+            useCompatPadding = true
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -69,6 +72,12 @@ class PermissionListActivity : BaseActivity() {
             }
         }
 
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(containerPadding, containerPadding, containerPadding, containerPadding)
+        }
+        card.addView(content)
+
         // 权限名称（完整 android.permission.XXX）
         val tvName = TextView(this).apply {
             text = perm.name
@@ -76,7 +85,7 @@ class PermissionListActivity : BaseActivity() {
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(getColor(R.color.primary))
         }
-        card.addView(tvName)
+        content.addView(tvName)
 
         // 分割线
         val dividerHeight = (0.5 * density).toInt()
@@ -90,7 +99,7 @@ class PermissionListActivity : BaseActivity() {
             }
             setBackgroundColor(getColor(R.color.divider_color))
         }
-        card.addView(divider)
+        content.addView(divider)
 
         // 权限说明
         val tvDesc = TextView(this).apply {
@@ -98,7 +107,7 @@ class PermissionListActivity : BaseActivity() {
             textSize = 14f
             setTextColor(getColor(R.color.onSurface))
         }
-        card.addView(tvDesc)
+        content.addView(tvDesc)
 
         // 使用场景标签
         val sceneLabel = TextView(this).apply {
@@ -110,7 +119,7 @@ class PermissionListActivity : BaseActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = (8 * density).toInt() }
         }
-        card.addView(sceneLabel)
+        content.addView(sceneLabel)
 
         // 场景内容
         val tvScene = TextView(this).apply {
@@ -118,7 +127,7 @@ class PermissionListActivity : BaseActivity() {
             textSize = 14f
             setTextColor(getColor(R.color.onSurface))
         }
-        card.addView(tvScene)
+        content.addView(tvScene)
 
         return card
     }

@@ -401,6 +401,8 @@
 
     <string name="perm_desc_read_media_audio">Allows the app to read audio files on your device for scanning and playing local music.</string>
     <string name="perm_scene_read_media_audio">Scanning local music library, playing audio files</string>
+    <string name="perm_desc_read_external_storage">Allows the app to read files in external storage for scanning music on older Android versions.</string>
+    <string name="perm_scene_read_external_storage">Scanning local music library, playing audio files on Android 12 and below</string>
 
     <string name="perm_desc_wake_lock">Allows the app to keep the device partially awake while playing music to avoid playback interruption.</string>
     <string name="perm_scene_wake_lock">Preventing system sleep during background playback</string>

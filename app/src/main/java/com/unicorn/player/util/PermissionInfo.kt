@@ -27,6 +27,11 @@ data class PermissionInfo(
                     scene = strings.getString(R.string.perm_scene_read_media_audio)
                 ),
                 PermissionInfo(
+                    name = "android.permission.READ_EXTERNAL_STORAGE",
+                    description = strings.getString(R.string.perm_desc_read_external_storage),
+                    scene = strings.getString(R.string.perm_scene_read_external_storage)
+                ),
+                PermissionInfo(
                     name = "android.permission.WAKE_LOCK",
                     description = strings.getString(R.string.perm_desc_wake_lock),
                     scene = strings.getString(R.string.perm_scene_wake_lock)

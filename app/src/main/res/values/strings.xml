@@ -447,7 +447,7 @@
     <!-- 权限说明页面 -->
     <string name="title_permission_list">权限说明</string>
     <string name="permission_scene_label">使用场景：</string>
-    <string name="permission_list_intro">轻籁申请的应用权限和使用说明</string>
+    <string name="permission_list_intro">轻籁申请的系统权限和使用说明</string>
 
     <!-- 权限说明：权限描述 + 使用场景 -->
     <string name="perm_desc_internet">允许应用访问网络，用于检查应用更新、同步相关数据。</string>
@@ -455,6 +455,8 @@
 
     <string name="perm_desc_read_media_audio">允许应用读取设备上的音频文件，用于扫描和播放本地音乐。</string>
     <string name="perm_scene_read_media_audio">扫描本地音乐库、播放音频文件</string>
+    <string name="perm_desc_read_external_storage">允许应用读取外部存储中的文件，用于在旧版安卓系统上扫描音乐。</string>
+    <string name="perm_scene_read_external_storage">Android 12 及以下版本扫描本地音乐库、播放音频文件</string>
 
     <string name="perm_desc_wake_lock">允许应用在播放音乐时保持设备部分唤醒，避免播放中断。</string>
     <string name="perm_scene_wake_lock">后台播放时防止系统休眠</string>
