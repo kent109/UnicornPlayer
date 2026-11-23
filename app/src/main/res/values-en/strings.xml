@@ -351,6 +351,8 @@
 
     <string name="compile_done">OK</string>
     <string name="genre_unknown">Unknown genre</string>
+    <string name="load_about_failed">Failed to load about content: %1$s</string>
+    <string name="load_manual_failed">Failed to load manual: %1$s</string>
 
     <string name="info_add_to_playlist">Add to playlist</string>
     <string name="info_share_local_file">Share file</string>

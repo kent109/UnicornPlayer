@@ -31,7 +31,7 @@ class AboutActivity : BaseActivity() {
         return try {
             resources.openRawResource(R.raw.about).bufferedReader().use { it.readText() }
         } catch (e: Exception) {
-            "加载关于内容失败：${e.message}"
+            getString(R.string.load_about_failed, e.message ?: "")
         }
     }
 }

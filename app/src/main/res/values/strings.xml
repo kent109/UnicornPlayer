@@ -400,6 +400,8 @@
     <!-- Done button (compile/save) - localized -->
     <string name="compile_done">确定</string>
     <string name="genre_unknown">未知流派</string>
+    <string name="load_about_failed">加载关于内容失败：%1$s</string>
+    <string name="load_manual_failed">加载使用指南失败：%1$s</string>
 
     <!-- Song info dialog clickable items -->
     <string name="info_add_to_playlist">添加到歌单</string>

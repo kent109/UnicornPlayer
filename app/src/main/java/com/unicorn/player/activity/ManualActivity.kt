@@ -31,7 +31,7 @@ class ManualActivity : BaseActivity() {
         return try {
             resources.openRawResource(R.raw.manual).bufferedReader().use { it.readText() }
         } catch (e: Exception) {
-            "加载使用指南失败：${e.message}"
+            getString(R.string.load_manual_failed, e.message ?: "")
         }
     }
 }
