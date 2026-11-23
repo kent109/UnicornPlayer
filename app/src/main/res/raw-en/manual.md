@@ -297,6 +297,16 @@ Changes take effect immediately.
 - **System:** Dialogs use a unified light/dark background, not following accent color (default)
 - **Follow theme:** Dialog background follows the current accent color. Each of the 8 accent colors has a corresponding sampled color.
 
+### 🌐 Language
+
+Switch the app's display language in **Settings → Language**. Two languages are currently supported:
+- **简体中文 (Simplified Chinese, default)**
+- **English**
+
+After switching, the app automatically destroys and recreates the current activity — the new language takes effect immediately, all UI text update accordingly.
+
+**Priority:** The language set inside the app takes precedence over the system language — once you choose a language in the app, the UI always displays in that language and no longer follows system language changes.
+
 ### 📤 Share Music
 
 In the song detail dialog, tap **Share local file** to share the music file with other apps. The full-screen player top bar also has a share button that shares the current song directly.
