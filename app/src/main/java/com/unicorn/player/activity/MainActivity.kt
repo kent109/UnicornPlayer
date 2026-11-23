@@ -4,9 +4,11 @@ import android.Manifest
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.tabs.TabLayoutMediator
 import com.unicorn.player.R
 import com.unicorn.player.databinding.ActivityMainBinding
@@ -53,6 +56,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     MusicManager.ConnectionCallback, MultiChoiceFragment.OnMultiChoiceActionListener {
@@ -329,6 +334,14 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         // 切换标签页时，仅在"歌曲"页显示排序按钮
         binding.viewPager.registerOnPageChangeCallback(object :
             ViewPager2.OnPageChangeCallback() {
+            /**
+             * 滑动过程中按滚动比例动态更新 tab 文字颜色：
+             * 目标 tab 的选中色 alpha 从 0 渐变到 1，源 tab 从 1 渐隐到 0
+             */
+            override fun onPageScrolled(position: Int, positionOffset: Float, offsetPixels: Int) {
+                updateTabTextAlpha(position + positionOffset)
+            }
+
             override fun onPageSelected(position: Int) {
                 currentMultiChoiceType = position
                 updateSortButtonVisibility(position)
@@ -360,6 +373,45 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         })
         // 初始化时同步一次可见性
         updateSortButtonVisibility(binding.viewPager.currentItem)
+        // 初始化时同步一次 tab 文字颜色（offset 为 0：选中项 t=1，其余 t=0）
+        binding.viewPager.post {
+            updateTabTextAlpha(binding.viewPager.currentItem.toFloat())
+        }
+    }
+
+    /**
+     * 根据 ViewPager 滑动位置（position + positionOffset）动态更新各 tab 文字颜色。
+     * 目标 tab 的选中色 alpha 从 0 渐变到 1，源 tab 从 1 渐隐到 0，
+     * 未参与滑动的 tab 保持未选中基色。
+     */
+    private fun updateTabTextAlpha(scrollPosition: Float) {
+        val baseColor = ContextCompat.getColor(this, R.color.onSurfaceVariant)
+        val selectedColor =
+            MaterialColors.getColor(
+                binding.tabLayout,
+                com.google.android.material.R.attr.colorPrimary
+            )
+        for (i in 0 until binding.tabLayout.tabCount) {
+            val tabView = binding.tabLayout.getTabAt(i)?.view ?: continue
+            val t = (1f - abs(i - scrollPosition)).coerceIn(0f, 1f)
+            val color = blendColor(baseColor, selectedColor, t)
+            for (j in 0 until tabView.childCount) {
+                (tabView.getChildAt(j) as? TextView)?.setTextColor(color)
+            }
+        }
+    }
+
+    /**
+     * 在 [base] 与 [target] 之间按比例 [t]（0..1）对 ARGB 各通道线性插值
+     */
+    private fun blendColor(base: Int, target: Int, t: Float): Int {
+        val inverse = 1f - t
+        return Color.argb(
+            (Color.alpha(base) * inverse + Color.alpha(target) * t).roundToInt(),
+            (Color.red(base) * inverse + Color.red(target) * t).roundToInt(),
+            (Color.green(base) * inverse + Color.green(target) * t).roundToInt(),
+            (Color.blue(base) * inverse + Color.blue(target) * t).roundToInt()
+        )
     }
 
     /**
