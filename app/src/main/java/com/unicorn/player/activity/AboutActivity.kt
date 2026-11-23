@@ -1,9 +1,11 @@
 package com.unicorn.player.activity
 
-import com.unicorn.player.R
 import android.os.Bundle
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ActivityAboutBinding
+import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
+import io.noties.markwon.core.MarkwonTheme
 
 /**
  * 关于页面
@@ -18,8 +20,14 @@ class AboutActivity : BaseActivity() {
         binding = ActivityAboutBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // 使用 Markwon 渲染 Markdown 到 TextView
-        val markwon = Markwon.create(this)
+        // 使用 Markwon 渲染 Markdown 到 TextView（headingBreakHeight=0 去掉标题下的分割线）
+        val markwon = Markwon.builder(this)
+            .usePlugin(object : AbstractMarkwonPlugin() {
+                override fun configureTheme(builder: MarkwonTheme.Builder) {
+                    builder.headingBreakHeight(0)
+                }
+            })
+            .build()
         val markdown = getAboutContent()
         markwon.setMarkdown(binding.tvAboutContent, markdown)
     }
