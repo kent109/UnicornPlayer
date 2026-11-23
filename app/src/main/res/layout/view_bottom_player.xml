@@ -21,6 +21,7 @@
             android:layout_height="48dp"
             android:layout_marginStart="4dp"
             android:contentDescription="@string/album_cover"
+            android:background="@drawable/bg_cover_placeholder"
             android:scaleType="centerCrop"
             android:src="@drawable/ic_music_note"
             app:layout_constraintBottom_toBottomOf="parent"
