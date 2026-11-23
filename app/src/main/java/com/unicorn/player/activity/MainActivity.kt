@@ -96,6 +96,9 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     // 乐库为空且未播放过歌曲时隐藏底部播放条
     private var playerHiddenByEmptyLibrary = false
 
+    // 隐私协议浮层控制器（未同意隐私协议时由 onCreate 守卫创建并展示）
+    private var consentController: PrivacyConsentController? = null
+
     // 多选相关
     private var multiChoiceFragment: MultiChoiceFragment? = null
     private var currentMultiChoiceType: Int = 0
@@ -186,8 +189,29 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
         }
     }
 
+    /** 同步读取隐私协议同意标记（DataStore 本地读取，无网络） */
+    private fun isPrivacyAgreed(): Boolean = PrivacyConsentController.isAgreed(this)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // 隐私协议守卫：未同意时把全屏隐私浮层设为本 Activity 的内容（同一窗口展示，
+        // 无 Activity 跳转 → 无跨 task 动画、无 Splash starting-window 叠加竞态），
+        // 同意后回调 initMainUi；已同意（含非冷启动）时直接初始化。
+        if (!isPrivacyAgreed()) {
+            consentController = PrivacyConsentController(
+                this,
+                onAccepted = { initMainUi(null) },
+                onRefused = { finishAffinity() },
+            ).also { it.show() }
+            return
+        }
+
+        initMainUi(savedInstanceState)
+    }
+
+    /** 隐私协议守卫期结束后的补初始化；正常启动路径也复用此方法 */
+    private fun initMainUi(savedInstanceState: Bundle?) {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -440,6 +464,10 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     }
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        // 隐私协议守卫期主界面尚未初始化，触摸事件直接交给系统分发
+        if (!::searchBarGestureController.isInitialized) {
+            return super.dispatchTouchEvent(ev)
+        }
         searchBarGestureController.trackSearchBarLongPress(ev)
         if (ev?.action == android.view.MotionEvent.ACTION_UP) {
             val clickView = if (multiChoiceFragment == null) {
@@ -1304,6 +1332,12 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
 
     override fun onResume() {
         super.onResume()
+
+        // 隐私协议守卫期：本页未初始化（隐私浮层展示中），等待同意回调，跳过所有视图访问
+        if (!::binding.isInitialized) {
+            return
+        }
+
         // 更新UI状态
         if (musicService != null) {
             updateBottomPlayerUI()
@@ -1344,6 +1378,15 @@ class MainActivity : BaseActivity(), SongsFragment.SongListHost,
     }
 
     override fun onDestroy() {
+        // 隐私守卫路径：onCreate 未同意隐私协议时提前 finish，binding 等均未初始化，
+        // 跳过所有依赖视图/控制器的清理逻辑
+        if (!::binding.isInitialized) {
+            MusicManager.unregisterConnectionCallback(this)
+            MusicManager.unbind(this)
+            super.onDestroy()
+            return
+        }
+
         // 移除自动检查更新的延迟任务，避免 Activity 销毁后仍执行
         autoUpdateCheckRunnable?.let { binding.root.removeCallbacks(it) }
         autoUpdateCheckRunnable = null

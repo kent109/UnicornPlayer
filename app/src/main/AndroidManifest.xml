@@ -34,11 +34,10 @@
 
         <profileable android:shell="true" />
 
-        <!-- 隐私协议确认 Activity（LAUNCHER 入口） -->
+        <!-- MainActivity（LAUNCHER 入口，冷启动时在最开头检查隐私协议标记） -->
         <activity
-            android:name=".activity.PrivacyDialogActivity"
+            android:name=".activity.MainActivity"
             android:exported="true"
-            android:excludeFromRecents="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity">
@@ -47,13 +46,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".activity.MainActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.UnicornPlayer"
-            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
             android:name=".activity.PlayerActivity"
