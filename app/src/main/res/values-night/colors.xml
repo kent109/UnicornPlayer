@@ -109,4 +109,7 @@
     <color name="dialog_item_color_5">#FF303F44</color>
     <color name="dialog_item_color_6">#FF343747</color>
     <color name="dialog_item_color_7">#FF3E3247</color>
+
+    <!-- 超链接颜色 -->
+    <color name="privacy_link_color">#FF295CDA</color>
 </resources>

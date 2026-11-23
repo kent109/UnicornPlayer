@@ -20,3 +20,9 @@ internal val Context.scanFiltersDataStore by preferencesDataStore(name = "scan_f
  * 顶层属性保证全进程唯一实例，避免 IllegalStateException
  */
 internal val Context.lyricsDataStore by preferencesDataStore(name = "lyrics_settings")
+
+/**
+ * 进程级单例 DataStore 委托：隐私协议同意标记
+ * 顶层属性保证全进程唯一实例，避免 IllegalStateException
+ */
+internal val Context.privacyDataStore by preferencesDataStore(name = "privacy_consent")

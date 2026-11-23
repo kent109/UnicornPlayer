@@ -196,9 +196,19 @@ class SettingsActivity : BaseActivity() {
                     title = getString(R.string.privacy_policy),
                     hasChevron = true,
                     isFirst = false,
-                    isLast = true,
+                    isLast = false,
                     onClick = {
                         startActivity(Intent(this, AboutActivity::class.java))
+                    }
+                ),
+                SettingItem(
+                    key = "permission_list",
+                    title = getString(R.string.title_permission_list),
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = true,
+                    onClick = {
+                        startActivity(Intent(this, PermissionListActivity::class.java))
                     }
                 )
             )

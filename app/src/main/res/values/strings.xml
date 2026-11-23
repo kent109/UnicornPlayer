@@ -435,4 +435,48 @@
         <item quantity="one">%1$d 首</item>
         <item quantity="other">%1$d 首</item>
     </plurals>
+
+    <!-- 隐私协议弹窗 -->
+    <string name="privacy_dialog_title">Hi欢迎使用【轻籁】</string>
+    <string name="privacy_dialog_content_full">我们非常重视您的个人信息保护，将严格按照相关法律法规处理您的使用数据。\n\n请您仔细阅读《隐私协议》，了解我们收集信息的类型、用途和您的相关权益。\n\n我们仅收集实现核心功能必需的最少信息，不会超范围采集您的隐私内容。</string>
+    <string name="privacy_dialog_link_label">《隐私协议》</string>
+    <string name="privacy_dialog_agree_checkbox">我已认真阅读并同意隐私协议</string>
+    <string name="privacy_dialog_reject">退出应用</string>
+    <string name="privacy_dialog_agree">开始使用</string>
+
+    <!-- 权限说明页面 -->
+    <string name="title_permission_list">权限说明</string>
+    <string name="permission_scene_label">使用场景：</string>
+    <string name="permission_list_intro">轻籁申请的应用权限和使用说明</string>
+
+    <!-- 权限说明：权限描述 + 使用场景 -->
+    <string name="perm_desc_internet">允许应用访问网络，用于检查应用更新、同步相关数据。</string>
+    <string name="perm_scene_internet">检查应用更新、网络请求</string>
+
+    <string name="perm_desc_read_media_audio">允许应用读取设备上的音频文件，用于扫描和播放本地音乐。</string>
+    <string name="perm_scene_read_media_audio">扫描本地音乐库、播放音频文件</string>
+
+    <string name="perm_desc_wake_lock">允许应用在播放音乐时保持设备部分唤醒，避免播放中断。</string>
+    <string name="perm_scene_wake_lock">后台播放时防止系统休眠</string>
+
+    <string name="perm_desc_fg_service">允许应用使用前台服务，确保音乐在后台持续播放。</string>
+    <string name="perm_scene_fg_service">后台持续播放音乐</string>
+
+    <string name="perm_desc_fg_media">允许应用使用媒体播放类型的前台服务，这是 Android 14+ 后台播放音乐的必需权限。</string>
+    <string name="perm_scene_fg_media">Android 14+ 后台媒体播放</string>
+
+    <string name="perm_desc_post_notifications">允许应用发送通知，用于显示正在播放的歌曲、控制播放状态。</string>
+    <string name="perm_scene_post_notifications">通知栏显示播放控制器</string>
+
+    <string name="perm_desc_bluetooth">允许应用访问蓝牙适配器，用于监听蓝牙 A2DP 设备连接/断开事件。</string>
+    <string name="perm_scene_bluetooth">监听蓝牙状态变化</string>
+
+    <string name="perm_desc_bluetooth_admin">允许应用管理蓝牙连接状态，处理蓝牙断开时的播放暂停。</string>
+    <string name="perm_scene_bluetooth_admin">处理蓝牙断开事件、自动暂停播放</string>
+
+    <string name="perm_desc_bluetooth_connect">允许应用连接已配对的蓝牙设备，获取蓝牙设备连接状态。</string>
+    <string name="perm_scene_bluetooth_connect">获取蓝牙设备连接状态</string>
+
+    <string name="perm_desc_install_packages">允许应用请求安装未知来源的 APK 文件，仅在应用内检查更新并下载新版时使用。</string>
+    <string name="perm_scene_install_packages">安装从应用内下载的更新版本</string>
 </resources>

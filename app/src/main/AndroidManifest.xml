@@ -34,9 +34,11 @@
 
         <profileable android:shell="true" />
 
+        <!-- 隐私协议确认 Activity（LAUNCHER 入口） -->
         <activity
-            android:name=".activity.MainActivity"
+            android:name=".activity.PrivacyDialogActivity"
             android:exported="true"
+            android:excludeFromRecents="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
             tools:ignore="DiscouragedApi,LockedOrientationActivity">
@@ -45,6 +47,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".activity.MainActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.UnicornPlayer"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
             android:name=".activity.PlayerActivity"
@@ -77,6 +86,13 @@
 
         <activity
             android:name=".activity.AboutActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.UnicornPlayer"
+            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
+        <activity
+            android:name=".activity.PermissionListActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.UnicornPlayer"
