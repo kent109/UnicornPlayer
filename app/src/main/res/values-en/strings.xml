@@ -384,7 +384,7 @@
     <!-- Privacy dialog -->
     <!-- Privacy dialog -->
     <string name="privacy_dialog_title">Hi, Welcome to UnicornPlayer</string>
-    <string name="privacy_dialog_content_full">We take your personal information privacy seriously and handle your usage data in strict accordance with relevant laws and regulations.\n\nPlease read the Privacy Policy carefully to understand the types of information we collect, how we use it, and your rights.\n\nWe only collect the minimum information necessary to implement core features and will never collect your private content beyond scope.</string>
+    <string name="privacy_dialog_content_full">We take your personal information privacy seriously and handle your usage data in strict accordance with relevant laws and regulations.\n\nPlease read the Privacy Policy carefully to understand the types of information we collect, how we use it, and your rights.\n\nWe only collect the minimum information necessary to implement core features and will never collect your private content beyond scope.\n\nWhen connected, the app contacts the update server to check for new versions; this process does not collect any personal information.</string>
     <string name="privacy_dialog_link_label">Privacy Policy</string>
     <string name="privacy_dialog_agree_checkbox">I have read and agree to the Privacy Policy</string>
     <string name="privacy_dialog_reject">Exit app</string>

@@ -67,7 +67,10 @@ abstract class MusicDatabase : RoomDatabase() {
                     "music_database"
                 )
                     .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) // 增量迁移，不清库
-                    .fallbackToDestructiveMigration() // 允许破坏性迁移（兜底）
+                    // 仅降级时允许破坏性迁移（正常 APK 升级不会降级）。
+                    // 不要用 fallbackToDestructiveMigration()：未来漏写 Migration 时
+                    // 它会静默清空用户数据；保留缺失时 Room 直接抛异常，问题立刻暴露
+                    .fallbackToDestructiveMigrationOnDowngrade()
                     .build()
                 INSTANCE = instance
                 instance

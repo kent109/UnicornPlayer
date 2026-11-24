@@ -438,7 +438,7 @@
 
     <!-- 隐私协议弹窗 -->
     <string name="privacy_dialog_title">Hi欢迎使用【轻籁】</string>
-    <string name="privacy_dialog_content_full">我们非常重视您的个人信息保护，将严格按照相关法律法规处理您的使用数据。\n\n请您仔细阅读《隐私协议》，了解我们收集信息的类型、用途和您的相关权益。\n\n我们仅收集实现核心功能必需的最少信息，不会超范围采集您的隐私内容。</string>
+    <string name="privacy_dialog_content_full">我们非常重视您的个人信息保护，将严格按照相关法律法规处理您的使用数据。\n\n请您仔细阅读《隐私协议》，了解我们收集信息的类型、用途和您的相关权益。\n\n我们仅收集实现核心功能必需的最少信息，不会超范围采集您的隐私内容。\n\n应用会在联网状态下连接更新服务器检查新版本，此过程不收集任何个人信息。</string>
     <string name="privacy_dialog_link_label">《隐私协议》</string>
     <string name="privacy_dialog_agree_checkbox">我已认真阅读并同意隐私协议</string>
     <string name="privacy_dialog_reject">退出应用</string>
