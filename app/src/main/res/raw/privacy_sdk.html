@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { background: transparent; }
+  body { font-family: sans-serif; font-size: 15px; line-height: 1.7; color: #333; margin: 0; padding: 20px 16px 40px; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #ccc; }
+    .date { color: #888; }
+    .muted { color: #999; }
+    th, td { border-color: #555; }
+    a { color: #7ab3ff; }
+  }
+  h1 { font-size: 20px; text-align: center; margin: 8px 0 4px; }
+  .date { text-align: center; color: #999; font-size: 12px; margin-bottom: 20px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { margin: 8px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+</style>
+</head>
+<body>
+<h1>第三方 SDK 清单</h1>
+<p class="date">更新日期：2026年11月24日</p>
+
+<p>轻籁为离线优先的本地音乐播放器，使用的组件以本地开源库为主。下表列出全部第三方组件及其数据处理情况：</p>
+
+<table>
+  <tr><th>组件</th><th>用途</th><th>联网</th><th>涉及的数据</th></tr>
+  <tr><td>OkHttp</td><td>网络请求框架</td><td>是</td><td>仅承载"检查更新"（api.github.com）与"歌词搜索"（lrclib.net）的 HTTP 通信</td></tr>
+  <tr><td>Media3 / ExoPlayer</td><td>音频播放引擎</td><td>否</td><td>播放您本地的音频文件</td></tr>
+  <tr><td>Glide</td><td>图片加载（专辑封面）</td><td>否</td><td>读取音频文件内嵌封面并在界面显示</td></tr>
+  <tr><td>Room</td><td>本地数据库</td><td>否</td><td>在设备本地存储媒体库、歌单、播放记录</td></tr>
+  <tr><td>DataStore</td><td>本地偏好存储</td><td>否</td><td>在设备本地存储主题、语言、播放状态等设置</td></tr>
+  <tr><td>DocumentFile</td><td>SAF 文件访问</td><td>否</td><td>按您授权的目录读写歌词等文件</td></tr>
+  <tr><td>SmartRefreshLayout</td><td>下拉刷新交互</td><td>否</td><td>无</td></tr>
+  <tr><td>Markwon</td><td>Markdown 渲染（使用指南）</td><td>否</td><td>无</td></tr>
+  <tr><td>Gson / kotlinx-serialization</td><td>JSON 解析</td><td>随请求</td><td>解析检查更新的版本响应，不主动发送数据</td></tr>
+  <tr><td>opencc4j / pinyin4j</td><td>繁简转换、拼音排序</td><td>否</td><td>对本地歌曲标题做文本转换</td></tr>
+</table>
+
+<h2>说明</h2>
+<ul>
+  <li>上表组件均为开源库，随应用安装在您的设备上本地运行，<b>不内置任何数据采集代码</b>；</li>
+  <li>仅 OkHttp 参与网络通信，且仅用于检查更新与歌词搜索两个场景，详见<a href="privacy.html">《轻籁隐私政策》</a>；</li>
+  <li>若本清单因版本升级发生变化，我们会同步更新《轻籁隐私政策》并在应用内告知。</li>
+</ul>
+</body>
+</html>

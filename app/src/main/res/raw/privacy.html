@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { background: transparent; }
+  body { font-family: sans-serif; font-size: 15px; line-height: 1.7; color: #333; margin: 0; padding: 20px 16px 40px; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #ccc; }
+    .date { color: #888; }
+    .muted { color: #999; }
+    th, td { border-color: #555; }
+    a { color: #7ab3ff; }
+  }
+  h1 { font-size: 20px; text-align: center; margin: 8px 0 4px; }
+  .date { text-align: center; color: #999; font-size: 12px; margin-bottom: 20px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { margin: 8px 0; }
+  ul, ol { padding-left: 22px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  a { color: #3f7fe0; text-decoration: none; }
+  .muted { color: #777; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>轻籁隐私政策</h1>
+<p class="date">生效日期：2026年11月24日</p>
+
+<h2>一、前言</h2>
+<p>轻籁（以下简称"本应用"）是一款本地音乐播放工具。我们（个人开发者）深知个人信息对您的重要性，将按照《中华人民共和国个人信息保护法》《中华人民共和国网络安全法》等法律法规的要求处理相关信息。请您在使用本应用前仔细阅读本政策。</p>
+<p>本应用<b>不需要注册或登录</b>，也<b>不接入任何统计分析、广告或推送 SDK</b>。您使用本应用产生的数据绝大多数仅保存在您的设备上。</p>
+
+<h2>二、我们如何收集和使用信息</h2>
+<h3>2.1 仅保存在设备本地的信息（不上传）</h3>
+<ul>
+  <li><b>本地音乐库信息：</b> 扫描您授权访问的音频文件时，读取文件自带的曲名、歌手、专辑、时长、内嵌封面等标签信息，用于在应用内展示和播放。</li>
+  <li><b>您的使用数据：</b> 播放记录、歌单、收藏、主题与语言偏好、播放进度等，全部存储在设备本地的应用数据目录中，不会上传到任何服务器。</li>
+</ul>
+<h3>2.2 涉及网络的情形（仅在您使用相应功能时发生）</h3>
+<ul>
+  <li><b>检查更新：</b> 应用启动后连接更新源（api.github.com）查询是否有新版本。该请求不携带任何个人身份信息，也不上传您的任何本地数据。</li>
+  <li><b>歌词搜索：</b> 当您主动使用"搜索歌词"功能时，应用会将该歌曲的<b>歌曲名与歌手名</b>发送至歌词服务 lrclib.net 以检索匹配的歌词，下载的歌词仅保存在您设备的 Download/Unicorn/Lyrics/ 目录。若您不使用该功能，不会发生任何相关网络请求。</li>
+</ul>
+<h3>2.3 我们不做的事</h3>
+<ul>
+  <li>不采集设备标识符（如 IMEI、Android ID、OAID）；</li>
+  <li>不获取精准位置、通讯录、短信、通话记录；</li>
+  <li>不进行用户画像或个性化广告推荐；</li>
+  <li>不将您的任何信息提供给营销类第三方。</li>
+</ul>
+
+<h2>三、权限使用说明</h2>
+<table>
+  <tr><th>权限</th><th>用途</th><th>拒绝的影响</th></tr>
+  <tr><td>音频媒体读取（READ_MEDIA_AUDIO / READ_EXTERNAL_STORAGE）</td><td>扫描和播放您设备中的本地音乐</td><td>无法加载音乐库</td></tr>
+  <tr><td>通知（POST_NOTIFICATIONS）</td><td>显示播放通知栏，便于控制播放</td><td>不显示播放通知</td></tr>
+  <tr><td>蓝牙连接（BLUETOOTH_CONNECT）</td><td>响应蓝牙耳机/音箱的播放控制</td><td>蓝牙设备无法控制播放</td></tr>
+  <tr><td>后台播放服务（FOREGROUND_SERVICE_MEDIA_PLAYBACK、WAKE_LOCK）</td><td>熄屏或切换应用后继续播放</td><td>无法后台播放</td></tr>
+</table>
+<p>您也可以在设备"设置 → 应用 → 轻籁 → 权限"中随时调整授权，或在应用内"设置 → 权限说明"查看详细说明。</p>
+
+<h2>四、本地数据的存储与删除</h2>
+<p>本应用的全部数据（媒体库、歌单、播放记录、设置）均存储在您的设备本地，我们不提供云端备份。您可以随时在应用内清理相应数据，卸载本应用即彻底删除所有数据。</p>
+
+<h2>五、第三方 SDK 清单</h2>
+<p>本应用使用了若干开源组件，其中涉及网络通信的组件及其处理的数据详见 <a href="privacy_sdk.html">《第三方 SDK 清单》</a>。</p>
+
+<h2>六、您的权利</h2>
+<ul>
+  <li>您可以随时在系统设置中关闭上述任一权限，关闭后相关功能不可用，但不影响其他功能；</li>
+  <li>您可以随时删除应用内的歌单、播放记录等本地数据；</li>
+  <li>如需彻底删除所有数据，直接卸载应用即可。</li>
+</ul>
+
+<h2>七、未成年人保护</h2>
+<p>本应用不收集任何个人信息，不存在面向未成年人的信息收集行为。如未成年人在监护人知晓的情况下使用，监护人可依据本政策管理相关权限。</p>
+
+<h2>八、政策更新</h2>
+<p>如本政策发生重大变更（例如新增联网功能），我们会在应用内以弹窗或显著提示的方式告知您，并在您确认后生效。</p>
+
+<h2>九、联系我们</h2>
+<p>如有任何疑问、意见或建议，请联系：</p>
+<p>邮箱：<a href="mailto:ldw5109@gmail.com">ldw5109@gmail.com</a></p>
+</body>
+</html>

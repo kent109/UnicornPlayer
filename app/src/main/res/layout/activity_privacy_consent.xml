@@ -19,8 +19,8 @@
             android:id="@+id/ivAppIcon"
             android:layout_width="80dp"
             android:layout_height="80dp"
-            android:layout_marginTop="40dp"
-            android:layout_marginBottom="28dp"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="20dp"
             android:background="@drawable/bg_privacy_icon"
             android:contentDescription="@string/app_name"
             android:padding="6dp"
@@ -45,7 +45,7 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="4dp"
         android:layout_weight="1"
         android:overScrollMode="never"
         android:scrollbars="none">
@@ -67,7 +67,7 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
         android:text="@string/privacy_dialog_agree_checkbox"
-        android:textColor="@color/onSurface"
+        android:textColor="@color/error"
         android:textSize="14sp" />
 
     <!-- 按钮行 -->

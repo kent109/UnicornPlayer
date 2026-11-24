@@ -15,14 +15,11 @@
         android:layout_height="wrap_content"
         app:title="@string/title_privacy" />
 
-    <!-- 内容区域 -->
+    <!-- 内容区域：SmartRefreshLayout 提供 overscroll 弹性效果，内部 WebView 渲染 HTML -->
     <com.scwang.smart.refresh.layout.SmartRefreshLayout
         android:id="@+id/smartRefreshLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="8dp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
         app:srlEnableAutoLoadMore="false"
         app:srlEnableFooterFollowWhenNoMoreData="false"
         app:srlEnableLoadMore="false"
@@ -31,23 +28,13 @@
         app:srlEnablePureScrollMode="true"
         app:srlEnableRefresh="false">
 
-        <ScrollView
+        <WebView
+            android:id="@+id/webView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="24dp"
-            android:overScrollMode="always"
-            android:scrollbars="none">
+            android:overScrollMode="never"
+            android:scrollbars="none" />
 
-            <TextView
-                android:id="@+id/tvAboutContent"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:lineSpacingMultiplier="1.4"
-                android:textColor="@color/onSurfaceVariant"
-                android:textSize="14sp" />
-
-        </ScrollView>
     </com.scwang.smart.refresh.layout.SmartRefreshLayout>
 
 </LinearLayout>

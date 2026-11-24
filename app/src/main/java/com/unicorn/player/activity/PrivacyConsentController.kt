@@ -72,20 +72,27 @@ class PrivacyConsentController(
         }
     }
 
-    /** 构建带《隐私协议》超链接的正文（链接无下划线，点击打开 AboutActivity） */
+    /** 构建带《隐私政策》《用户协议》超链接的正文（链接无下划线，点击打开 DocViewerActivity 对应文档） */
     private fun buildContentWithLink(): SpannableStringBuilder {
         val fullText = activity.getString(R.string.privacy_dialog_content_full)
-        val privacyLabel = activity.getString(R.string.privacy_dialog_link_label)
+        val linkColor = activity.getColor(R.color.privacy_link_color)
 
         val ssb = SpannableStringBuilder(fullText)
-        val start = fullText.indexOf(privacyLabel)
-        if (start >= 0) {
-            val end = start + privacyLabel.length
-            val linkColor = activity.getColor(R.color.privacy_link_color)
+        val links = listOf(
+            activity.getString(R.string.privacy_dialog_link_label) to DocViewerActivity.DOC_PRIVACY,
+            activity.getString(R.string.privacy_dialog_link_label_agreement) to DocViewerActivity.DOC_AGREEMENT
+        )
+        for ((label, docType) in links) {
+            val start = fullText.indexOf(label)
+            if (start < 0) continue
+            val end = start + label.length
 
             val clickableSpan = object : ClickableSpan() {
                 override fun onClick(widget: View) {
-                    activity.startActivity(Intent(activity, AboutActivity::class.java))
+                    activity.startActivity(
+                        Intent(activity, DocViewerActivity::class.java)
+                            .putExtra(DocViewerActivity.EXTRA_DOC, docType)
+                    )
                 }
 
                 override fun updateDrawState(ds: android.text.TextPaint) {

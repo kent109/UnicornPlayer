@@ -79,7 +79,7 @@
     <string name="share_friends">Share</string>
     <string name="feedback">Feedback</string>
     <string name="manual">Guide</string>
-    <string name="privacy_policy">Privacy</string>
+    <string name="privacy_policy">Privacy Policy</string>
 
     <string name="playlist_name_exists">Playlist %1$s exists</string>
     <string name="new_playlist">New playlist</string>
@@ -314,7 +314,8 @@
     <string name="save_label">Save</string>
 
     <string name="title_settings">Settings</string>
-    <string name="title_privacy">Privacy</string>
+    <string name="title_privacy">Privacy Policy</string>
+    <string name="title_user_agreement">User Agreement</string>
     <string name="title_album_songs">Album songs</string>
     <string name="title_artist_songs">Artist songs</string>
     <string name="title_playlist_songs">Playlist songs</string>
@@ -351,7 +352,6 @@
 
     <string name="compile_done">OK</string>
     <string name="genre_unknown">Unknown genre</string>
-    <string name="load_about_failed">Failed to load about content: %1$s</string>
     <string name="load_manual_failed">Failed to load manual: %1$s</string>
 
     <string name="info_add_to_playlist">Add to playlist</string>
@@ -384,9 +384,10 @@
     <!-- Privacy dialog -->
     <!-- Privacy dialog -->
     <string name="privacy_dialog_title">Hi, Welcome to UnicornPlayer</string>
-    <string name="privacy_dialog_content_full">We take your personal information privacy seriously and handle your usage data in strict accordance with relevant laws and regulations.\n\nPlease read the Privacy Policy carefully to understand the types of information we collect, how we use it, and your rights.\n\nWe only collect the minimum information necessary to implement core features and will never collect your private content beyond scope.\n\nWhen connected, the app contacts the update server to check for new versions; this process does not collect any personal information.</string>
+    <string name="privacy_dialog_content_full">We take your personal information privacy seriously and handle your usage data in strict accordance with relevant laws and regulations.\n\nPlease read the Privacy Policy and User Agreement carefully to understand the types of information we collect, how we use it, and your rights.\n\nWe only collect the minimum information necessary to implement core features and will never collect your private content beyond scope.\n\nWhen connected, the app contacts the update server to check for new versions; this process does not collect any personal information.</string>
     <string name="privacy_dialog_link_label">Privacy Policy</string>
-    <string name="privacy_dialog_agree_checkbox">I have read and agree to the Privacy Policy</string>
+    <string name="privacy_dialog_link_label_agreement">User Agreement</string>
+    <string name="privacy_dialog_agree_checkbox">I agree to the Privacy Policy and User Agreement</string>
     <string name="privacy_dialog_reject">Exit app</string>
     <string name="privacy_dialog_agree">Start using</string>
 

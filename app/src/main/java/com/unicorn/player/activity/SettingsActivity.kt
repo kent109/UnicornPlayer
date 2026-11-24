@@ -1,6 +1,5 @@
 package com.unicorn.player.activity
 
-import com.unicorn.player.R
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -13,6 +12,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.cardview.widget.CardView
 import androidx.core.content.FileProvider
 import com.google.android.material.switchmaterial.SwitchMaterial
+import com.unicorn.player.R
 import com.unicorn.player.databinding.ActivitySettingsBinding
 import com.unicorn.player.util.UpdateHelper
 import java.io.File
@@ -198,7 +198,29 @@ class SettingsActivity : BaseActivity() {
                     isFirst = false,
                     isLast = false,
                     onClick = {
-                        startActivity(Intent(this, AboutActivity::class.java))
+                        startActivity(
+                            Intent(this, DocViewerActivity::class.java)
+                                .putExtra(
+                                    DocViewerActivity.EXTRA_DOC,
+                                    DocViewerActivity.DOC_PRIVACY
+                                )
+                        )
+                    }
+                ),
+                SettingItem(
+                    key = "user_agreement",
+                    title = getString(R.string.title_user_agreement),
+                    hasChevron = true,
+                    isFirst = false,
+                    isLast = false,
+                    onClick = {
+                        startActivity(
+                            Intent(this, DocViewerActivity::class.java)
+                                .putExtra(
+                                    DocViewerActivity.EXTRA_DOC,
+                                    DocViewerActivity.DOC_AGREEMENT
+                                )
+                        )
                     }
                 ),
                 SettingItem(
@@ -294,7 +316,7 @@ class SettingsActivity : BaseActivity() {
         }
 
         // 添加设置项
-        items.forEachIndexed { index, item ->
+        items.forEachIndexed { _, item ->
             val itemView = createSettingItem(inflater, contentContainer, item)
             contentContainer.addView(itemView)
 

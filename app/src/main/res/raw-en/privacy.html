@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { background: transparent; }
+  body { font-family: sans-serif; font-size: 15px; line-height: 1.7; color: #333; margin: 0; padding: 20px 16px 40px; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #ccc; }
+    .date { color: #888; }
+    .muted { color: #999; }
+    th, td { border-color: #555; }
+    a { color: #7ab3ff; }
+  }
+  h1 { font-size: 20px; text-align: center; margin: 8px 0 4px; }
+  .date { text-align: center; color: #999; font-size: 12px; margin-bottom: 20px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { margin: 8px 0; }
+  ul, ol { padding-left: 22px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  a { color: #3f7fe0; text-decoration: none; }
+  .muted { color: #777; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>UnicornPlayer Privacy Policy</h1>
+<p class="date">Effective date: November 24, 2026</p>
+
+<h2>1. Introduction</h2>
+<p>UnicornPlayer (the "App") is a local music player. We (an independent developer) take your privacy seriously and process information in accordance with applicable laws and regulations. Please read this policy carefully before using the App.</p>
+<p>The App <b>requires no registration or sign-in</b> and integrates <b>no analytics, advertising, or push-notification SDKs</b>. Nearly all data generated while using the App stays on your device.</p>
+
+<h2>2. How We Collect and Use Information</h2>
+<h3>2.1 Information kept on your device only (never uploaded)</h3>
+<ul>
+  <li><b>Local music library:</b> When scanning the audio files you grant access to, the App reads tags stored in the files themselves (title, artist, album, duration, embedded cover art) to display and play them.</li>
+  <li><b>Your usage data:</b> Play history, playlists, favorites, theme and language preferences, playback position, etc., are stored exclusively in the App's local data directory on your device and are never uploaded to any server.</li>
+</ul>
+<h3>2.2 Network features (only when you use the corresponding function)</h3>
+<ul>
+  <li><b>Update check:</b> On startup, the App connects to the update source (api.github.com) to query for a new version. The request carries no personal identity information and uploads none of your local data.</li>
+  <li><b>Lyrics search:</b> When you actively use the "Search lyrics" function, the App sends the song's <b>title and artist name</b> to the lyrics service lrclib.net to find matching lyrics; downloaded lyrics are saved only to the Download/Unicorn/Lyrics/ folder on your device. If you never use this function, no related network request is made.</li>
+</ul>
+<h3>2.3 What we do not do</h3>
+<ul>
+  <li>We do not collect device identifiers (IMEI, Android ID, OAID, etc.);</li>
+  <li>We do not access precise location, contacts, SMS, or call logs;</li>
+  <li>We do not build user profiles or serve personalized ads;</li>
+  <li>We do not share any of your information with marketing third parties.</li>
+</ul>
+
+<h2>3. Permissions</h2>
+<table>
+  <tr><th>Permission</th><th>Purpose</th><th>Effect if denied</th></tr>
+  <tr><td>Audio media access (READ_MEDIA_AUDIO / READ_EXTERNAL_STORAGE)</td><td>Scan and play local music on your device</td><td>Music library cannot load</td></tr>
+  <tr><td>Notifications (POST_NOTIFICATIONS)</td><td>Show the playback notification for media control</td><td>No playback notification</td></tr>
+  <tr><td>Bluetooth connect (BLUETOOTH_CONNECT)</td><td>Respond to playback controls from Bluetooth headsets/speakers</td><td>Bluetooth devices cannot control playback</td></tr>
+  <tr><td>Background playback service (FOREGROUND_SERVICE_MEDIA_PLAYBACK, WAKE_LOCK)</td><td>Keep music playing when the screen is off or the app is in background</td><td>No background playback</td></tr>
+</table>
+<p>You can adjust these grants anytime in device "Settings → Apps → UnicornPlayer → Permissions", or read details in the App under "Settings → Permission list".</p>
+
+<h2>4. Local Data Storage and Deletion</h2>
+<p>All App data (library, playlists, play history, settings) is stored locally on your device; we provide no cloud backup. You may clear the corresponding data within the App at any time, and uninstalling the App removes all data permanently.</p>
+
+<h2>5. Third-party SDK List</h2>
+<p>The App uses several open-source components. For details on which components perform network communication and what data is involved, see the <a href="privacy_sdk.html">Third-party SDK List</a>.</p>
+
+<h2>6. Your Rights</h2>
+<ul>
+  <li>You may revoke any of the above permissions in system settings at any time; the related function becomes unavailable while others keep working;</li>
+  <li>You may delete playlists, play history, and other local data within the App at any time;</li>
+  <li>To remove all data completely, simply uninstall the App.</li>
+</ul>
+
+<h2>7. Minors</h2>
+<p>The App collects no personal information from anyone, including minors. If a minor uses the App under a guardian's knowledge, the guardian may manage related permissions according to this policy.</p>
+
+<h2>8. Updates to This Policy</h2>
+<p>If this policy changes materially (for example, a new network feature is added), we will notify you prominently within the App (via dialog or banner), and the update takes effect after your confirmation.</p>
+
+<h2>9. Contact Us</h2>
+<p>If you have any questions, comments, or suggestions, please contact:</p>
+<p>Email: ldw5109@gmail.com</p>
+</body>
+</html>

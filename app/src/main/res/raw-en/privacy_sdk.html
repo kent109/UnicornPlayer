@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { background: transparent; }
+  body { font-family: sans-serif; font-size: 15px; line-height: 1.7; color: #333; margin: 0; padding: 20px 16px 40px; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #ccc; }
+    .date { color: #888; }
+    .muted { color: #999; }
+    th, td { border-color: #555; }
+    a { color: #7ab3ff; }
+  }
+  h1 { font-size: 20px; text-align: center; margin: 8px 0 4px; }
+  .date { text-align: center; color: #999; font-size: 12px; margin-bottom: 20px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { margin: 8px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  a { color: #3f7fe0; text-decoration: none; }
+</style>
+</head>
+<body>
+<h1>Third-party SDK List</h1>
+<p class="date">Last updated: November 24, 2026</p>
+
+<p>UnicornPlayer is an offline-first local music player built mostly on local open-source libraries. The table below lists all third-party components and their data handling:</p>
+
+<table>
+  <tr><th>Component</th><th>Purpose</th><th>Network</th><th>Data involved</th></tr>
+  <tr><td>OkHttp</td><td>HTTP client framework</td><td>Yes</td><td>Carries only the "update check" (api.github.com) and "lyrics search" (lrclib.net) HTTP traffic</td></tr>
+  <tr><td>Media3 / ExoPlayer</td><td>Audio playback engine</td><td>No</td><td>Plays your local audio files</td></tr>
+  <tr><td>Glide</td><td>Image loading (album art)</td><td>No</td><td>Reads embedded cover art from audio files for display</td></tr>
+  <tr><td>Room</td><td>Local database</td><td>No</td><td>Stores library, playlists, and play history on the device</td></tr>
+  <tr><td>DataStore</td><td>Local preferences</td><td>No</td><td>Stores theme, language, playback state on the device</td></tr>
+  <tr><td>DocumentFile</td><td>SAF file access</td><td>No</td><td>Reads/writes files (e.g., lyrics) in directories you authorize</td></tr>
+  <tr><td>SmartRefreshLayout</td><td>Pull-to-refresh UI</td><td>No</td><td>None</td></tr>
+  <tr><td>Markwon</td><td>Markdown rendering (user guide)</td><td>No</td><td>None</td></tr>
+  <tr><td>Gson / kotlinx-serialization</td><td>JSON parsing</td><td>Follows requests</td><td>Parses the version-check response; sends nothing by itself</td></tr>
+  <tr><td>opencc4j / pinyin4j</td><td>Traditional/Simplified conversion, pinyin sorting</td><td>No</td><td>Text conversion on local song titles</td></tr>
+</table>
+
+<h2>Notes</h2>
+<ul>
+  <li>All components above are open-source libraries running locally on your device; <b>none of them embeds data-collection code</b>;</li>
+  <li>Only OkHttp performs network communication, limited to update checks and lyrics search. See the <a href="privacy.html">UnicornPlayer Privacy Policy</a> for details;</li>
+  <li>If this list changes due to version upgrades, we will update the Privacy Policy accordingly and notify you in the App.</li>
+</ul>
+</body>
+</html>

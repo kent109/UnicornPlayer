@@ -89,7 +89,7 @@
     <string name="share_friends">分享好友</string>
     <string name="feedback">意见反馈</string>
     <string name="manual">使用指南</string>
-    <string name="privacy_policy">隐私协议</string>
+    <string name="privacy_policy">隐私政策</string>
 
     <!-- 歌单 -->
     <string name="playlist_name_exists">歌单「%1$s」已存在</string>
@@ -359,7 +359,8 @@
 
     <!-- Activity titles (for titleBar app:title) -->
     <string name="title_settings">设置</string>
-    <string name="title_privacy">隐私协议</string>
+    <string name="title_privacy">隐私政策</string>
+    <string name="title_user_agreement">用户协议</string>
     <string name="title_album_songs">专辑歌曲</string>
     <string name="title_artist_songs">歌手歌曲</string>
     <string name="title_playlist_songs">歌单歌曲</string>
@@ -400,7 +401,6 @@
     <!-- Done button (compile/save) - localized -->
     <string name="compile_done">确定</string>
     <string name="genre_unknown">未知流派</string>
-    <string name="load_about_failed">加载关于内容失败：%1$s</string>
     <string name="load_manual_failed">加载使用指南失败：%1$s</string>
 
     <!-- Song info dialog clickable items -->
@@ -437,10 +437,11 @@
     </plurals>
 
     <!-- 隐私协议弹窗 -->
-    <string name="privacy_dialog_title">Hi欢迎使用【轻籁】</string>
-    <string name="privacy_dialog_content_full">我们非常重视您的个人信息保护，将严格按照相关法律法规处理您的使用数据。\n\n请您仔细阅读《隐私协议》，了解我们收集信息的类型、用途和您的相关权益。\n\n我们仅收集实现核心功能必需的最少信息，不会超范围采集您的隐私内容。\n\n应用会在联网状态下连接更新服务器检查新版本，此过程不收集任何个人信息。</string>
-    <string name="privacy_dialog_link_label">《隐私协议》</string>
-    <string name="privacy_dialog_agree_checkbox">我已认真阅读并同意隐私协议</string>
+    <string name="privacy_dialog_title">Hi欢迎使用『轻籁』</string>
+    <string name="privacy_dialog_content_full">我们非常重视您的个人信息保护，将严格按照相关法律法规处理您的使用数据。\n\n请您仔细阅读《隐私政策》和《用户协议》，了解我们收集信息的类型、用途和您的相关权益。\n\n我们仅收集实现核心功能必需的最少信息，不会超范围采集您的隐私内容。\n\n应用会在联网状态下连接更新服务器检查新版本，此过程不收集任何个人信息。</string>
+    <string name="privacy_dialog_link_label">《隐私政策》</string>
+    <string name="privacy_dialog_link_label_agreement">《用户协议》</string>
+    <string name="privacy_dialog_agree_checkbox">我同意《隐私政策》和《用户协议》</string>
     <string name="privacy_dialog_reject">退出应用</string>
     <string name="privacy_dialog_agree">开始使用</string>
 
