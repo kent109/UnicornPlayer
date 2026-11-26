@@ -35,7 +35,7 @@ class PermissionListActivity : BaseActivity() {
         // 顶部说明文字
         val introText = TextView(this).apply {
             text = getString(R.string.permission_list_intro)
-            textSize = 15f
+            textSize = 16f
             gravity = Gravity.CENTER
             setTextColor(getColor(R.color.onSurfaceVariant))
             setPadding(
@@ -56,7 +56,7 @@ class PermissionListActivity : BaseActivity() {
 
     private fun createPermissionCard(perm: PermissionInfo, density: Float): CardView {
         val containerPadding = (12 * density).toInt()
-        val itemSpacing = (0 * density).toInt()
+        val itemSpacing = (-4 * density).toInt()
 
         // 外层 CardView：圆角 + 阴影
         val card = CardView(this).apply {
